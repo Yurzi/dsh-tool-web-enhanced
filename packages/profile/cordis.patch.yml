@@ -1,0 +1,28 @@
+# dsh-tool-web-enhanced-profile: one layer over the shipped base profile.
+#
+# This bundle owns the web capability selection, the way dsh-base does for the
+# native providers. A patch replaces a row's whole config, so the two fields
+# are always written together here; a later layer (the user's own patch, or
+# another bundle) that rewrites `web` takes precedence over both.
+- id: web
+  config:
+    searchProvider: search-enhanced
+    fetchProvider: fetch-enhanced
+
+# Native DeepSeek Messages search becomes the `deepseek-messages` backend of
+# web-search-enhanced. Disabling the row also retires the built-in "Web search"
+# page, whose switch rewrites the selection above in the user layer.
+# web-deepseek-api and web-fetch-http stay mounted: unselected, they register
+# providers no one routes to, and remain a manual escape hatch.
+- id: web-search-deepseek
+  disabled: true
+
+# The menu row depends on neither plugin row: each plugin registers its menu
+# section into it, so disabling one plugin row (or both) leaves it healthy.
+- insert:
+    - id: web-search-enhanced
+      name: dsh-web-search-enhanced
+    - id: web-fetch-enhanced
+      name: dsh-web-fetch-enhanced
+    - id: tool-web-enhanced-ui
+      name: dsh-tool-web-enhanced-ui

@@ -1,0 +1,52 @@
+{
+  "name": "dsh-web-fetch-enhanced",
+  "version": "0.2.0",
+  "description": "web_fetch provider for DeepSeek Harness with switchable fetch backends, including operator-approved private ranges; installed through dsh-tool-web-enhanced-profile",
+  "keywords": [
+    "deepseek-harness",
+    "dsh-plugin",
+    "web-fetch",
+    "fake-ip",
+    "allowlist"
+  ],
+  "license": "MIT",
+  "author": "Yurzi",
+  "type": "module",
+  "icon": "./icon.svg",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon.svg": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "locale/*.json",
+    "icon.svg",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0",
+    "dsh": ">=0.2.1-rc.2 <0.3.0-0"
+  },
+  "scripts": {
+    "build": "node ../../scripts/clean.ts && tsdown",
+    "clean": "node ../../scripts/clean.ts"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.0.5",
+    "@deepseek-ai/dsh-web": ">=0.2.1-rc.2 <0.3.0-0",
+    "@deepseek-ai/dsh-web-fetch-http": ">=0.2.1-rc.2 <0.3.0-0"
+  },
+  "devDependencies": {
+    "dsh-tool-web-enhanced-core": "workspace:*",
+    "@deepseek-ai/cordis": "catalog:",
+    "@deepseek-ai/dsh-web": "catalog:",
+    "@deepseek-ai/dsh-web-fetch-http": "catalog:"
+  }
+}

@@ -1,0 +1,17 @@
+<svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="5" y="7" width="26" height="22" rx="5" stroke="url(#wtu-frame)" stroke-width="2.2"/>
+  <circle cx="12" cy="14" r="2.4" fill="url(#wtu-frame)"/>
+  <path d="M17 14h9" stroke="url(#wtu-frame)" stroke-width="2.2" stroke-linecap="round"/>
+  <circle cx="12" cy="22" r="2.4" fill="url(#wtu-dot)"/>
+  <path d="M17 22h9" stroke="url(#wtu-dot)" stroke-width="2.2" stroke-linecap="round"/>
+  <defs>
+    <linearGradient id="wtu-frame" x1="5" y1="7" x2="31" y2="29" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#67C7FE"/>
+      <stop offset="1" stop-color="#3F77D8"/>
+    </linearGradient>
+    <linearGradient id="wtu-dot" x1="12" y1="19" x2="26" y2="25" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#45E7A4"/>
+      <stop offset="1" stop-color="#05909D"/>
+    </linearGradient>
+  </defs>
+</svg>

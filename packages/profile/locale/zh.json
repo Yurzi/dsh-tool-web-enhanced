@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "增强网页工具",
+    "description": "用你选择的后端提供 web_search 与 web_fetch：分别切换搜索服务和抓取后端，并可让 web_fetch 访问你批准的内网网段。"
+  }
+}

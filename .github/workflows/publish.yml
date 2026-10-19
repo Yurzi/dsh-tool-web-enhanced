@@ -1,0 +1,28 @@
+name: publish
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      # No registry-url: npm trusted publishing authenticates this workflow
+      # through OIDC, and a configured token would take its place.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Tag matches the profile version
+        run: test "v$(node -p 'require("./packages/profile/package.json").version')" = "$GITHUB_REF_NAME"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check
+      # Publishes every public package whose version is not on the registry yet.
+      - run: pnpm --recursive publish --access public --no-git-checks --provenance

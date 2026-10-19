@@ -1,0 +1,51 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [
+    "typescript",
+    "react",
+    "unicorn",
+    "oxc",
+    "import"
+  ],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "options": {
+    "typeAware": true,
+    "reportUnusedDisableDirectives": "warn"
+  },
+  "env": {
+    "builtin": true,
+    "browser": true
+  },
+  "rules": {
+    "react/rules-of-hooks": "error",
+    "react/exhaustive-deps": "warn",
+    "typescript/no-floating-promises": "error",
+    "import/no-cycle": "error",
+    "no-underscore-dangle": [
+      "warn",
+      {
+        "allow": [
+          "__PLUGIN_VERSION__",
+          "__ModuleLoader__"
+        ]
+      }
+    ],
+    "import/no-empty-named-blocks": "off",
+    "unicorn/require-module-specifiers": "off",
+    "react/hooks": "off",
+    "react/react-in-jsx-scope": "off",
+    "import/no-named-as-default": "off",
+    "typescript/consistent-return": "off",
+    "typescript/no-unsafe-type-assertion": "off",
+    "unicorn/consistent-function-scoping": "off"
+  },
+  "ignorePatterns": [
+    "**/lib/**",
+    "dist/**",
+    "coverage/**",
+    ".e2e/**"
+  ]
+}

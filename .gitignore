@@ -1,0 +1,13 @@
+node_modules/
+lib/
+dist/
+coverage/
+.e2e/
+*.tgz
+.DS_Store
+.env
+.env.*
+.pnpm-store/
+.pnpm-home/
+.npm-cache/
+.xdg/

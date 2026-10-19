@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Web Search Enhanced",
+    "description": "Serves web_search from the search backend you choose: native DeepSeek search, keyless and API-key services, or a search-capable model."
+  }
+}

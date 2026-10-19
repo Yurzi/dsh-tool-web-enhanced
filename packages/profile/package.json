@@ -1,0 +1,52 @@
+{
+  "name": "dsh-tool-web-enhanced-profile",
+  "version": "0.1.0",
+  "description": "DeepSeek Harness bundle: serves web_search and web_fetch from switchable backends through dsh-web-search-enhanced and dsh-web-fetch-enhanced",
+  "keywords": [
+    "deepseek-harness",
+    "dsh-plugin",
+    "dsh-bundle",
+    "web-search",
+    "web-fetch"
+  ],
+  "license": "MIT",
+  "author": "Yurzi",
+  "type": "module",
+  "icon": "./icon.svg",
+  "exports": {
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json",
+    "./icon.svg": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0",
+    "dsh": ">=0.2.1-rc.2 <0.3.0-0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {
+    "dsh-tool-web-enhanced-ui": "workspace:*",
+    "dsh-web-fetch-enhanced": "workspace:*",
+    "dsh-web-search-enhanced": "workspace:*"
+  },
+  "devDependencies": {
+    "dsh-tool-web-enhanced-core": "workspace:*",
+    "@deepseek-ai/cordis": "catalog:",
+    "@deepseek-ai/cordis-plugin-include": "catalog:",
+    "@deepseek-ai/dsh-web": "catalog:",
+    "yaml": "^2.9.1"
+  }
+}

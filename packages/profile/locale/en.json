@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Web Tools Enhanced",
+    "description": "Serve web_search and web_fetch from backends you choose: switch search services and fetch backends separately, and let web_fetch reach private ranges you approve."
+  }
+}

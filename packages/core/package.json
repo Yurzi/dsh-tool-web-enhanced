@@ -1,0 +1,12 @@
+{
+  "name": "dsh-tool-web-enhanced-core",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Shared building blocks of the dsh-tool-web-enhanced plugins. Source only: each plugin inlines what it imports at build time.",
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": false,
+  "exports": {
+    "./shared": "./src/shared/index.ts"
+  }
+}

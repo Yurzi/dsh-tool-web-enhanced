@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Web Connection Menu",
+    "description": "One composer button for choosing this conversation's search and fetch connections. Works with either plugin alone and hides when both are off."
+  }
+}

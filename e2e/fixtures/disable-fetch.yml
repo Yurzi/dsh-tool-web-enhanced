@@ -1,0 +1,3 @@
+# The user switches off the fetch plugin's row on the Plugins page.
+- id: web-fetch-enhanced
+  disabled: true

@@ -1,0 +1,32 @@
+packages:
+  - packages/*
+
+# One DSH release train for every package: dev pins compile and test against
+# the exact release the e2e suite installs. Runtime ranges (peerDependencies,
+# engines.dsh) are literal in each manifest and checked by scripts/pack.ts.
+catalog:
+  '@deepseek-ai/cordis': 4.0.5
+  '@deepseek-ai/cordis-plugin-include': 1.0.10
+  '@deepseek-ai/cordis-plugin-loader': 1.0.6
+  '@deepseek-ai/schemastery': 3.18.5
+  '@deepseek-ai/dsh-agent': 0.2.1-rc.2
+  '@deepseek-ai/dsh-credentials': 0.2.1-rc.2
+  '@deepseek-ai/dsh-deepseek-account': 0.2.1-rc.2
+  '@deepseek-ai/dsh-launch-environment': 0.2.1-rc.2
+  '@deepseek-ai/dsh-session': 0.2.1-rc.2
+  '@deepseek-ai/dsh-web': 0.2.1-rc.2
+  '@deepseek-ai/dsh-web-deepseek-api': 0.2.1-rc.2
+  '@deepseek-ai/dsh-web-fetch-http': 0.2.1-rc.2
+  '@deepseek-ai/dsh-web-search-deepseek': 0.2.1-rc.2
+
+# Keep schema types crossing DSH package boundaries on one Zod copy.
+overrides:
+  zod: 4.4.3
+
+allowBuilds:
+  esbuild: true
+
+# DSH publishes every 0.2.x prerelease as one train; releases younger than
+# pnpm's minimum age would otherwise block an upgrade to the Host under test.
+minimumReleaseAgeExclude:
+  - '@deepseek-ai/*'
