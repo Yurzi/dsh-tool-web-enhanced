@@ -13,6 +13,7 @@
  */
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { parse, parseDocument, type ScalarTag } from 'yaml'
 import { pack, publishablePackages, repo } from '../../scripts/workspace.ts'
@@ -54,9 +55,11 @@ declare module 'vitest' {
 /**
  * Variables that would hide a composition mistake (a pinned provider), change
  * behaviour (a real DeepSeek key), or point DSH at the developer's own world.
+ * NODE_PATH would also let the Vitest shim's workspace plugins shadow real
+ * profile installs; workers additionally disable Node's global search paths.
  * Proxy and registry settings are kept: pnpm needs them to reach the registry.
  */
-const LEAKY = /^(DSH_|DEEPSEEK_|VITEST|NODE_OPTIONS$|NODE_ENV$)/
+const LEAKY = /^(DSH_|DEEPSEEK_|VITEST|NODE_OPTIONS$|NODE_PATH$|NODE_ENV$)/
 
 /**
  * Build the run's environment and create its directories.
@@ -191,4 +194,13 @@ export function composedRows(e2e: Pick<E2EContext, 'cli' | 'env'>, overlays: rea
 export function enterIsolatedEnvironment(env: Record<string, string>): void {
   for (const name of Object.keys(process.env)) if (!(name in env)) delete process.env[name]
   Object.assign(process.env, env)
+}
+
+/** Resolve the user patch through DSH's public profile loader, never a guessed filename. */
+export function profilePatchPath(e2e: E2EContext): string {
+  const anchor = join(e2e.install, 'node_modules/@deepseek-ai/dsh/package.json')
+  const app = createRequire(anchor)('@deepseek-ai/dsh-app-boot') as {
+    loadProfile(binName: string, name: string, anchor: string, home: string): { patchPath: string }
+  }
+  return app.loadProfile('web-enhanced-e2e', PROFILE, anchor, e2e.env.DSH_HOME!).patchPath
 }

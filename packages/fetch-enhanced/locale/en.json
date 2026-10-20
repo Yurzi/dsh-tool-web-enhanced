@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Web Fetch Enhanced",
-    "description": "Serves web_fetch from the fetch backend you choose: local HTTP(S) with operator-approved private ranges, or a remote reader service."
+    "description": "Serves web_fetch from the fetch connection each conversation chooses: local fetching with an operator allowlist for non-public addresses, or the DeepSeek Fetch API."
   }
 }

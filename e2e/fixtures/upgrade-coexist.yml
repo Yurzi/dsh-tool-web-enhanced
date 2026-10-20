@@ -1,0 +1,37 @@
+# Persisted user layer from search 0.1.10 / fetch 0.1.0 coexistence mode.
+# This is installed at loadProfile().patchPath, not passed as a --patch overlay.
+- id: web-search-deepseek
+  disabled: false
+
+- id: web-search-enhanced
+  config:
+    providerId: enhanced-search
+    version: 2
+    defaultConnection: builtin:exa
+    freshness: fresh
+    connections:
+      builtin:exa:
+        label: Legacy Exa
+        access: keyless
+      custom:upgrade-exa:
+        kind: structured
+        label: Legacy custom Exa
+        adapter: exa
+        credentialRef: UPGRADE_EXA_KEY
+        endpoint: https://upgrade.example.invalid/search
+        trustedEndpoint: true
+        options:
+          type: fast
+
+- id: web-fetch-enhanced
+  config:
+    schemaVersion: 1
+    providerId: enhanced-fetch
+    allowCidrs: ['127.0.0.1/32']
+    userAgent: wfe-e2e/1.0
+
+# A user patch replaces the whole config, so both provider fields are present.
+- id: web
+  config:
+    searchProvider: enhanced-search
+    fetchProvider: http

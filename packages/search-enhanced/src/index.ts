@@ -1,27 +1,26 @@
-/**
- * web_search for DeepSeek Harness from switchable backends. The plugin
- * registers the `search-enhanced` provider in `ctx.web`; the profile bundle
- * selects it in the shared `web` row, and the model keeps DSH's own
- * web_search tool.
- * @module dsh-web-search-enhanced
- */
+/** Session-scoped search connections behind DSH's native web_search tool. */
 import type { Context } from '@deepseek-ai/cordis'
-import type {} from '@deepseek-ai/dsh-web'
+import { settingsRow, type VolatileSettings } from 'dsh-tool-web-enhanced-core/host'
 import { SEARCH } from 'dsh-tool-web-enhanced-core/shared'
-import { deepseekMessages } from './backends/deepseek-messages.ts'
-import { createSearchSeat } from './seat.ts'
+import { installSearch } from './host/runtime.ts'
+import { resolveSettings, type ResolvedSettings } from './settings/resolve.ts'
+import { RETIRED_FIELDS } from './settings/retired.ts'
+import type { SearchSettings } from './settings/types.ts'
 
-/** Cordis plugin name used in Loader diagnostics; equal to the row id. */
 export const name = SEARCH.rowId
-
-/** The capability seam this plugin contributes to. */
 export const inject = ['web']
 
-/**
- * Register the search seat; it leaves with the plugin's fiber.
- * @param ctx - plugin context.
- */
-export function apply(ctx: Context): void {
-  const backends = { 'deepseek-messages': deepseekMessages(ctx) }
-  ctx.web.registerSearchProvider(createSearchSeat(SEARCH.providerId, () => backends['deepseek-messages']))
+export type ConfigValues = SearchSettings & Partial<Record<typeof RETIRED_FIELDS[number], unknown>>
+export type Config = VolatileSettings<ConfigValues>
+const row = settingsRow<ConfigValues, ResolvedSettings>({
+  identity: SEARCH, capabilityLabel: 'search', retiredFields: RETIRED_FIELDS,
+  secretFields: ['apiKey'], resolve: resolveSettings,
+})
+export const Config = row.Config
+
+export function apply(ctx: Context, config: Config): void {
+  row.apply(ctx, config, installSearch)
 }
+
+export { resolveSettings }
+export type { ResolvedSettings, SearchSettings }

@@ -1,0 +1,6 @@
+# Probe both new seats against unchanged predecessor row configuration.
+# The persisted user routing remains untouched for the later GUI preflight.
+- id: web
+  config:
+    searchProvider: search-enhanced
+    fetchProvider: fetch-enhanced

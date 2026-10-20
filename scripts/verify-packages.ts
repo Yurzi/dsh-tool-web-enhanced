@@ -59,12 +59,16 @@ try {
         if (versions.get(dep) !== range) fail(name, `depends on ${dep}@${range}; this workspace releases ${versions.get(dep) ?? 'no such package'}`)
       }
     } else {
-      // A plugin: its host bundle may import only Node built-ins and the DSH installation.
+      // A plugin: its host bundle may import only Node built-ins and the DSH installation,
+      // and every DSH package it imports must be a declared peer (the installation provides it).
       if (manifest.dependencies !== undefined) fail(name, 'plugins inline their dependencies; remove "dependencies"')
       const entry = tar(tarball, `package/${(manifest.main ?? '').replace(/^\.\//, '')}`)
       for (const match of entry.matchAll(/(?:^|[;\s])(?:import|export)\s[^'"]*?from\s*['"]([^'"]+)['"]|import\(\s*['"]([^'"]+)['"]\s*\)/g)) {
         const specifier = match[1] ?? match[2]!
-        if (!isBuiltin(specifier) && !specifier.startsWith('@deepseek-ai/')) fail(name, `host bundle imports ${specifier}`)
+        if (isBuiltin(specifier)) continue
+        if (!specifier.startsWith('@deepseek-ai/')) { fail(name, `host bundle imports ${specifier}`); continue }
+        const imported = specifier.split('/').slice(0, 2).join('/')
+        if (manifest.peerDependencies?.[imported] === undefined) fail(name, `host bundle imports ${imported}, which is not a declared peer`)
       }
     }
 

@@ -6,7 +6,7 @@
  *   `@deepseek-ai/*` come from the DSH installation; everything else —
  *   including the workspace core package — is inlined, so a plugin ships with
  *   no runtime `dependencies`.
- * - Client face (only when the manifest exports `./client`): `lib/client.js`,
+ * - Client face (only when the manifest exports `./client`): `lib/client.cjs`,
  *   one script registering a `factory(require)` with the DSH module loader.
  *   Only the shell's platform modules stay external.
  */
@@ -56,7 +56,7 @@ export function pluginBuild(configUrl: string): UserConfig[] {
     },
     plugins: [cssModules(manifest.name)],
     outputOptions: {
-      entryFileNames: 'client.js',
+      entryFileNames: 'client.cjs',
       banner: `window.__ModuleLoader__.load({ id: ${JSON.stringify(manifest.name)}, factory: (require) => {`,
       intro: 'var module = { exports: {} }; var exports = module.exports;',
       footer: 'return module.exports; } });',

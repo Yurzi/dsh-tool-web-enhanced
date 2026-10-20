@@ -7,7 +7,11 @@
   disabled: true
 - id: web-runtime
   disabled: true
+# Connection owns carrier-neutral registries; only its optional webServer
+# attachment binds HTTP. Keep it for the real fileUploads/sessionController
+# services, removing the Web launcher dependency and its config expressions.
 - id: connection
-  disabled: true
+  inject: []
+  config: {}
 - id: modules
   disabled: true

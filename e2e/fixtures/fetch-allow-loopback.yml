@@ -1,0 +1,10 @@
+# --patch replaces the entire row config, not only the options object.
+- id: web-fetch-enhanced
+  config:
+    version: 2
+    defaultConnection: builtin:local
+    connections:
+      builtin:local:
+        options:
+          allowCidrs: ['127.0.0.1/32']
+          userAgent: wfe-e2e/1.0

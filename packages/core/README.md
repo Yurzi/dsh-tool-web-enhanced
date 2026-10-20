@@ -6,13 +6,12 @@ the parts it imports, so the shipped plugins carry no runtime dependency on it.
 
 | Entry | Runs in | Contents |
 | --- | --- | --- |
-| `./shared` | Host and browser | package, row and provider ids; grammars both faces enforce |
+| `./shared` | Host and browser | `ids`: package, row and provider ids. `connections`: connection ids, credential references, access modes, `Descriptor`, `OptionRule` and `validateOptions`. `settings`: the settings document both rows use (`documentSchema`, `resolveDocument`), version detection (`documentVersion`) and the N→N+1 migration pipeline (`migrateDocument`, empty today). `route`: `routeOf`, the `web` row check both faces use (only an absent field falls back to the environment variable, as in `WebRuntime`). `url`: endpoint and source URL checks. `selection`: the per-Session selection vocabulary and `selectionContract`, which builds a capability's `<ns>/get`, `set`, `provider`, `pairings` and `forgetPairing` Remote contract |
+| `./host` | Host | `Capability` (everything a plugin supplies) and `installCapability`, which installs the single provider, per-Session selections (`Sessions`: queueing, revisions, fork inheritance, model memory, resolution order), per-step plans (`planFor`, `Snapshots`; only the connection id and session options are frozen), `isSelectable`, the route-guarded `ToolRestriction`, the Remote service factory (`createConnectionsService`), route detection (`routeFacts`), credential resolution, `capabilityErrors` and the bounded HTTP transport (`createTransport`) |
+| `./client` | browser | the composer section contract (`ConnectionSection`, `SelectionStore`, `RouteStore`, `WebConnectionsService`, `Context.webConnections`) and `useObservable`; `ConnectionSelectionStore`, `RouteStatus`, `PairingsStatus`, `CredentialStatus`; `selectionCommand` for `/setup-<capability>`; sparse writes (`createSparseSettings`), the settings document view (`effectiveDocument`, `useSettingsDocument`) and the settings page skeleton (`create*Section` factories). Components take their text from the plugin's `t` and key table; core ships no dictionary |
 
-Planned entries carry the selection paradigm both plugins share — `./host`
-(session selections, per-step plans, tool restriction, Remote factory,
-credential resolution, bounded transport, route detection) and `./client`
-(connection menu, `/setup-<capability>` command, settings page skeleton,
-sparse writes, route notice). They move here from search when fetch becomes
-their second user; see [docs/architecture.md](../../docs/architecture.md),
-sections 4.3 and 6. Nothing here may import a plugin package or hold
-module-level state: each plugin inlines its own copy.
+A plugin supplies only its catalog, backends, settings resolver (built on
+`resolveDocument`) and capability parameters; see
+[docs/architecture.md](../../docs/architecture.md), sections 4.3, 6 and 8.
+Nothing here may import a plugin package or hold module-level state: each
+plugin inlines its own copy.

@@ -1,0 +1,40 @@
+# Unified fetch documents: capability defaults are always empty.
+version: 2
+defaultConnection: builtin:local
+showSelector: true
+defaults: {}
+connections:
+  builtin:local:
+    options:
+      allowCidrs: [198.18.0.0/15]
+      allowHostnames: ['*.example.com']
+---
+version: 2
+defaultConnection: builtin:deepseek-fetch-api
+showSelector: false
+defaults: {}
+connections:
+  builtin:deepseek-fetch-api:
+    credentialRef: WORK_DEEPSEEK
+    trustedEndpoint: true
+    options:
+      baseURL: https://gateway.example.com/v1/tools
+  builtin:local:
+    options:
+      allowCidrs: [10.20.0.0/16]
+      allowHostnames: [wiki.corp.example, '*.docs.corp.example']
+      timeoutMs: 15000
+      maxRedirects: 3
+---
+version: 2
+defaultConnection: builtin:local
+showSelector: true
+defaults: {}
+connections:
+  builtin:local:
+    disabled: true
+    options:
+      allowCidrs: []
+      allowHostnames: []
+      userAgent: ''
+      maxRedirects: 0

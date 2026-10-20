@@ -2,7 +2,9 @@
  * Bundler plugins shared by the package builds (tsdown/Rolldown) and the unit
  * tests (Vitest). Both accept the same Rollup-style plugin object.
  */
+import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { dirname, relative, resolve } from 'node:path'
 import { transform } from 'lightningcss'
 import ts from 'typescript'
@@ -71,6 +73,74 @@ export function cssModules(pluginId: string) {
         '  document.head.appendChild(style);',
         '}',
         `export default ${JSON.stringify(classes)};`,
+      ].join('\n')
+    },
+  }
+}
+
+const STUB_PREFIX = '\0dsh-primitives-stub:'
+const PRIMITIVES_LIB = /dsh-client-ui-primitives[\\/]lib[\\/]/
+
+/**
+ * Test builds only. The published primitives library keeps bare imports of its
+ * implementation libraries (shiki, katex, micromark, simple-icons, clsx, …),
+ * which the DSH shell bundles but this repository does not install. Imports
+ * that do not resolve become inert stubs exporting the names the library
+ * imports; the tests never render the code paths that use them (code
+ * highlighting, Markdown, site glyphs). Mirrors the predecessor's
+ * scripts/client-build.ts.
+ */
+export function primitivesStub() {
+  return {
+    name: 'dsh-primitives-stub',
+    enforce: 'pre' as const,
+    resolveId(source: string, importer: string | undefined) {
+      if (importer === undefined || !PRIMITIVES_LIB.test(importer) || source.startsWith('.') || source.startsWith('\0')) return null
+      try {
+        createRequire(importer).resolve(source)
+        return null
+      } catch {
+        // Only an unresolvable library is stubbed; anything installed stays real.
+        return `${STUB_PREFIX}${source}?${importer}`
+      }
+    },
+    load(id: string) {
+      if (!id.startsWith(STUB_PREFIX)) {
+        // The published library references a source map it does not ship.
+        return PRIMITIVES_LIB.test(id) && id.endsWith('.js')
+          ? readFileSync(id, 'utf8').replace(/\n\/\/# sourceMappingURL=\S+\s*$/, '\n')
+          : null
+      }
+      const [source, importer] = id.slice(STUB_PREFIX.length).split('?') as [string, string]
+      // clsx builds class names the primitives render; a real tiny implementation keeps className a string.
+      if (source === 'clsx') {
+        return [
+          'function clsx(...inputs) {',
+          '  const out = [];',
+          '  for (const input of inputs) {',
+          "    if (!input) continue;",
+          "    if (typeof input === 'string' || typeof input === 'number') out.push(String(input));",
+          '    else if (Array.isArray(input)) { const nested = clsx(...input); if (nested) out.push(nested); }',
+          "    else if (typeof input === 'object') for (const [key, value] of Object.entries(input)) if (value) out.push(key);",
+          '  }',
+          "  return out.join(' ');",
+          '}',
+          'export { clsx };',
+          'export default clsx;',
+        ].join('\n')
+      }
+      const quoted = source.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')
+      const names = new Set<string>()
+      for (const match of readFileSync(importer, 'utf8').matchAll(new RegExp(`import\\s*\\{([^}]*)\\}\\s*from\\s*["']${quoted}["']`, 'g'))) {
+        for (const binding of match[1]!.split(',')) {
+          const name = binding.trim().split(/\s+as\s+/)[0]
+          if (name) names.add(name)
+        }
+      }
+      return [
+        "const stub = new Proxy(function () {}, { get: (_, key) => key === Symbol.toPrimitive ? () => '' : stub, apply: () => stub, construct: () => stub });",
+        'export default stub;',
+        ...[...names].map(name => `export const ${name} = stub;`),
       ].join('\n')
     },
   }

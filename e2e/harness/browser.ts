@@ -1,10 +1,11 @@
 /**
  * Headless Chromium through Playwright, pointed at the isolated GUI.
  */
-import { existsSync } from 'node:fs'
+import { existsSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { type Browser, type Page, chromium } from 'playwright-core'
-import { artifacts } from './environment.ts'
+import { artifacts, isolatedEnvironment, run } from './environment.ts'
+import { en as uiText } from '../../packages/ui/src/client/locales.ts'
 
 /**
  * A Chromium or Chrome binary: `DSH_E2E_CHROMIUM`, else the usual system paths.
@@ -14,6 +15,14 @@ export const chromiumPath = [process.env.DSH_E2E_CHROMIUM, '/usr/bin/chromium', 
   .find((path): path is string => path !== undefined && existsSync(path))
 
 export const browserRequired = process.env.CI !== undefined
+
+/** Retain accessible DOM and console evidence when a browser assertion fails. */
+export async function recordBrowserFailure(app: App, name: string): Promise<void> {
+  writeFileSync(join(artifacts, name + '.json'), JSON.stringify({
+    url: app.page.url(), errors: app.errors, accessibility: await app.page.locator('body').ariaSnapshot(),
+  }, null, 2))
+  await app.screenshot(name)
+}
 
 /** An open app page and what it logged. */
 export interface App {
@@ -31,25 +40,40 @@ export interface App {
  */
 export async function openApp(url: string): Promise<App> {
   if (chromiumPath === undefined) throw new Error('no Chromium found; set DSH_E2E_CHROMIUM')
-  const browser = await chromium.launch({ executablePath: chromiumPath, headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] })
-  const page = await (await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: 'en-US' })).newPage()
-  page.setDefaultTimeout(30_000)
-  const errors: string[] = []
-  page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()) })
-  page.on('pageerror', (error) => { errors.push(error.message) })
-  await page.addLocatorHandler(page.getByRole('dialog', { name: 'Preview Notice' }), async (dialog) => {
-    await dialog.getByRole('button', { name: 'Continue' }).click()
+  // Chromium's SingletonSocket must fit Linux's 108-byte Unix-socket path limit.
+  // Upgrade homes are too deeply nested, so keep Chrome scratch short and still
+  // inside the run instead of falling back to any developer home or OS cache.
+  const browser = await chromium.launch({
+    executablePath: chromiumPath, headless: true,
+    args: ['--no-sandbox', '--disable-dev-shm-usage'],
+    env: { ...isolatedEnvironment(), TMPDIR: run },
   })
-  await page.addLocatorHandler(page.getByRole('button', { name: 'Configure later' }), async (button) => { await button.click() })
-  await page.addLocatorHandler(page.getByRole('dialog', { name: 'Get started' }), async (dialog) => {
-    await dialog.getByRole('button', { name: 'Close' }).click()
-  })
-  await page.goto(url)
-  return {
-    browser,
-    page,
-    errors,
-    screenshot: async (name) => { await page.screenshot({ path: join(artifacts, `${name}.png`), fullPage: true }) },
-    close: () => browser.close(),
+  try {
+    const page = await (await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: 'en-US' })).newPage()
+    page.setDefaultTimeout(30_000)
+    const errors: string[] = []
+    page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()) })
+    page.on('pageerror', (error) => { errors.push(error.message) })
+    await page.addLocatorHandler(page.getByRole('dialog', { name: 'Preview Notice' }), async (dialog) => {
+      await dialog.getByRole('button', { name: 'Continue' }).click()
+    })
+    await page.addLocatorHandler(page.getByRole('button', { name: 'Configure later' }), async (button) => { await button.click() })
+    await page.addLocatorHandler(page.getByRole('dialog', { name: 'Get started' }), async (dialog) => {
+      await dialog.getByRole('button', { name: 'Close' }).click()
+    })
+    await page.addLocatorHandler(page.getByRole('dialog', { name: uiText['activation.title'] }), async (dialog) => {
+      await dialog.getByRole('button', { name: uiText['activation.later'], exact: true }).click()
+    })
+    await page.goto(url)
+    return {
+      browser,
+      page,
+      errors,
+      screenshot: async (name) => { await page.screenshot({ path: join(artifacts, `${name}.png`), fullPage: true }) },
+      close: () => browser.close(),
+    }
+  } catch (error) {
+    await browser.close()
+    throw error
   }
 }

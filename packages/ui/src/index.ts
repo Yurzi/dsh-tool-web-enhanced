@@ -7,7 +7,7 @@
  * register their menu sections into its browser service through optional
  * injection, so this row stays healthy with either plugin row, both, or
  * neither enabled. The browser face (`webConnections` service, menu,
- * activation prompt, bundle overview) arrives with milestone M1; see
+ * activation prompt, bundle overview) lives in src/client; see
  * docs/architecture.md, section 9.
  * @module dsh-tool-web-enhanced-ui
  */

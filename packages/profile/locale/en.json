@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Web Tools Enhanced",
-    "description": "Serve web_search and web_fetch from backends you choose: switch search services and fetch backends separately, and let web_fetch reach private ranges you approve."
+    "description": "Serves web_search and web_fetch from switchable backends. Each conversation chooses its search and fetch connections from the composer; operators configure services, keys and the fetch allowlist in the plugin settings."
   }
 }

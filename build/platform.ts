@@ -1,7 +1,7 @@
 /**
  * Modules the DSH web shell shares with every client bundle through its module
  * table (deepseek-harness packages/client/web/src/platform.ts). A client half
- * may import these at runtime; everything else is inlined into lib/client.js.
+ * may import these at runtime; everything else is inlined into lib/client.cjs.
  */
 export const PLATFORM_MODULES: readonly string[] = [
   'react', 'react/jsx-runtime', 'react-dom', 'react-dom/client', '@deepseek-ai/cordis',

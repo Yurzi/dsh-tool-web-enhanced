@@ -1,0 +1,352 @@
+.root {
+  position: relative;
+  min-width: 0;
+}
+
+.trigger {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 200px;
+  max-width: min(240px, 32cqw);
+  height: 28px;
+  padding: 0 4px 0 8px;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  outline: none;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.trigger:hover,
+.trigger[aria-expanded='true'] {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.trigger:focus-visible {
+  box-shadow: 0 0 0 2px var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+}
+
+.icon {
+  flex: 0 0 auto;
+}
+
+.label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+}
+
+.attention {
+  position: absolute;
+  top: 3px;
+  left: 19px;
+  pointer-events: none;
+}
+
+.chevron,
+.busy {
+  flex: 0 0 auto;
+}
+
+.chevron {
+  color: var(--dsw-alias-label-caption);
+  transition: transform 120ms ease;
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+}
+
+@container (max-width: 460px) {
+  .label {
+    display: none;
+  }
+}
+
+@container (max-width: 380px) {
+  .trigger {
+    justify-content: center;
+    width: 28px;
+    padding: 0;
+  }
+
+  .chevron,
+  .busy {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
+}
+
+.menu {
+  position: fixed;
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: min(320px, calc(100vw - 24px));
+  max-width: calc(100vw - 48px);
+  max-height: min(480px, calc(100vh - 32px));
+  overflow: hidden;
+  padding: 6px 0;
+}
+
+/* Only lists scroll: both headers stay in the 480px panel, even with two open lists. */
+.sectionBlock {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  min-height: 36px;
+  min-width: 0;
+}
+
+.sectionBlock + .sectionBlock {
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.sectionExpanded {
+  flex: 0 1 auto;
+  min-height: 112px;
+}
+
+.sectionHeading {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 12px;
+  border: none;
+  background: var(--dsw-menu-surface-fill, var(--dsw-alias-bg-module-platform));
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 20px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sectionSummary {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.sectionTitle {
+  flex: none;
+  color: var(--dsw-alias-label-primary);
+}
+
+.sectionCurrent,
+.sectionSource {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sectionCurrent {
+  flex: 0 1 auto;
+}
+
+.sectionSource {
+  flex: 0 2 auto;
+  max-width: 40%;
+  color: var(--dsw-alias-label-caption);
+}
+
+.sectionContents {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.sectionContents[hidden] {
+  display: none;
+}
+
+.sectionBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 18px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--dsw-radius-xs);
+}
+
+.sectionHeading:hover,
+.row:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.sectionHeading:focus-visible,
+.settingsButton:focus-visible,
+.row:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1.5px var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+}
+
+.row:disabled {
+  color: var(--dsw-alias-label-dimmed);
+  cursor: default;
+}
+
+.rowContent {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.rowLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowCaption {
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--dsw-alias-label-caption);
+}
+
+.rowCaptionWarn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.warnDot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-warn-label);
+  flex: none;
+}
+
+.check {
+  flex: 0 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.separator {
+  height: 0.5px;
+  background: var(--dsw-alias-border-l2);
+  margin: 6px 8px;
+}
+
+.routeNotice,
+.disabledNotice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 12px;
+  margin: 4px 8px;
+  font-size: 12px;
+  line-height: 16px;
+  border-radius: var(--dsw-radius-xs);
+  background: var(--dsw-alias-state-warn-tertiary);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.noticeIcon {
+  flex: none;
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.linkAction {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  color: var(--dsw-alias-link);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.sectionFooter {
+  flex: none;
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  padding: 4px 8px;
+  background: var(--dsw-menu-surface-fill, var(--dsw-alias-bg-module-platform));
+  backdrop-filter: var(--dsw-menu-backdrop-filter);
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  margin-top: 4px;
+}
+
+.settingsButton {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  border-radius: var(--dsw-radius-xs);
+  cursor: pointer;
+}
+
+.settingsButton:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.empty {
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--dsw-alias-label-caption);
+}
+
+.optionsWrapper {
+  padding: 4px 12px;
+}

@@ -1,0 +1,5 @@
+# Keep both provider fields: config replacement is atomic.
+- id: web
+  config:
+    searchProvider: search-enhanced
+    fetchProvider: http

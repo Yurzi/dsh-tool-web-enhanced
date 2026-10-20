@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "增强网页工具",
-    "description": "用你选择的后端提供 web_search 与 web_fetch：分别切换搜索服务和抓取后端，并可让 web_fetch 访问你批准的内网网段。"
+    "description": "用可切换的后端提供 web_search 与 web_fetch。每个会话在输入框里选择搜索与抓取连接；服务、密钥与抓取白名单由运维在插件设置里配置。"
   }
 }

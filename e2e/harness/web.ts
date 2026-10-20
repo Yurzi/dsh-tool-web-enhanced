@@ -23,12 +23,13 @@ const LOG = join(artifacts, 'web.log')
 /**
  * Start the GUI on a free loopback port; never the default 3080 a developer may be using.
  * @param e2e - the run's install and environment.
+ * @param overlays - profile patches parsed before Web command flags.
  * @returns the server once it printed its launch URL.
  */
-export async function startWeb(e2e: E2EContext): Promise<WebServer> {
+export async function startWeb(e2e: E2EContext, overlays: readonly string[] = []): Promise<WebServer> {
   const port = await freePort()
   // `dsh web` starts the profile named web (PROFILE).
-  const child = spawn(e2e.cli, [PROFILE, '--no-open', '--host', '127.0.0.1', '--port', String(port)], { cwd: run, env: e2e.env })
+  const child = spawn(e2e.cli, [PROFILE, ...overlays.flatMap(file => ['--patch', file]), '--no-open', '--host', '127.0.0.1', '--port', String(port)], { cwd: run, env: e2e.env })
   const log = createWriteStream(LOG)
   child.stdout.pipe(log)
   child.stderr.pipe(log)

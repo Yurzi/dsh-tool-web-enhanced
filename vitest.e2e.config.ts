@@ -10,6 +10,10 @@ export default defineConfig({
     globalSetup: ['e2e/global-setup.ts'],
     // The files share one profile; GUI tests write to it.
     fileParallelism: false,
+    // pnpm's vitest shim puts the workspace's .pnpm/node_modules on NODE_PATH; the
+    // in-process host boot would then resolve this workspace's packages instead of
+    // the profile's installed ones (the upgrade scenario installs older versions).
+    execArgv: ['--no-global-search-paths'],
     testTimeout: 120_000,
     hookTimeout: 600_000,
   },

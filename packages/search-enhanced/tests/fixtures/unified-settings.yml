@@ -1,0 +1,77 @@
+# Unified search documents: only version/defaultConnection/showSelector/defaults/connections.
+version: 2
+defaultConnection: builtin:exa
+showSelector: true
+defaults:
+  freshness: auto
+connections: {}
+---
+version: 2
+defaultConnection: builtin:exa
+showSelector: false
+defaults:
+  freshness: fresh
+connections:
+  builtin:exa:
+    access: api-key
+    options:
+      type: fast
+  builtin:tinyfish:
+    disabled: true
+---
+version: 2
+defaultConnection: custom:team-tavily
+showSelector: true
+defaults:
+  freshness: realtime
+connections:
+  custom:team-tavily:
+    kind: adapter
+    label: 团队 Tavily
+    adapter: tavily
+    credentialRef: TEAM_TAVILY_API_KEY
+    options:
+      topic: news
+---
+version: 2
+defaultConnection: custom:work-exa
+showSelector: true
+defaults:
+  freshness: auto
+connections:
+  custom:work-exa:
+    kind: adapter
+    label: Work proxy
+    adapter: exa
+    credentialRef: WORK_EXA_API_KEY
+    endpoint: https://search.example.com/api
+    trustedEndpoint: true
+    options:
+      type: instant
+---
+version: 2
+defaultConnection: builtin:deepseek-messages
+showSelector: true
+defaults: {}
+connections:
+  builtin:deepseek-messages:
+    credentialRef: WORK_DEEPSEEK
+    trustedEndpoint: true
+    options:
+      baseURL: https://gateway.example.com/anthropic/v1
+      model: search
+      apiVersion: '2023-06-01'
+      maxTokens: 1000
+      maxUses: 3
+---
+version: 2
+defaultConnection: builtin:deepseek-search-api
+showSelector: false
+defaults:
+  freshness: auto
+connections:
+  builtin:deepseek-search-api:
+    disabled: true
+    options:
+      count: 50
+      sendOriginalQuestion: false

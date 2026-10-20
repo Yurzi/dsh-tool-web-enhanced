@@ -19,6 +19,7 @@ dsh plugin --profile <profile> add dsh-tool-web-enhanced-profile
 | `tool-web-enhanced-ui` (inserted) | [dsh-tool-web-enhanced-ui](../ui/README.md) | — (browser-only composer menu) |
 
 Remove dsh-web-search-enhanced 0.1.x and dsh-web-fetch-enhanced 0.1.x (the old
-standalone bundles) before installing: they insert the same row ids.
+standalone bundles) before installing: they insert the same row ids. Their
+settings are not migrated; see the upgrade notes in each plugin's README.
 
 Design: [docs/architecture.md](../../docs/architecture.md).
