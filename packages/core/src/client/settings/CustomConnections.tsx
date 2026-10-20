@@ -1,61 +1,71 @@
-/** Shared custom connection list; capability-specific editor and data stay outside core. */
-import { useState, type ComponentType, type ReactNode } from 'react'
+/**
+ * Operator-defined adapter connections. The catalog's adapter entries are the
+ * formats; without one the section does not render. Removing the connection
+ * that is the default restores the catalog default in the same write.
+ */
+import { useState, type ReactNode } from 'react'
 import { Button, IconPlusOutlineRegular, StateDot, Switch, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { CredentialStatusMap } from '../credentials.ts'
 import type { ClientTranslate } from '../command.ts'
+import { createConnectionForm } from './connection-form.ts'
+import { createConnectionEditor, type CustomEditorTarget, type EditorCopyKey } from './ConnectionEditor.tsx'
 import type { CredentialEditorComponent, SaveCredential } from './CredentialEditor.tsx'
+import { catalogEntry, customConnections, type AdapterKeyOf, type CatalogSettings, type CustomConnection, type OptionCopyTable, type SettingsCatalog } from './model.ts'
+import type { OptionsEditor } from './OptionsEditor.tsx'
 import type { SettingsClasses, SettingsParts, SettingsDoc, WriteSettings } from './parts.tsx'
 import type { SparseSettings } from './sparse.ts'
 
-export type CustomEditorTarget = { readonly kind: 'new' } | { readonly kind: 'edit'; readonly id: string }
-export interface CustomEditorProps<S, K extends string> {
-  target: CustomEditorTarget
+export type CustomCopyKey = EditorCopyKey | "services.remoteNotice" | "custom.title" | "custom.addStructured" | "custom.empty" | "custom.kindStructured" | "credential.set" | "credential.unset" | "credential.manage" | "custom.edit" | "custom.remove" | "services.enable" | "custom.removeConfirm" | "confirm.cancel"
+
+interface CustomProps<S, K extends string> {
   doc: SettingsDoc<S>
   write: WriteSettings
+  credentials: CredentialStatusMap
   saveCredential: SaveCredential
-  taken: readonly string[]
   t: ClientTranslate<K>
-  onClose: (problem?: string) => void
 }
-export interface CustomEditorConnection { readonly label: string; readonly disabled?: boolean }
-export type CustomCopyKey = "custom.title" | "custom.addStructured" | "custom.empty" | "credential.set" | "credential.unset" | "credential.manage" | "custom.edit" | "custom.remove" | "services.enable" | "custom.removeConfirm" | "confirm.cancel"
-export function createCustomConnectionsSection<S, C extends CustomEditorConnection, K extends string>({
-  classes: css, keys, parts: { Section, ErrorText, ConfirmRow, useWrite }, CredentialEditor, Editor: ConnectionEditor,
-  sparse, connectionsOf, takenIds, credentialRefOf, kindLabel, unsupported,
+
+export function createCustomConnectionsSection<S extends CatalogSettings, T extends SettingsCatalog, K extends string>({
+  classes: css, keys, parts, CredentialEditor, optionsEditor, sparse, catalog, optionCopy, defaultConnection,
 }: {
   classes: SettingsClasses
   keys: Readonly<Record<CustomCopyKey, K>>
   parts: SettingsParts<K>
   CredentialEditor: CredentialEditorComponent<K>
-  Editor: ComponentType<CustomEditorProps<S, K>>
+  optionsEditor: OptionsEditor<K>
   sparse: SparseSettings
-  connectionsOf: (config: S) => readonly (readonly [string, C])[]
-  takenIds: (config: S) => readonly string[]
-  credentialRefOf: (connection: C) => string
-  kindLabel: (connection: C, t: ClientTranslate<K>) => string
-  unsupported: (connection: C, t: ClientTranslate<K>) => string | undefined
-}) {
-  type EditorTarget = CustomEditorTarget
-  interface CustomProps {
-    doc: SettingsDoc<S>
-    write: WriteSettings
-    credentials: CredentialStatusMap
-    saveCredential: SaveCredential
-    t: ClientTranslate<K>
+  catalog: T
+  /** Copy for the options of each adapter entry. */
+  optionCopy: (key: AdapterKeyOf<T>) => OptionCopyTable<K>
+  /** The catalog default that replaces a removed default connection. */
+  defaultConnection: string
+}): (props: CustomProps<S, K>) => ReactNode {
+  type A = AdapterKeyOf<T>
+  const { Section, ErrorText, ConfirmRow, useWrite } = parts
+  const rules = createConnectionForm({ catalog, optionCopy })
+  const [initialAdapter] = rules.adapters
+  if (initialAdapter === undefined) return () => null
+  const ConnectionEditor = createConnectionEditor<S, T, K>({ classes: css, keys, parts, optionsEditor, sparse, catalog, rules, initialAdapter })
+
+  /** Who receives what a connection sends: the catalog service, and the host when the endpoint is not the catalog's. */
+  function recipient(connection: CustomConnection<A>): string {
+    const info = catalogEntry(catalog, connection.adapter)
+    if (connection.endpoint === undefined || connection.endpoint === info.endpoint) return info.label
+    return info.label + ' (' + new URL(connection.endpoint).host + ')'
   }
-  
-  function CustomConnectionsSection({ doc, write, credentials, saveCredential, t }: CustomProps) {
-    const [editor, setEditor] = useState<EditorTarget | undefined>(undefined)
+
+  function CustomConnectionsSection({ doc, write, credentials, saveCredential, t }: CustomProps<S, K>) {
+    const [editor, setEditor] = useState<CustomEditorTarget | undefined>(undefined)
     const [notice, setNotice] = useState<string | undefined>(undefined)
-    const connections = connectionsOf(doc.config)
-    const taken = takenIds(doc.config)
-  
-    const open = (target: EditorTarget | undefined) => {
+    const connections = customConnections<A>(doc.config)
+    const taken = doc.config.connections === undefined ? [] : Object.keys(doc.config.connections)
+
+    const open = (target: CustomEditorTarget | undefined) => {
       setNotice(undefined)
       setEditor(target)
     }
-  
-    const editorFor = (target: EditorTarget) => (
+
+    const editorFor = (target: CustomEditorTarget) => (
       <ConnectionEditor
         key={target.kind === 'edit' ? target.id : 'new'}
         target={target}
@@ -70,7 +80,9 @@ export function createCustomConnectionsSection<S, C extends CustomEditorConnecti
         }}
       />
     )
-  
+
+    const editing = (id: string) => editor !== undefined && editor.kind === 'edit' && editor.id === id
+
     return (
       <Section
         title={t(keys['custom.title'])}
@@ -89,21 +101,10 @@ export function createCustomConnectionsSection<S, C extends CustomEditorConnecti
         )}
       >
         <ErrorText>{notice}</ErrorText>
-        {editor?.kind === 'new' ? editorFor(editor) : null}
+        {editor !== undefined && editor.kind === 'new' ? editorFor(editor) : null}
         {connections.length === 0 ? <p className={css.empty}>{t(keys['custom.empty'])}</p> : (
           <ul className={css.list}>
-            {connections.map(([id, connection]) => unsupported(connection, t) !== undefined ? (
-              <li key={id} className={css.row}>
-                <div className={css.rowLine}>
-                  <StateDot state="idle" />
-                  <div className={css.rowMain}>
-                    <span className={css.rowTitle}>{connection.label}<Tag tone="neutral">{kindLabel(connection, t)}</Tag></span>
-                    <span className={css.rowMeta}><code>{id}</code></span>
-                    <p className={css.hint}>{unsupported(connection, t)}</p>
-                  </div>
-                </div>
-              </li>
-            ) : (
+            {connections.map(([id, connection]) => (
               <CustomRow
                 key={id}
                 id={id}
@@ -113,9 +114,9 @@ export function createCustomConnectionsSection<S, C extends CustomEditorConnecti
                 credentials={credentials}
                 saveCredential={saveCredential}
                 t={t}
-                editing={editor?.kind === 'edit' && editor.id === id}
-                onEdit={() => { open(editor?.kind === 'edit' && editor.id === id ? undefined : { kind: 'edit', id }) }}
-                editor={editor?.kind === 'edit' && editor.id === id ? editorFor(editor) : null}
+                editing={editing(id)}
+                onEdit={() => { open(editing(id) ? undefined : { kind: 'edit', id }) }}
+                editor={editing(id) ? editorFor({ kind: 'edit', id }) : null}
               />
             ))}
           </ul>
@@ -123,10 +124,10 @@ export function createCustomConnectionsSection<S, C extends CustomEditorConnecti
       </Section>
     )
   }
-  
-  function CustomRow({ id, connection, doc, write, credentials, saveCredential, editing, onEdit, editor, t }: CustomProps & {
+
+  function CustomRow({ id, connection, doc, write, credentials, saveCredential, editing, onEdit, editor, t }: CustomProps<S, K> & {
     id: string
-    connection: C
+    connection: CustomConnection<A>
     editing: boolean
     onEdit: () => void
     editor: ReactNode
@@ -134,17 +135,24 @@ export function createCustomConnectionsSection<S, C extends CustomEditorConnecti
     const [keyOpen, setKeyOpen] = useState(false)
     const [confirming, setConfirming] = useState(false)
     const action = useWrite(t)
-    const credentialRef = credentialRefOf(connection)
+    const credentialRef = connection.credentialRef
     const credentialStatus = credentials[credentialRef]
     const enabled = connection.disabled !== true
     const disabled = !doc.editable || action.busy
-  
+
     const userConnections = (doc.layers.user as { connections?: Record<string, unknown> } | undefined)?.connections
     const removable = userConnections !== undefined && Object.hasOwn(userConnections, id)
-  
+
     const save = (path: string[], target: unknown, fallback?: unknown) =>
       action.run(() => write(sparse.sparseSettingOperations(doc.layers, ['connections', id, ...path], target, fallback)))
-  
+
+    /** Removing the default connection puts the catalog default back in the same write. */
+    const remove = () => {
+      const ops = sparse.sparseSettingOperations(doc.layers, ['connections', id], undefined)
+      const restore = doc.config.defaultConnection === id ? sparse.sparseSettingOperations(doc.layers, ['defaultConnection'], defaultConnection, defaultConnection) : []
+      return action.run(() => write([...ops, ...restore]))
+    }
+
     return (
       <li className={css.row}>
         <div className={css.rowLine}>
@@ -152,7 +160,7 @@ export function createCustomConnectionsSection<S, C extends CustomEditorConnecti
           <div className={css.rowMain}>
             <span className={css.rowTitle}>
               {connection.label}
-              <Tag tone="neutral">{kindLabel(connection, t)}</Tag>
+              <Tag tone="neutral">{t(keys['custom.kindStructured'])}</Tag>
             </span>
             <span className={css.rowMeta}>
               <code>{id}</code>
@@ -160,6 +168,7 @@ export function createCustomConnectionsSection<S, C extends CustomEditorConnecti
               <code>{credentialRef}</code>
               {credentialStatus === 'configured' ? ' · ' + t(keys['credential.set']) : ''}
               {credentialStatus === 'missing' ? ' · ' + t(keys['credential.unset']) : ''}
+              {' · ' + t(keys['services.remoteNotice'], { name: recipient(connection) })}
             </span>
           </div>
           <div className={css.rowActions}>
@@ -184,7 +193,7 @@ export function createCustomConnectionsSection<S, C extends CustomEditorConnecti
             confirmLabel={t(keys['custom.remove'])}
             cancelLabel={t(keys['confirm.cancel'])}
             disabled={disabled}
-            onConfirm={() => { void save([], undefined) }}
+            onConfirm={() => { void remove() }}
             onCancel={() => { setConfirming(false) }}
           />
         ) : null}
@@ -198,5 +207,6 @@ export function createCustomConnectionsSection<S, C extends CustomEditorConnecti
       </li>
     )
   }
+
   return CustomConnectionsSection
 }

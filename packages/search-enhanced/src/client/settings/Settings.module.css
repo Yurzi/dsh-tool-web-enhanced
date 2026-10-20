@@ -266,22 +266,14 @@
 }
 
 @container (max-width: 560px) {
-  .rowLine {
+  .rowLine:has(.rowActions) {
     flex-wrap: wrap;
-  }
-
-  .rowLine > .rowMain {
-    flex-basis: calc(100% - 32px);
   }
 
   .rowActions {
     order: 3;
     flex-basis: 100%;
-    padding-left: 20px;
-  }
-
-  .rowLine > .disclosure {
-    margin-left: 20px;
+    padding-left: 10px;
   }
 }
 
@@ -404,12 +396,6 @@
   min-width: 0;
 }
 
-.optionBoolean {
-  display: flex;
-  align-items: center;
-  height: 36px;
-}
-
 .optionName {
   display: flex;
   align-items: baseline;
@@ -458,6 +444,16 @@
 
 .formWide {
   grid-column: 1 / -1;
+}
+
+@container (max-width: 760px) {
+  .optionGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@container (max-width: 480px) {
+  .optionGrid { grid-template-columns: minmax(0, 1fr); }
+  .settingControl { flex-basis: 100%; }
+  .panel { padding: 12px; }
 }
 
 @container (max-width: 520px) {

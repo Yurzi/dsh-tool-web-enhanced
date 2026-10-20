@@ -76,7 +76,7 @@ async function fixture(served = true) {
       current = { ...current, source: 'session', selection: { ...current.selection, connectionId: change.connectionId === undefined ? current.selection.connectionId : change.connectionId, revision: current.selection.revision + 1 } }
       return { ok: true as const, value: current }
     }),
-    provider: vi.fn(async () => ({ ok: true as const, value: { providerId: SEARCH.providerId, envProvider: null } })),
+    provider: vi.fn(async () => ({ ok: true as const, value: { providerId: SEARCH.providerId, envProvider: null as string | null } })),
     pairings: vi.fn(async () => ({ ok: true as const, value: { pairings: [{ provider: 'p', model: 'm', connectionId: null }] } })),
     forgetPairing: vi.fn(async () => ({ ok: true as const, value: { pairings: [] } })),
   }
@@ -179,6 +179,21 @@ async function mountUi(ctx: cordis.Context) {
 }
 
 describe('browser apply composition', () => {
+  it('keeps environment-aware route facts when the selector is hidden, then removes them on unload', async () => {
+    const h = await fixture()
+    await h.page().mutate([{ op: 'set', path: ['showSelector'], value: false }], 1)
+    h.ctx.configForms.describe().acceptView(namespace(WEB_ROW, {}))
+    h.searchConnections.provider.mockResolvedValue({ ok: true, value: { providerId: SEARCH.providerId, envProvider: 'external-provider' } })
+    const ui = createWebConnectionsService()
+    const registered = when(ui.routes, routes => routes.get('search')?.kind === 'other')
+    h.ctx.provide('webConnections', ui)
+    await registered
+    expect(ui.sections.getSnapshot()).toEqual([])
+    expect(ui.routes.getSnapshot().get('search')).toEqual({ kind: 'other', provider: 'external-provider', providerId: SEARCH.providerId })
+    await h.fiber.dispose()
+    expect(ui.routes.getSnapshot().size).toBe(0)
+  })
+
   it('reads the public secrets sidecar and renders manual repair without exposing or unsetting a secret', async () => {
     const h = await fixture()
     const mirror = h.ctx.configForms.describe()
@@ -194,7 +209,7 @@ describe('browser apply composition', () => {
     roots.push(root)
     await React.act(async () => { root.render(h.ctx.slots.renderSlot('root', {})); await h.page().refreshPairings() })
     const alert = container.querySelector<HTMLElement>('[role="alert"]')!
-    expect(alert.textContent).toBe(en['settings.invalid'])
+    expect(alert.textContent).toBe(en['settings.unsupported'])
     expect(alert.title).toBe(en['settings.retiredSecret'].replace('{fields}', 'apiKey'))
     await React.act(async () => { h.ctx.locale.setLocale('zh') })
     expect(alert.title).toBe(zh['settings.retiredSecret'].replace('{fields}', 'apiKey'))

@@ -252,7 +252,7 @@
 
 .rowMeta code,
 .optionKey {
-  font-family: var(--dsw-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 11.5px;
 }
 
@@ -396,12 +396,6 @@
   min-width: 0;
 }
 
-.optionBoolean {
-  display: flex;
-  align-items: center;
-  height: 36px;
-}
-
 .optionName {
   display: flex;
   align-items: baseline;
@@ -489,7 +483,7 @@
 
 .prefix {
   flex: none;
-  font-family: var(--dsw-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 13px;
   line-height: 22px;
   color: var(--dsw-alias-label-tertiary);

@@ -1,4 +1,5 @@
 import { useId, useState } from 'react'
+import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { WriteSettings } from 'dsh-tool-web-enhanced-core/client'
 import type { Translate } from '../connections.ts'
 import { readAllowlist, replaceLine, type AllowlistField, type AllowlistReading, type LineNote } from '../allowlist-lines.ts'
@@ -126,11 +127,25 @@ export function AllowlistEditor({ allowCidrs, allowHostnames, disabled, revision
         <RuleField field="allowHostnames" text={draft.hostnames} reading={hostnames} disabled={locked} onChange={text => change('hostnames', text)} t={t} />
       </div>
       <div className={css.actions}>
-        <button type="button" className={css.save} disabled={locked || !dirty || cidrs.values === undefined || hostnames.values === undefined} onClick={() => { void save() }}>{t(busy ? 'allowlist.saving' : 'allowlist.save')}</button>
-        <button type="button" className={css.reset} disabled={locked || !dirty} onClick={() => {
-          setDraft({ cidrs: sourceCidrs, hostnames: sourceHostnames, baselineCidrs: sourceCidrs, baselineHostnames: sourceHostnames, revision })
-          setStatus('idle')
-        }}>{t('allowlist.reset')}</button>
+        <Button
+          type="button"
+          variant="primary"
+          disabled={locked || !dirty || cidrs.values === undefined || hostnames.values === undefined}
+          onClick={() => { void save() }}
+        >
+          {t(busy ? 'allowlist.saving' : 'allowlist.save')}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={locked || !dirty}
+          onClick={() => {
+            setDraft({ cidrs: sourceCidrs, hostnames: sourceHostnames, baselineCidrs: sourceCidrs, baselineHostnames: sourceHostnames, revision })
+            setStatus('idle')
+          }}
+        >
+          {t('allowlist.reset')}
+        </Button>
       </div>
       <ErrorText title={action.errorTitle}>{status === 'failed' ? action.error : undefined}</ErrorText>
       {status === 'saved' && <p role="status" className={css.success}>{t('allowlist.saved')}</p>}

@@ -81,13 +81,21 @@ export async function expandConnectionSection(menu: Locator, title: string): Pro
   const heading = section.getByRole('button', { name: new RegExp('^' + title + ' ·') })
   if (await heading.getAttribute('aria-expanded') !== 'true') await heading.click()
   await expect.poll(() => heading.getAttribute('aria-expanded')).toBe('true')
+  // Connection sections are an accordion; expanding one must collapse the other.
+  await expect.poll(() => menu.getByRole('button', { expanded: true }).count()).toBe(1)
   return section
 }
 
-export async function openConnections(page: Page): Promise<Locator> {
-  const button = page.getByRole('button', { name: uiText['button.aria'], exact: true })
+/** The composer trigger has one public capability span per side, independent of its dynamic name. */
+export function connectionButton(page: Page): Locator {
+  return page.getByRole('button').and(page.locator('[aria-haspopup="menu"]'))
+    .filter({ has: page.locator('span[data-capability]') })
+}
+
+export async function openConnections(page: Page, text: Readonly<Record<'menu.aria', string>> = uiText): Promise<Locator> {
+  const button = connectionButton(page)
   if (await button.getAttribute('aria-expanded') !== 'true') await button.click()
-  const menu = page.getByRole('menu', { name: uiText['menu.aria'], exact: true })
+  const menu = page.getByRole('menu', { name: text['menu.aria'], exact: true })
   await menu.waitFor()
   return menu
 }

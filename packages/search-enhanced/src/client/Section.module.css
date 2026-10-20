@@ -1,0 +1,37 @@
+/* Styles for search section options in composer menu */
+.caption {
+  margin: 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-caption);
+  overflow-wrap: anywhere;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.segmented {
+  display: grid;
+  width: 100%;
+}
+
+.segmented button {
+  padding: 0 4px;
+  font-size: 12px;
+}
+
+.error {
+  margin: 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-state-error-primary);
+}

@@ -1,7 +1,20 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { en, zh, type LocaleKey } from '../src/client/locales.ts'
+import { describe as connectionText } from '../src/client/connections.ts'
+import { SERVICE_NOTES } from '../src/client/settings/model.ts'
+import { ADAPTER_KEYS } from '../src/catalog.ts'
 
 const copy = {
+  'services.keyless': ['无需密钥', 'No key needed'],
+  'selector.offRow': ['关闭', 'Off'],
+  'settings.intro': ['每个会话通过地球按钮或 /setup-fetch 选择网页获取连接。本页设置默认连接及各连接的参数。状态点只反映配置，不代表服务可用性。', 'Each conversation chooses a fetch connection with the globe button or /setup-fetch. Set the default and each connection below. Status dots show configuration only, not service health.'],
+  'source.session': ['本会话', 'This conversation'],
+  'source.inherited': ['来自父会话', 'Parent conversation'],
+  'source.model': ['该模型上次的选择', "Model's last choice"],
+  'source.default': ['默认连接', 'Default connection'],
+  'status.needsAccount': ['需要 DeepSeek 账号或 API Key', 'Needs a DeepSeek account or API key'],
+  'status.needsCredential': ['需要 API Key', 'Needs an API key'],
   'defaults.showSelector': ['在输入框菜单中显示网页获取连接', 'Show fetch connections in the composer menu'],
   'route.unknown': ['无法确认网页获取是否经过本插件。', "Can't confirm that web fetch goes through this plugin."],
   'route.auto': ['尚未指定网页获取服务，这里的设置可能不生效。请在插件页打开本组合包修复。', 'No fetch service is selected, so these settings may not apply. Open this bundle on the Plugins page to fix it.'],
@@ -25,5 +38,38 @@ describe('fetch browser copy', () => {
       expect(placeholders(zh[key]), key).toEqual(placeholders(en[key]))
     }
     for (const dictionary of [zh, en]) expect(Object.values(dictionary).join(' ')).not.toMatch(/web_search|web_fetch|profile|配置包|抓取/)
+  })
+  it.each([
+    ['zh', '增强网页获取', '用你选择的网页获取连接提供 web_fetch：本机获取（可选内网放行规则）、DeepSeek Fetch API，或远程读取服务（Exa、Firecrawl、Tavily、Tinyfish）。'],
+    ['en', 'Web Fetch Enhanced', 'Serves web_fetch from the fetch connection you choose: local fetching (with optional private-network rules), the DeepSeek Fetch API, or remote reading services (Exa, Firecrawl, Tavily, Tinyfish).'],
+  ])('names every kind of connection in the %s Plugins-page metadata', (language, title, description) => {
+    const metadata: unknown = JSON.parse(readFileSync(new URL('../locale/' + language + '.json', import.meta.url), 'utf8'))
+    expect(metadata).toEqual({ meta: { title, description } })
+  })
+  it('describes the package with every kind of connection', () => {
+    const manifest: unknown = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+    expect(manifest).toHaveProperty('description', 'web_fetch provider for DeepSeek Harness with switchable fetch connections: local fetching with optional private-network access, the DeepSeek Fetch API, or remote reading services (Exa, Firecrawl, Tavily, Tinyfish); installed through dsh-tool-web-enhanced-profile')
+  })
+  it('has a plain note for every remote adapter service', () => {
+    for (const key of ADAPTER_KEYS) expect(SERVICE_NOTES).toHaveProperty(key)
+  })
+})
+
+describe('fetch connections in the composer menu', () => {
+  const t = (key: LocaleKey, params: Record<string, string | number> = {}) => zh[key].replace(/[{](\w+)[}]/gu, (_match, name: string) => String(params[name]))
+  const view = { remote: true, access: 'api-key', status: 'ready' } as const
+
+  it('says which service receives the URL of a ready remote connection', () => {
+    expect(connectionText({ ...view, id: 'builtin:tavily', label: 'Tavily', kind: 'adapter', access: 'keyless' }, t).caption).toBe('无需密钥 · URL 会发送给 Tavily')
+    expect(connectionText({ ...view, id: 'custom:team', label: 'Team reader', kind: 'adapter' }, t).caption).toBe('API Key · URL 会发送给 Team reader')
+    expect(connectionText({ ...view, id: 'builtin:deepseek-fetch-api', label: 'DeepSeek Fetch API', kind: 'native', access: 'account' }, t).caption).toBe('DeepSeek 账号 · URL 会发送给 DeepSeek Fetch API')
+    expect(connectionText({ id: 'builtin:local', label: 'Local HTTP', kind: 'local', remote: false, access: 'keyless', status: 'ready' }, t)).toEqual({ label: zh['connection.local'], caption: zh['access.local'] })
+  })
+
+  it('tells a missing key apart from a missing account or key, and from off or unsupported', () => {
+    expect(connectionText({ ...view, id: 'builtin:tinyfish', label: 'Tinyfish', kind: 'adapter', status: 'needs-credential' }, t).reason).toBe('需要 API Key')
+    expect(connectionText({ ...view, id: 'builtin:deepseek-fetch-api', label: 'DeepSeek Fetch API', kind: 'native', status: 'needs-credential' }, t).reason).toBe('需要 DeepSeek 账号或 API Key')
+    expect(connectionText({ ...view, id: 'builtin:exa', label: 'Exa', kind: 'adapter', status: 'disabled' }, t).reason).toBe(t('status.disabled', { name: 'Exa' }))
+    expect(connectionText({ ...view, id: 'custom:x', label: 'X', kind: 'adapter', status: 'unsupported' }, t).reason).toBe(t('status.unsupported', { name: 'X' }))
   })
 })

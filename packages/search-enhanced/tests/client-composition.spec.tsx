@@ -14,7 +14,8 @@ import type { SettingsNamespaceView } from '@deepseek-ai/dsh-api-remotes/client'
 import * as uiPlugin from '../../ui/src/client/index.tsx'
 import { en as uiEn } from '../../ui/src/client/locales.ts'
 import { fireEvent, screen } from '@testing-library/react'
-import { SEARCH, WEB_ROW } from 'dsh-tool-web-enhanced-core/shared'
+import { PROFILE_PACKAGE, SEARCH, WEB_ROW } from 'dsh-tool-web-enhanced-core/shared'
+import { NATIVE_SEARCH_ROW } from '../../ui/src/client/preflight.ts'
 import * as React from 'react'
 import * as ReactDOM from 'react-dom'
 import * as ReactDOMClient from 'react-dom/client'
@@ -22,6 +23,10 @@ import * as jsxRuntime from 'react/jsx-runtime'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as plugin from '../src/client/index.tsx'
 import type { SearchSelectionChange, SearchSelectionView } from '../src/contract.ts'
+import { en as searchEn } from '../src/client/locales.ts'
+
+/** The composer button; its name states the search side as "Search: <state>". */
+const composerButton = () => screen.getByRole('button', { name: new RegExp(`^${searchEn['section.title']}: `) })
 
 /** Execute shipped public client bundles with their documented module-loader protocol. */
 function browserModule(specifier: string): unknown {
@@ -50,6 +55,8 @@ const localeModule = browserModule('@deepseek-ai/dsh-client-locale/client') as {
 const contexts: cordis.Context[] = []
 const roots: ReactDOMClient.Root[] = []
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
+// jsdom does not lay out, so it has no scrollIntoView; the menu calls it when a section opens.
+Element.prototype.scrollIntoView = () => {}
 
 afterEach(async () => {
   await React.act(async () => { for (const root of roots.splice(0)) root.unmount() })
@@ -76,7 +83,7 @@ function when<T>(source: ObservableSnapshot<T>, matches: (value: T) => boolean):
   })
 }
 
-async function fixture(holdSelection = false) {
+async function fixture(holdSelection = false, envProvider: string | null = null) {
   const ctx = new cordis.Context()
   contexts.push(ctx)
   ctx.provide('connection', { generation: clientStore.createSnapshotStore(0) })
@@ -108,7 +115,7 @@ async function fixture(holdSelection = false) {
       }
       return { ok: true as const, value: current }
     }),
-    provider: vi.fn(async () => ({ ok: true as const, value: { providerId: SEARCH.providerId, configured: SEARCH.providerId, envProvider: null, routed: true } })),
+    provider: vi.fn(async () => ({ ok: true as const, value: { providerId: SEARCH.providerId, envProvider } })),
     pairings: vi.fn(async () => ({ ok: true as const, value: { pairings: [] } })),
     forgetPairing: vi.fn(async () => ({ ok: true as const, value: { pairings: [] } })),
   }
@@ -117,6 +124,7 @@ async function fixture(holdSelection = false) {
     searchConnections,
     settings: {
       describe: vi.fn(async () => ({ ok: true as const, value: { namespaces, writable: true, hasDocument: true } })),
+      mutate: vi.fn(async () => ({ ok: false as const, error: { code: 'gateway/internal', message: 'unexpected settings write' } })),
     },
     credentials: {
       describe: vi.fn(async () => ({ ok: true as const, value: {} })),
@@ -149,10 +157,21 @@ async function fixture(holdSelection = false) {
     props: { sessionId: 's1' },
   })
   ctx.slots.installScope('session', { current: session, bindingSource: () => session, renderArea: (_binding, props) => props.children })
+  let surface:
+    | { readonly kind: 'composer' }
+    | { readonly kind: 'overview' }
+    | { readonly kind: 'activation'; readonly onDismiss: () => void; readonly onOpenDetails: () => void }
+    = { kind: 'composer' }
   ctx.slots.register({ name: 'root', children: {
     'conversation.input.right': { kind: 'list', scope: 'session' },
     'plugins.row.config': { kind: 'keyed', scope: 'root' },
-  } }, ({ renderSlot }) => renderSlot('conversation.input.right', {}))
+    'plugins.bundle.activation': { kind: 'keyed', scope: 'root' },
+    'plugins.detail.section': { kind: 'list', scope: 'root' },
+  } }, ({ renderSlot }) => surface.kind === 'composer'
+    ? renderSlot('conversation.input.right', {})
+    : surface.kind === 'overview'
+      ? renderSlot('plugins.detail.section', { subject: { kind: 'bundle', pkg: { name: PROFILE_PACKAGE, installed: true, availability: 'installation', official: false, enabled: true, rows: [] } } })
+      : renderSlot('plugins.bundle.activation', { packageName: PROFILE_PACKAGE, onDismiss: surface.onDismiss, onOpenDetails: surface.onOpenDetails }, { entryKey: PROFILE_PACKAGE }))
 
   // The Plugins page navigation the ui package stores for its "open Plugins page" links.
   const openBundle = vi.fn()
@@ -182,6 +201,31 @@ async function fixture(holdSelection = false) {
   await render()
   return {
     ctx, root, render, remote, searchConnections, section, popup, openBundle,
+    async overview() {
+      await React.act(async () => {
+        surface = { kind: 'overview' }
+        root.render(ctx.slots.renderSlot('root', {}))
+      })
+    },
+    async activation() {
+      const onDismiss = vi.fn()
+      const onOpenDetails = vi.fn()
+      await React.act(async () => {
+        surface = { kind: 'activation', onDismiss, onOpenDetails }
+        root.render(ctx.slots.renderSlot('root', {}))
+      })
+      return { onDismiss, onOpenDetails }
+    },
+    async overrideWeb(user: Record<string, string>) {
+      await React.act(async () => {
+        ctx.configForms.describe().acceptView({ ...namespace(WEB_ROW, user), user })
+      })
+    },
+    async enableNativeSearch() {
+      await React.act(async () => {
+        ctx.configForms.describe().acceptView(namespace(NATIVE_SEARCH_ROW, {}))
+      })
+    },
     async releaseSelection() {
       await React.act(async () => {
         initialRead.resolve()
@@ -189,7 +233,7 @@ async function fixture(holdSelection = false) {
       })
     },
     async toggleMenu() {
-      await React.act(async () => { fireEvent.click(screen.getByRole('button', { name: uiEn['button.aria'] })) })
+      await React.act(async () => { fireEvent.click(composerButton()) })
     },
     async chooseCommand(id: string) {
       await React.act(async () => { await popup.onSelect({ id, label: '' }, { sessionId: 's1' } as never) })
@@ -203,6 +247,54 @@ async function fixture(holdSelection = false) {
 }
 
 describe('real UI and search browser apply composition', () => {
+  it('uses environment routing in the overview even when no selector section is registered', async () => {
+    const h = await fixture(false, SEARCH.providerId)
+    await h.overrideWeb({})
+    await React.act(async () => {
+      h.ctx.configForms.describe().acceptView(namespace(SEARCH.rowId, { version: 2, showSelector: false }))
+    })
+    expect(h.ctx.webConnections.sections.getSnapshot()).toEqual([])
+    await h.overview()
+    expect(screen.getByText(uiEn['overview.status.routed'])).toBeDefined()
+    expect(screen.getByText('search-enhanced', { selector: 'code' })).toBeDefined()
+    await h.overrideWeb({ searchProvider: 'external-provider' })
+    expect(screen.getByText(uiEn['overview.status.notRouted'])).toBeDefined()
+  })
+
+  it('cannot inspect the user configuration of an unserved native plugin', async () => {
+    const h = await fixture()
+    const native = h.ctx.configForms.get(NATIVE_SEARCH_ROW).getSnapshot()
+    expect(native.status).toBe('unavailable')
+    expect(native.user).toBeUndefined()
+    expect(h.ctx.configForms.describe().getSnapshot().view!.namespaces.some(entry => entry.ns === NATIVE_SEARCH_ROW)).toBe(false)
+  })
+
+  it('checks activation for legacy routing without writing settings and reacts to cleared overrides', async () => {
+    const h = await fixture()
+    await h.overrideWeb({ searchProvider: 'legacy-search' })
+    const actions = await h.activation()
+    expect(screen.getByText('Some previous settings may stop this bundle from handling web tools. Open settings to review them and remove leftover settings.')).toBeDefined()
+    expect(screen.queryByText(uiEn['activation.body'])).toBeNull()
+    await React.act(async () => { fireEvent.click(screen.getByRole('button', { name: uiEn['activation.open'] })) })
+    expect(actions.onOpenDetails).toHaveBeenCalledTimes(1)
+    await h.overrideWeb({ searchProvider: SEARCH.providerId })
+    expect(screen.getByText(uiEn['activation.body'])).toBeDefined()
+    expect(h.searchConnections.set).not.toHaveBeenCalled()
+    expect(h.remote.settings.mutate).not.toHaveBeenCalled()
+    expect(h.remote.settings.describe.mock.calls.length).toBeGreaterThan(0)
+  })
+
+  it('checks activation for a re-enabled native search plugin without web overrides', async () => {
+    const h = await fixture()
+    await h.activation()
+    expect(screen.getByText(uiEn['activation.body'])).toBeDefined()
+    await h.enableNativeSearch()
+    expect(screen.getByText('Some previous settings may stop this bundle from handling web tools. Open settings to review them and remove leftover settings.')).toBeDefined()
+    expect(screen.queryByText(uiEn['activation.body'])).toBeNull()
+    expect(h.searchConnections.set).not.toHaveBeenCalled()
+    expect(h.remote.settings.mutate).not.toHaveBeenCalled()
+  })
+
   it('stores the Plugins page navigation without navigating on activation', async () => {
     // A snapshot store runs a function passed to set() as an updater; the callback must be wrapped.
     const h = await fixture()
@@ -213,7 +305,7 @@ describe('real UI and search browser apply composition', () => {
   it('does not mark Off as selected or show its check while the initial selection is loading', async () => {
     const h = await fixture(true)
     try {
-      expect(screen.getByRole('button', { name: uiEn['button.aria'] }).textContent).toContain(uiEn['button.loading'])
+      expect(composerButton().textContent).toContain(uiEn['button.loading'])
       await h.toggleMenu()
       const menu = screen.getByRole('menu', { hidden: true })
       expect(menu.querySelector('[aria-checked="true"]') === null).toBe(true)
@@ -231,12 +323,12 @@ describe('real UI and search browser apply composition', () => {
     expect(h.searchConnections.get).toHaveBeenCalledTimes(1)
   })
 
-  it('reads provider facts only once per menu mount despite real route and selection rerenders', async () => {
+  it('keeps provider facts for the plugin lifetime rather than re-reading on menu mounts', async () => {
     const h = await fixture()
-    expect(h.searchConnections.provider).not.toHaveBeenCalled()
+    expect(h.searchConnections.provider).toHaveBeenCalledTimes(1)
     await h.toggleMenu()
     expect(h.searchConnections.provider).toHaveBeenCalledTimes(1)
-    expect(h.section.route.source.getSnapshot()).toEqual({ kind: 'this' })
+    expect(h.ctx.webConnections.routes.getSnapshot().get('search')).toEqual({ kind: 'this' })
     await h.render()
     await h.chooseCommand('connection:builtin:tavily')
     await h.chooseCommand('off')
@@ -244,9 +336,9 @@ describe('real UI and search browser apply composition', () => {
     await h.toggleMenu()
     expect(screen.queryByRole('menu', { hidden: true })).toBeNull()
     await h.toggleMenu()
-    expect(h.searchConnections.provider).toHaveBeenCalledTimes(2)
+    expect(h.searchConnections.provider).toHaveBeenCalledTimes(1)
     await h.render()
-    expect(h.searchConnections.provider).toHaveBeenCalledTimes(2)
+    expect(h.searchConnections.provider).toHaveBeenCalledTimes(1)
   })
 
   it('keeps real composer radio checks, trigger text and command options in sync after switches from either surface', async () => {
@@ -257,7 +349,7 @@ describe('real UI and search browser apply composition', () => {
 
     await React.act(async () => { fireEvent.click(screen.getByRole('menuitemradio', { name: uiEn['menu.offRow'], hidden: true })) })
     expect(screen.queryByRole('menu', { hidden: true })).toBeNull()
-    expect(screen.getByRole('button', { name: uiEn['button.aria'] }).textContent).toContain(uiEn['button.off'])
+    expect(composerButton().textContent).toContain(uiEn['button.off'])
     expect((await h.commandConnections()).filter(option => option.active).map(option => option.id)).toEqual(['off'])
 
     await h.toggleMenu()
@@ -265,13 +357,14 @@ describe('real UI and search browser apply composition', () => {
     expect(off.getAttribute('aria-checked')).toBe('true')
     expect(off.querySelector('svg')).not.toBeNull()
     await h.chooseCommand('connection:builtin:tavily')
-    expect(screen.getByRole('button', { name: uiEn['button.aria'] }).textContent).toContain('Tavily')
+    expect(composerButton().textContent).toContain('Tavily')
+    expect(composerButton().getAttribute('aria-label')).toBe(`${searchEn['section.title']}: Tavily`)
     expect(screen.getByRole('menuitemradio', { name: /Tavily/, hidden: true }).getAttribute('aria-checked')).toBe('true')
     expect(screen.getByRole('menuitemradio', { name: uiEn['menu.offRow'], hidden: true }).getAttribute('aria-checked')).toBe('false')
     expect((await h.commandConnections()).filter(option => option.active).map(option => option.id)).toEqual(['connection:builtin:tavily'])
 
     await React.act(async () => { fireEvent.click(screen.getByRole('menuitemradio', { name: /Exa/, hidden: true })) })
-    expect(screen.getByRole('button', { name: uiEn['button.aria'] }).textContent).toContain('Exa')
+    expect(composerButton().textContent).toContain('Exa')
     expect((await h.commandConnections()).filter(option => option.active).map(option => option.id)).toEqual(['connection:builtin:exa'])
     expect(h.searchConnections.set.mock.calls.map(([change]) => change.connectionId)).toEqual([null, 'builtin:tavily', 'builtin:exa'])
   })

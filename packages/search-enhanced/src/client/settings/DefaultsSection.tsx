@@ -1,7 +1,7 @@
 /** Defaults for new sessions and the composer button switch. */
 import { Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import { CATALOG, FRESHNESS, honorsFreshness, type CatalogKey, type Freshness } from '../../catalog.ts'
-import { freshnessLabel, type Translate } from '../connections.ts'
+import { freshnessLabel, listText, type Translate } from '../connections.ts'
 import { connectionChoices } from './model.ts'
 import { createDefaultsSection, type CredentialStatusMap } from 'dsh-tool-web-enhanced-core/client'
 import { resolveSettings } from '../../settings/resolve.ts'
@@ -32,15 +32,14 @@ export function DefaultsSection({ doc, write, credentials = {}, t }: { doc: Sett
     label: freshnessLabel(value, t),
   }))
 
-  const freshnessServices = (Object.keys(CATALOG) as CatalogKey[])
+  const freshnessServices = listText((Object.keys(CATALOG) as CatalogKey[])
     .filter(key => CATALOG[key].freshness.length > 0)
     .map(key => {
       const name = CATALOG[key].label
       return honorsFreshness(key, 'api-key') && !honorsFreshness(key, 'keyless')
         ? t('defaults.freshnessKeyOnly', { name })
         : name
-    })
-    .join(t('list.separator'))
+    }), t)
 
   return (
     <BaseDefaultsSection doc={doc} write={write} t={t} choices={choices} defaultConnection={defaultConnection} defaultLabel={CATALOG['deepseek-messages'].label} defaultAvailability={defaultAvailability}>

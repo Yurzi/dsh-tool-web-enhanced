@@ -1,6 +1,8 @@
 import {
+  Fragment,
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent,
@@ -18,9 +20,11 @@ import {
   useDismissOnOutsidePointer,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
-import { useObservable, type ConnectionSection, type WebConnectionsService } from 'dsh-tool-web-enhanced-core/client'
-import { checkDisabledCapabilities, type WebConfigSnapshot } from './disabled.ts'
+import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
+import { useObservable, type CapabilityName, type ConnectionSection, type SelectionState, type WebConnectionsService } from 'dsh-tool-web-enhanced-core/client'
+import { checkDisabledCapabilities, routeFor, type WebConfigSnapshot } from './disabled.ts'
 import type { NS } from './locales.ts'
+import type { Route } from 'dsh-tool-web-enhanced-core/shared'
 import css from './ComposerConnectionMenu.module.css'
 
 function clsx(...classes: (string | boolean | undefined | null)[]): string {
@@ -28,6 +32,69 @@ function clsx(...classes: (string | boolean | undefined | null)[]): string {
 }
 
 export type Translate = TranslateNS<typeof NS>
+
+/** What one capability's side of the button and its section heading show. */
+type SideState =
+  | { readonly kind: 'loading' }
+  | { readonly kind: 'read-failed' }
+  | { readonly kind: 'invalid-settings' }
+  | { readonly kind: 'off' }
+  | { readonly kind: 'missing' }
+  | { readonly kind: 'connection'; readonly label: string; readonly ready: boolean }
+
+function sideState(section: ConnectionSection, state: SelectionState): SideState {
+  if (state.readFailure === 'invalid-settings') return { kind: 'invalid-settings' }
+  if (state.readFailure === 'failed') return { kind: 'read-failed' }
+  const { view } = state
+  if (view === undefined) return { kind: 'loading' }
+  const { connectionId } = view.selection
+  if (connectionId === null) return { kind: 'off' }
+  const selected = view.connections.find(connection => connection.id === connectionId)
+  if (selected === undefined) return { kind: 'missing' }
+  return { kind: 'connection', label: section.describe(selected).label, ready: selected.status === 'ready' }
+}
+
+function sideText(side: SideState, t: Translate): string {
+  switch (side.kind) {
+    case 'loading': return t('button.loading')
+    case 'read-failed': return t('button.readFailed')
+    case 'invalid-settings': return t('button.invalidSettings')
+    case 'off': return t('button.off')
+    case 'missing': return t('button.missing')
+    case 'connection': return side.label
+  }
+}
+
+/** Whether the side needs the user: it cannot serve as shown, or the web row sends the capability elsewhere. */
+function needsAttention(side: SideState, route: Route): boolean {
+  if (route.kind === 'other') return true
+  switch (side.kind) {
+    case 'loading':
+    case 'off': return false
+    case 'read-failed':
+    case 'invalid-settings':
+    case 'missing': return true
+    case 'connection': return !side.ready
+  }
+}
+
+/** One snapshot of several sources; the array stays the same while none of them changes. */
+function combineSnapshots<T>(sources: readonly ObservableSnapshot<T>[]): ObservableSnapshot<readonly T[]> {
+  let last: readonly T[] = []
+  return {
+    getSnapshot() {
+      const next = sources.map(source => source.getSnapshot())
+      if (next.length !== last.length || next.some((value, index) => value !== last[index])) last = next
+      return last
+    },
+    subscribe(listener) {
+      const unsubscribes = sources.map(source => source.subscribe(listener))
+      return () => {
+        for (const unsubscribe of unsubscribes) unsubscribe()
+      }
+    },
+  }
+}
 
 export interface ModelSelectionProjection {
   readonly next?: { readonly provider: string; readonly model: string } | undefined
@@ -136,6 +203,7 @@ export function ComposerConnectionMenu({
   t,
 }: ComposerConnectionMenuProps) {
   const sections = useObservable(webConnections.sections)
+  const routes = useObservable(webConnections.routes)
 
   if (sections.length === 0) {
     return null
@@ -146,6 +214,7 @@ export function ComposerConnectionMenu({
       sessionId={sessionId}
       modelKey={modelKey}
       sections={sections}
+      routes={routes}
       searchServed={searchServed}
       fetchServed={fetchServed}
       webConfig={webConfig}
@@ -159,6 +228,7 @@ function ComposerConnectionMenuInner({
   sessionId,
   modelKey,
   sections,
+  routes,
   searchServed,
   fetchServed,
   webConfig,
@@ -168,6 +238,7 @@ function ComposerConnectionMenuInner({
   readonly sessionId: string
   readonly modelKey?: string | undefined
   readonly sections: readonly ConnectionSection[]
+  readonly routes: ReadonlyMap<CapabilityName, Route>
   readonly searchServed: boolean
   readonly fetchServed: boolean
   readonly webConfig?: WebConfigSnapshot | undefined
@@ -175,6 +246,8 @@ function ComposerConnectionMenuInner({
   readonly t: Translate
 }) {
   const [open, setOpen] = useState(false)
+  // Accordion: at most one section is open, so the open list gets the whole menu height.
+  const [expanded, setExpanded] = useState<CapabilityName | null>(null)
   const [notice, setNotice] = useState<{ seq: number; text: string } | null>(null)
   const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null)
   const seqRef = useRef(0)
@@ -192,13 +265,11 @@ function ComposerConnectionMenuInner({
   })
   useDismissOnOutsidePointer(rootRef, open, setOpen, menuRef)
 
-  // Sections sorted by order, primary section is search if available
-  const sortedSections = sections.toSorted((a, b) => a.order - b.order)
-  const primarySection =
-    sortedSections.find(s => s.capability === 'search') ??
-    sortedSections[0]!
-
-  const primaryState = useObservable(primarySection.selection.source(sessionId))
+  const sortedSections = useMemo(() => sections.toSorted((a, b) => a.order - b.order), [sections])
+  const states = useObservable(useMemo(
+    () => combineSnapshots(sortedSections.map(section => section.selection.source(sessionId))),
+    [sortedSections, sessionId],
+  ))
 
   useEffect(() => {
     for (const section of sections) {
@@ -216,6 +287,7 @@ function ComposerConnectionMenuInner({
       close()
     } else {
       setOpen(true)
+      setExpanded(sortedSections[0]!.capability)
       for (const section of sections) {
         void section.selection.load(sessionId, modelKey)
       }
@@ -245,35 +317,27 @@ function ComposerConnectionMenuInner({
     }
   }
 
-  let triggerLabel = t('button.loading')
-  let triggerAttention = false
-
-  if (primaryState.readFailed) {
-    triggerLabel = t('button.readFailed')
-    triggerAttention = true
-  } else if (primaryState.view !== undefined) {
-    const { connectionId } = primaryState.view.selection
-    if (connectionId === null) {
-      triggerLabel = t('button.off')
-    } else {
-      const conn = primaryState.view.connections.find(c => c.id === connectionId)
-      if (conn !== undefined) {
-        const text = primarySection.describe(conn)
-        triggerLabel = text.label
-        if (conn.status !== 'ready') {
-          triggerAttention = true
-        }
-      } else {
-        triggerLabel = t('button.missing')
-        triggerAttention = true
-      }
+  // Each side shows its connection; other states name their side, since "Off" alone does not say which.
+  const sides = sortedSections.map((section, index) => {
+    const side = sideState(section, states[index]!)
+    const state = sideText(side, t)
+    const capability = section.title()
+    const attention = needsAttention(side, routeFor(section.capability, routes, webConfig))
+    return {
+      capability: section.capability,
+      label: side.kind === 'connection' ? state : t('button.side', { capability, state }),
+      name: t(attention ? 'button.sideAttention' : 'button.side', { capability, state }),
+      attention,
     }
-  }
+  })
+  const triggerName = sides.map(side => side.name).join(' · ')
+  const saving = states.some(state => state.saving)
 
   const disabled = checkDisabledCapabilities({
     searchServed,
     fetchServed,
     webConfig,
+    routes,
   })
 
   return (
@@ -289,17 +353,26 @@ function ComposerConnectionMenuInner({
         ref={triggerRef}
         type="button"
         className={css.trigger}
-        aria-label={t('button.aria')}
+        aria-label={triggerName}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? `${id}-menu` : undefined}
-        title={t('button.title')}
+        title={triggerName}
         onClick={onTriggerClick}
       >
         <IconGlobeOutlineRegular className={css.icon} size={16} />
-        <span className={css.label}>{triggerLabel}</span>
-        {triggerAttention ? <StateDot state="warning" className={css.attention} /> : null}
-        {primaryState.saving ? (
+        <span className={css.sides}>
+          {sides.map((side, index) => (
+            <Fragment key={side.capability}>
+              {index > 0 && <span className={css.sideSeparator} aria-hidden="true">·</span>}
+              <span className={css.side} data-capability={side.capability}>
+                <span className={css.sideLabel}>{side.label}</span>
+                {side.attention && <StateDot state="warning" className={css.sideMark} />}
+              </span>
+            </Fragment>
+          ))}
+        </span>
+        {saving ? (
           <StateDot state="ongoing" className={css.busy} />
         ) : (
           <IconChevronDownOutlineRegular
@@ -319,12 +392,16 @@ function ComposerConnectionMenuInner({
             role="menu"
             aria-label={t('menu.aria')}
           >
-            {sortedSections.map((section, idx) => (
+            {sortedSections.map(section => (
               <SectionItem
                 key={section.capability}
                 section={section}
+                route={routeFor(section.capability, routes, webConfig)}
                 sessionId={sessionId}
-                initiallyExpanded={idx === 0}
+                expanded={expanded === section.capability}
+                onExpandedChange={next => {
+                  setExpanded(current => next ? section.capability : current === section.capability ? null : current)
+                }}
                 onChoose={connId => void choose(section, connId)}
                 onCloseMenu={close}
                 t={t}
@@ -398,35 +475,38 @@ function ComposerConnectionMenuInner({
 
 function SectionItem({
   section,
+  route,
   sessionId,
-  initiallyExpanded,
+  expanded,
+  onExpandedChange,
   onChoose,
   onCloseMenu,
   t,
 }: {
   readonly section: ConnectionSection
+  readonly route: Route
   readonly sessionId: string
-  readonly initiallyExpanded: boolean
+  readonly expanded: boolean
+  readonly onExpandedChange: (expanded: boolean) => void
   readonly onChoose: (connectionId: string | null) => void
   readonly onCloseMenu: () => void
   readonly t: Translate
 }) {
-  const [expanded, setExpanded] = useState(initiallyExpanded)
   const id = useId()
   const state = useObservable(section.selection.source(sessionId))
-  const route = useObservable(section.route.source)
   const settingsFn = useObservable(section.settings)
+  const bodyRef = useRef<HTMLDivElement | null>(null)
 
   const view = state.view
+  const loaded = view !== undefined
+
+  // Opening a section, or its list arriving while open, brings the chosen row into view.
+  useEffect(() => {
+    if (!expanded || !loaded) return
+    bodyRef.current?.querySelector('[aria-checked="true"]')?.scrollIntoView({ block: 'nearest' })
+  }, [expanded, loaded])
   const source = view ? section.sourceText(view) : ''
-  let current = t('button.loading')
-  if (state.readFailed) {
-    current = t('button.readFailed')
-  } else if (view !== undefined) {
-    const selected = view.connections.find(connection => connection.id === view.selection.connectionId)
-    current = view.selection.connectionId === null ? t('button.off')
-      : selected ? section.describe(selected).label : t('button.missing')
-  }
+  const current = sideText(sideState(section, state), t)
   const groupLabel = [section.title(), current, source].filter(Boolean).join(' · ')
 
   return (
@@ -439,11 +519,11 @@ function SectionItem({
         aria-controls={id + '-content'}
         title={groupLabel}
         aria-label={groupLabel}
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => onExpandedChange(!expanded)}
         onKeyDown={event => {
           if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
             event.preventDefault()
-            setExpanded(event.key === 'ArrowRight')
+            onExpandedChange(event.key === 'ArrowRight')
           }
         }}
       >
@@ -456,7 +536,7 @@ function SectionItem({
         <IconChevronDownOutlineRegular size={12} className={clsx(css.chevron, expanded && css.chevronOpen)} />
       </button>
       <div id={id + '-content'} className={css.sectionContents} hidden={!expanded}>
-        <div className={css.sectionBody}>
+        <div ref={bodyRef} className={css.sectionBody}>
           {route.kind === 'other' && (
             <div className={css.routeNotice} role="alert">
               <IconWarningOutlineRegular size={14} className={css.noticeIcon} />
@@ -464,8 +544,14 @@ function SectionItem({
             </div>
           )}
 
-          {view === undefined ? (
-            state.readFailed ? (
+          {state.readFailure === 'invalid-settings' ? (
+            // Retrying cannot help: the settings must be fixed, through the settings entry below.
+            <div className={css.routeNotice} role="alert">
+              <IconWarningOutlineRegular size={14} className={css.noticeIcon} />
+              <span>{t('menu.invalidSettings', { capability: section.title() })}</span>
+            </div>
+          ) : view === undefined ? (
+            state.readFailure === 'failed' ? (
               <button
                 type="button"
                 className={css.row}

@@ -10,6 +10,7 @@ import type { FetchSettings } from '../src/settings/types.ts'
 import type { CredentialStatusMap, PairingsState } from '../src/client/injected.ts'
 import { zh } from '../src/client/locales.ts'
 import { SettingsPage, type SettingsPageProps } from '../src/client/settings/SettingsPage.tsx'
+import { CATALOG } from '../src/catalog.ts'
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined
@@ -287,6 +288,122 @@ describe('fetch row settings', () => {
     await flush()
     expect(h.saveCredential).toHaveBeenCalledWith('DEEPSEEK_API_KEY', 'secret')
     expect(JSON.stringify(h.mutate.mock.calls)).not.toContain('secret')
+  })
+
+  it('revokes endpoint trust when the API URL is cleared', async () => {
+    const h = mountPage({ user: { version: 2, connections: { 'builtin:deepseek-fetch-api': { label: 'Fetch API', trustedEndpoint: true, options: { baseURL: 'https://proxy.example.com/v1/tools' } } } } })
+    h.configure('Fetch API')
+    const url = input(h, 'option.native.baseURL')
+    type(url, '')
+    blur(url)
+    await flush()
+    expect(h.mutate).toHaveBeenCalledExactlyOnceWith([
+      { op: 'unset', path: ['connections', 'builtin:deepseek-fetch-api', 'options'] },
+      { op: 'unset', path: ['connections', 'builtin:deepseek-fetch-api', 'trustedEndpoint'] },
+    ], 8)
+  })
+
+  it('leaves the allowlist and User-Agent to the local editors and the limits to the shared form', () => {
+    const h = mountPage()
+    h.configure(tZh('connection.local'))
+    const local = h.row(tZh('connection.local'))
+    const labels = [...local.querySelectorAll('label')].map(label => label.textContent)
+    expect(labels.filter(label => label === tZh('option.local.userAgent'))).toHaveLength(1)
+    expect(labels.filter(label => label === tZh('allowlist.allowCidrs'))).toHaveLength(1)
+    for (const key of ['option.local.maxResponseBytes', 'option.local.maxBodyChars', 'option.local.timeoutMs', 'option.local.maxRedirects']) expect(labels).toContain(tZh(key))
+    expect(local.textContent).not.toContain(tZh('credential.reference'))
+  })
+
+  it('shows every remote service from the catalog with who receives the URL and its options per route', () => {
+    const h = mountPage()
+    for (const name of ['Exa', 'Firecrawl', 'Tavily', 'Tinyfish']) {
+      expect(h.row(name).textContent).not.toContain(tZh('services.remoteNotice', { name }))
+      h.configure(name)
+      expect(h.row(name).textContent).toContain(tZh('services.remoteNotice', { name }))
+      h.configure(name)
+    }
+    h.configure('Exa')
+    expect(h.row('Exa').textContent).toContain(tZh('services.note.exa'))
+    expect(h.row('Exa').textContent).not.toContain(tZh('option.exa.maxAgeHours'))
+    expect(h.row('Exa').textContent).toContain(tZh('options.keylessMore'))
+    h.configure('Tinyfish')
+    expect(input(h, 'option.tinyfish.ttl').placeholder).toBe('默认')
+    expect(input(h, 'credential.reference').value).toBe('TINYFISH_API_KEY')
+  })
+
+  it('says how the local connection reaches pages, as the menu does, and keyless services need no key', () => {
+    const h = mountPage()
+    expect(h.row(tZh('connection.local')).textContent).toContain(tZh('access.local'))
+    expect(h.row(tZh('connection.local')).textContent).not.toContain(tZh('services.keyless'))
+    expect(h.row('Tavily').textContent).toContain(tZh('services.keyless'))
+  })
+
+  it('keeps the default placeholder on numeric cache options and explains special values below them', () => {
+    const h = mountPage({ user: { version: 2, connections: { 'builtin:exa': { access: 'api-key' }, 'builtin:tinyfish': {} } } })
+    const hintOf = (element: HTMLElement) => document.getElementById(element.getAttribute('aria-describedby')!)?.textContent
+    h.configure('Exa')
+    for (const key of ['option.exa.maxAgeHours', 'option.exa.livecrawlTimeout']) expect(input(h, key).placeholder).toBe('默认')
+    expect(hintOf(input(h, 'option.exa.maxAgeHours'))).toBe('0 为总是实时，-1 为只用缓存')
+    h.configure('Firecrawl')
+    expect(input(h, 'option.firecrawl.maxAge').placeholder).toBe('默认')
+    expect(hintOf(input(h, 'option.firecrawl.maxAge'))).toBe('0 为总是实时；1 天 = 86 400 000 毫秒')
+    h.configure('Tinyfish')
+    expect(input(h, 'option.tinyfish.ttl').placeholder).toBe('默认')
+    expect(hintOf(input(h, 'option.tinyfish.ttl'))).toBe('0 为总是实时')
+  })
+
+  it('accepts a cache age of -1 for Exa on the personal-key route', async () => {
+    const h = mountPage({ user: { version: 2, connections: { 'builtin:exa': { access: 'api-key' } } } })
+    h.configure('Exa')
+    const age = input(h, 'option.exa.maxAgeHours')
+    type(age, '-1')
+    blur(age)
+    await flush()
+    expect(h.mutate).toHaveBeenCalledExactlyOnceWith([{ op: 'set', path: ['connections', 'builtin:exa', 'options', 'maxAgeHours'], value: -1 }], 8)
+  })
+
+  it('shows the custom connection section because the catalog has adapter entries, offering them as formats', () => {
+    const h = mountPage()
+    expect(h.container.textContent).toContain(tZh('custom.title'))
+    expect(h.container.textContent).toContain(tZh('custom.empty'))
+    click(byText(h.container, 'button', tZh('custom.addStructured')))
+    const format = h.container.querySelector('[aria-label="' + tZh('editor.adapter') + '"]')
+    expect(format?.textContent).toContain('Exa')
+    expect(input(h, 'editor.endpoint').placeholder).toBe(CATALOG.exa.endpoint)
+  })
+
+  it('shows an unset boolean option as the service default rather than off', async () => {
+    const h = mountPage()
+    h.configure('Firecrawl')
+    const menu = byText(h.row('Firecrawl'), 'button[aria-label="' + tZh('option.firecrawl.onlyMainContent') + '"]', '')!
+    expect(menu.textContent).toContain(tZh('options.default'))
+    expect(h.row('Firecrawl').querySelector('[role="switch"][aria-label="' + tZh('option.firecrawl.onlyMainContent') + '"]')).toBeNull()
+    click(menu)
+    click(byText(document.body, '[role="menuitem"]', tZh('options.off')))
+    await flush()
+    expect(h.mutate).toHaveBeenCalledExactlyOnceWith([{ op: 'set', path: ['connections', 'builtin:firecrawl', 'options', 'onlyMainContent'], value: false }], 8)
+  })
+
+  it('switches Exa back to the keyless route together with dropping its personal-key options', async () => {
+    const h = mountPage({ user: { version: 2, connections: { 'builtin:exa': { access: 'api-key', options: { maxAgeHours: 24 } } } } })
+    h.configure('Exa')
+    click(byText(h.row('Exa'), '[role="tab"]', tZh('services.accessKeyless')))
+    await flush()
+    expect(h.mutate).toHaveBeenCalledExactlyOnceWith([
+      { op: 'unset', path: ['connections', 'builtin:exa', 'access'] },
+      { op: 'unset', path: ['connections', 'builtin:exa', 'options'] },
+    ], 8)
+  })
+
+  it('removes the last custom connection without touching a built-in default', async () => {
+    const h = mountPage({ user: { version: 2, defaultConnection: 'builtin:exa', connections: {
+      'custom:team': { kind: 'adapter', adapter: 'firecrawl', label: 'Team', credentialRef: 'TEAM_KEY', endpoint: 'https://scrape.team.internal/v2/scrape', trustedEndpoint: true },
+    } } })
+    expect(h.row('Team').textContent).toContain(tZh('services.remoteNotice', { name: 'Firecrawl (scrape.team.internal)' }))
+    click(byText(h.row('Team'), 'button', tZh('custom.remove')))
+    click(byText(h.row('Team').querySelector('[role="group"]')!, 'button', tZh('custom.remove')))
+    await flush()
+    expect(h.mutate).toHaveBeenCalledExactlyOnceWith([{ op: 'unset', path: ['connections'] }], 8)
   })
 
   it('lists model memories, clears them and confirms reset without deleting credentials', async () => {

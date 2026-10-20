@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ConnectionSection } from 'dsh-tool-web-enhanced-core/client'
+import type { Route } from 'dsh-tool-web-enhanced-core/shared'
 import { Context } from '@deepseek-ai/cordis'
 import {
   createSnapshotStore,
@@ -13,12 +14,9 @@ function mockSection(capability: 'search' | 'fetch', order: number): ConnectionS
     order,
     title: () => (capability === 'search' ? 'Web Search' : 'Web Fetch'),
     selection: {
-      source: () => createSnapshotStore({ view: undefined, saving: false, readFailed: false }),
+      source: () => createSnapshotStore({ view: undefined, saving: false, readFailure: undefined }),
       load: async () => {},
       set: async () => ({ ok: true }),
-    },
-    route: {
-      source: createSnapshotStore({ kind: 'this' }),
     },
     describe: conn => ({ label: conn.label }),
     sourceText: () => 'default',
@@ -28,6 +26,20 @@ function mockSection(capability: 'search' | 'fetch', order: number): ConnectionS
 }
 
 describe('WebConnectionsService (pure factory)', () => {
+  it('publishes route facts independently of sections and releases their subscriptions', () => {
+    const service = createWebConnectionsService()
+    const source = createSnapshotStore<Route>({ kind: 'this' })
+    const unregister = service.registerRoute('search', { source })
+    expect(service.sections.getSnapshot()).toEqual([])
+    expect(service.routes.getSnapshot().get('search')).toEqual({ kind: 'this' })
+    source.set({ kind: 'other', provider: 'http', providerId: 'search-enhanced' })
+    expect(service.routes.getSnapshot().get('search')).toEqual({ kind: 'other', provider: 'http', providerId: 'search-enhanced' })
+    unregister()
+    unregister()
+    source.set({ kind: 'this' })
+    expect(service.routes.getSnapshot().size).toBe(0)
+  })
+
   it('starts with empty sections', () => {
     const service = createWebConnectionsService()
     expect(service.sections.getSnapshot()).toEqual([])

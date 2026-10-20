@@ -1,13 +1,15 @@
 /** Optional request options: labelled inputs over editor text, and a self-saving form around them. */
 import { useState, type KeyboardEvent } from 'react'
-import { Input, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Input } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ClientTranslate } from '../command.ts'
 import { fieldText, fieldValue, isValidText, type OptionField, type FieldTexts } from './fields.ts'
 import type { SettingsClasses, SettingsParts } from './parts.tsx'
 
+export type OptionsCopyKey = 'options.default' | 'options.invalid' | 'options.on' | 'options.off'
+
 export function createOptionsEditor<K extends string>({ classes: css, keys, parts: { SelectMenu }, valueLabel }: {
   classes: SettingsClasses
-  keys: Readonly<Record<'options.default' | 'options.invalid', K>>
+  keys: Readonly<Record<OptionsCopyKey, K>>
   parts: SettingsParts<K>
   valueLabel: (value: string, t: ClientTranslate<K>) => string
 }) {
@@ -52,26 +54,8 @@ export function createOptionsEditor<K extends string>({ classes: css, keys, part
     t: ClientTranslate<K>
   }) {
     const label = t(field.label)
-  
-    if (field.kind === 'boolean') {
-      return (
-        <div className={css.option}>
-          <span className={css.optionName}>{label}</span>
-          <div className={css.optionBoolean}>
-            <Switch
-              checked={text === 'true'}
-              disabled={disabled}
-              label={label}
-              onChange={(checked) => {
-                const next = checked ? 'true' : 'false'
-                onEdit(next)
-                onSettle(next)
-              }}
-            />
-          </div>
-        </div>
-      )
-    }
+    const hintId = id + '-hint'
+    const hint = field.hint === undefined ? null : <span className={css.hint} id={hintId}>{t(field.hint)}</span>
   
     if (field.kind === 'text' || field.kind === 'url' || field.kind === 'integer') {
       const invalid = !isValidText(field, text)
@@ -90,6 +74,7 @@ export function createOptionsEditor<K extends string>({ classes: css, keys, part
             value={text}
             disabled={disabled}
             aria-invalid={invalid}
+            aria-describedby={hint === null ? undefined : hintId}
             spellCheck={false}
             title={field.name}
             inputMode={field.kind === 'integer' ? 'numeric' : undefined}
@@ -99,11 +84,15 @@ export function createOptionsEditor<K extends string>({ classes: css, keys, part
             onKeyDown={settleOnEnter}
           />
           {invalid ? <span className={css.fieldError}>{t(keys['options.invalid'])}</span> : null}
+          {hint}
         </div>
       )
     }
   
-    const choices = field.values.map(value => ({ id: value, label: valueLabel(value, t) }))
+    // Unset is the service's own default, which the catalog does not claim to know; a boolean is no exception.
+    const choices = field.kind === 'boolean'
+      ? [{ id: 'true', label: t(keys['options.on']) }, { id: 'false', label: t(keys['options.off']) }]
+      : field.values.map(value => ({ id: value, label: valueLabel(value, t) }))
     return (
       <div className={css.option}>
         <span className={css.optionName}>{label}</span>
@@ -119,6 +108,7 @@ export function createOptionsEditor<K extends string>({ classes: css, keys, part
             onSettle(choice)
           }}
         />
+        {hint}
       </div>
     )
   }

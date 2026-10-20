@@ -4,7 +4,14 @@ import type {} from '@deepseek-ai/dsh-settings'
 import z from '@deepseek-ai/schemastery'
 import { SETTINGS_FIELDS } from '../shared/settings.ts'
 import type { RowIdentity } from '../shared/ids.ts'
-import { capabilityErrors } from './errors.ts'
+import { WebError } from '@deepseek-ai/dsh-web'
+
+/** Identifies invalid row documents without exposing their diagnostics to callers. */
+export class InvalidSettingsError extends WebError {
+  constructor(packageName: string, capabilityLabel: string) {
+    super(packageName + ': ' + capabilityLabel + ' settings are invalid; ask the user to fix them on the settings page', 'WEB_PROVIDER_CONFIGURED_UNAVAILABLE')
+  }
+}
 
 export type VolatileSettings<V> = { [K in keyof V]-?: Volatile<V[K]> }
 
@@ -24,7 +31,6 @@ export function settingsRow<V extends object, S>(options: {
   const read = (config: VolatileSettings<V>): Record<string, unknown> => Object.fromEntries(Object.entries(config)
     .map(([key, value]) => [key, Object.hasOwn(fields, key) ? (value as Volatile<unknown>).get() : value])
     .filter(([, value]) => value !== undefined))
-  const errors = capabilityErrors(identity.packageName)
   function apply(ctx: Context, config: VolatileSettings<V>, install: (ctx: Context, settings: () => S) => unknown): void {
     try {
       resolve(read(config))
@@ -42,9 +48,9 @@ export function settingsRow<V extends object, S>(options: {
     install(ctx, () => {
       try {
         return resolve(read(config))
-      } catch (error) {
-        ctx.logger.warn('%s: invalid live ' + capabilityLabel + ' settings: %s', identity.rowId, error)
-        throw errors.error('WEB_PROVIDER_CONFIGURED_UNAVAILABLE', capabilityLabel + ' settings are invalid; ask the user to fix them on the settings page')
+      } catch {
+        // Initial validation and internal/config already record the document diagnostic.
+        throw new InvalidSettingsError(identity.packageName, capabilityLabel)
       }
     })
   }

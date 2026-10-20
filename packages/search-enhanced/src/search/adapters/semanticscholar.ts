@@ -1,18 +1,18 @@
 /** Semantic Scholar paper search; requires a personal API key. */
 import { invalidResponse } from '../http.ts'
-import { authors, collect, firstSourceUrl, isRecord, summary, text } from '../sources.ts'
-import { apiKeyHeader, envelope, getJson, type AdapterFor } from './types.ts'
+import { authors, collect, firstSourceUrl, summary, text } from '../sources.ts'
+import { isRecord, apiKeyHeader, getJson } from 'dsh-tool-web-enhanced-core/host'
+import { envelope, type AdapterFor } from './types.ts'
 
 const FIELDS = 'title,url,abstract,tldr,authors,year,publicationDate,citationCount,openAccessPdf,externalIds'
 
 export const semanticscholar: AdapterFor<'semanticscholar'> = {
   request(input, endpoint, auth) {
-    const url = new URL(endpoint)
-    url.searchParams.set('query', input.query)
-    if (input.maxResults !== undefined) url.searchParams.set('limit', String(Math.min(input.maxResults, 100)))
-    url.searchParams.set('fields', FIELDS)
-    for (const [key, value] of Object.entries(input.options)) url.searchParams.set(key, String(value))
-    return getJson(url, apiKeyHeader(auth))
+    const query: Record<string, string> = { query: input.query }
+    if (input.maxResults !== undefined) query.limit = String(Math.min(input.maxResults, 100))
+    query.fields = FIELDS
+    for (const [key, value] of Object.entries(input.options)) query[key] = String(value)
+    return getJson(endpoint, query, apiKeyHeader(auth))
   },
   parse(payload) {
     const root = envelope(payload)

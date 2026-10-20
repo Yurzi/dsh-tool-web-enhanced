@@ -1,5 +1,7 @@
-import { documentVersion, migrateDocument } from '../src/shared/settings.ts'
-import { describe, expect, it } from 'vitest'
+import { validateOptions, type OptionRule } from '../src/shared/connections.ts'
+import { customConnectionSchema, documentVersion, migrateDocument, type CustomConnection } from '../src/shared/settings.ts'
+import { describe, expect, expectTypeOf, it } from 'vitest'
+import type { z } from 'zod'
 import { resolveTestSettings, resolveLocalSettings } from './fixtures/settings.ts'
 
 const hint = 'this release does not read 0.1.x settings; remove the field or use Reset on the settings page'
@@ -33,6 +35,20 @@ for (const [name, resolve, defaults] of [['custom-enabled', resolveTestSettings,
   })
 }
 
+describe('custom connections', () => {
+  it('are rejected as unknown connection ids, with reset advice, when the catalog has no adapter entries', () => {
+    const custom = { kind: 'adapter', adapter: 'adapter', label: 'Mine', credentialRef: 'MINE_KEY' }
+    expect(() => resolveLocalSettings({ connections: { 'custom:mine': custom } })).toThrow('connections.custom:mine: unknown connection id "custom:mine"; ' + hint)
+    expect(() => resolveLocalSettings({ defaultConnection: 'custom:mine' })).toThrow('defaultConnection: unknown connection id "custom:mine"; ' + hint)
+    expect(resolveTestSettings({ defaultConnection: 'custom:mine', connections: { 'custom:mine': custom } }).connections.get('custom:mine')).toMatchObject({ kind: 'adapter', access: 'api-key', credentialRef: 'MINE_KEY' })
+  })
+
+  it('keep the interface and the schema of a persisted custom connection identical', () => {
+    type Parsed = Readonly<z.output<ReturnType<typeof customConnectionSchema>>>
+    expectTypeOf<Parsed>().toEqualTypeOf<CustomConnection>()
+  })
+})
+
 describe('document version identification and future upgrade pipeline', () => {
   it('recognizes omitted/current, older, newer and malformed version states', () => {
     expect(documentVersion({})).toEqual({ kind: 'current' })
@@ -51,5 +67,15 @@ describe('document version identification and future upgrade pipeline', () => {
     expect(() => migrateDocument({ version: 3 })).toThrow('newer')
     expect(() => resolveTestSettings({ schemaVersion: 1 })).toThrow(hint)
     expect(() => resolveLocalSettings({ schemaVersion: 1 })).toThrow(hint)
+  })
+})
+
+describe('option rules', () => {
+  it('lets an integer option require API-key access, like the other rule kinds', () => {
+    const rules: Record<string, OptionRule> = { maxAgeHours: { kind: 'integer', min: -1, max: 720, keyless: false }, timeout: { kind: 'integer', min: 1, max: 60 } }
+    expect(validateOptions('Service', rules, { maxAgeHours: 24, timeout: 5 }, 'api-key')).toEqual([])
+    expect(validateOptions('Service', rules, { timeout: 5 }, 'keyless')).toEqual([])
+    expect(validateOptions('Service', rules, { maxAgeHours: 24 }, 'keyless')).toEqual(['Service option "maxAgeHours" = 24 needs API-key access'])
+    expect(validateOptions('Service', rules, { maxAgeHours: 721 }, 'api-key')).toEqual(['Service option "maxAgeHours" has an invalid value'])
   })
 })

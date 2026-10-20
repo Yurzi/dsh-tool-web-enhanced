@@ -39,8 +39,8 @@ export function selectionCommand<V extends SelectionView, K extends string>(
 ): CommandContribution {
   const t = (key: CommandCopyKey) => spec.t(spec.keys[key])
   const read = async (sessionId: string) => {
-    const { view, readFailed } = await selections.current(sessionId)
-    if (view === undefined || readFailed) throw new Error(t('readFailed'))
+    const { view, readFailure } = await selections.current(sessionId)
+    if (view === undefined || readFailure !== undefined) throw new Error(t('readFailed'))
     return view
   }
   return {

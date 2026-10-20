@@ -1,27 +1,26 @@
-/** M2 visual matrix against one isolated DSH server and one shared browser. */
+/** Visual matrix against one isolated DSH server and one shared browser. */
 import { join } from 'node:path'
 import { FETCH, SEARCH } from 'dsh-tool-web-enhanced-core/shared'
-import type { Locator, Page } from 'playwright-core'
+import type { Locator } from 'playwright-core'
 import { afterAll, afterEach, beforeAll, describe, expect, inject, it } from 'vitest'
 import { type App, browserRequired, chromiumPath, openApp, recordBrowserFailure } from './harness/browser.ts'
 import { en as uiText } from '../packages/ui/src/client/locales.ts'
 import { en as searchText } from '../packages/search-enhanced/src/client/locales.ts'
 import { en as fetchText } from '../packages/fetch-enhanced/src/client/locales.ts'
 import { artifacts } from './harness/environment.ts'
-import { newSession, openBundle, openConnections, openFetchSettings, openSearchSettings } from './harness/navigation.ts'
+import { connectionButton, expandConnectionSection, newSession, openBundle, openConnections, openFetchSettings, openSearchSettings } from './harness/navigation.ts'
 import { type WebServer, startWeb } from './harness/web.ts'
+import { expectTheme, setTheme, type ThemePreference } from './harness/theme.ts'
 
 const e2e = inject('e2e')
 const desktop = { width: 1280, height: 900 }
 const widths = [1280, 768, 390] as const
 const schemes = ['light', 'dark'] as const
-const views = ['settings-page', 'fetch-settings-page', 'composer-menu', 'bundle-overview'] as const
+const views = ['settings-page', 'fetch-settings-page', 'composer-menu', 'bundle-overview', 'fetch-remote-settings', 'fetch-remote-menu'] as const
 const matrix = widths.flatMap(width => schemes.flatMap(scheme => views.map(view => ({ width, scheme, view }))))
-type Scheme = typeof schemes[number]
-type ThemePreference = Scheme | 'system'
-const themeLabels = { light: 'Light', dark: 'Dark', system: 'System' } as const
 
-describe.skipIf(chromiumPath === undefined && !browserRequired)('M2 screenshot matrix', () => {
+
+describe.skipIf(chromiumPath === undefined && !browserRequired)('Screenshot matrix', () => {
   let server: WebServer | undefined
   let app: App
   let originalTheme: ThemePreference | undefined
@@ -89,9 +88,38 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('M2 screenshot m
           await page.locator('[data-conversation-session="' + sessionId + '"]').waitFor()
           const menu = await openConnections(page)
           // A section title alone can render before its selection has loaded.
-          await menu.getByRole('group', { name: new RegExp('^' + searchText['section.title'] + '(?: ·|$)') }).getByRole('menuitemradio', { name: /^Exa\b/ }).waitFor()
+          const search = await expandConnectionSection(menu, searchText['section.title'])
+          await search.getByRole('menuitemradio', { name: /^Exa\b/ }).waitFor()
           await menu.getByRole('group', { name: fetchText['section.title'], exact: true }).getByRole('button', { name: /^Fetch · Local HTTP ·/ }).waitFor()
           // DSH's first-run workspace warning must not obscure the menu evidence.
+          await page.getByRole('alert').filter({ hasText: 'Unable to create default workspace.' }).waitFor({ state: 'hidden' })
+          break
+        }
+        case 'fetch-remote-settings': {
+          const settings = await openFetchSettings(page, false)
+          const configure = settings.getByRole('button', { name: fetchText['services.configureLabel'].replace('{name}', 'Firecrawl'), exact: true })
+          await configure.click()
+          const notice = settings.getByText(fetchText['services.remoteNotice'].replace('{name}', 'Firecrawl'), { exact: true })
+          await notice.waitFor()
+          await page.setViewportSize({ width, height: desktop.height })
+          await configure.scrollIntoViewIfNeeded()
+          await settings.getByRole('button', { name: fetchText['option.firecrawl.onlyMainContent'], exact: true }).waitFor()
+          break
+        }
+        case 'fetch-remote-menu': {
+          await newSession(page)
+          await page.setViewportSize({ width, height: desktop.height })
+          const menu = await openConnections(page)
+          const fetch = await expandConnectionSection(menu, fetchText['section.title'])
+          for (const name of ['Exa', 'Firecrawl', 'Tavily']) {
+            const row = fetch.getByRole('menuitemradio', { name: new RegExp('^' + name + '(?: |$)') })
+            await row.waitFor()
+            expect(await row.isEnabled()).toBe(true)
+          }
+          const tinyfish = fetch.getByRole('menuitemradio', { name: /^Tinyfish(?: |$)/ })
+          expect(await tinyfish.getAttribute('aria-checked')).toBe('false')
+          await tinyfish.getByText(fetchText['status.needsCredential'].replace('{name}', 'Tinyfish'), { exact: true }).waitFor()
+          await fetch.getByRole('menuitemradio', { name: /^Firecrawl(?: |$)/ }).scrollIntoViewIfNeeded()
           await page.getByRole('alert').filter({ hasText: 'Unable to create default workspace.' }).waitFor({ state: 'hidden' })
           break
         }
@@ -113,6 +141,14 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('M2 screenshot m
         fullPage: true,
         animations: 'disabled',
       })
+      if (view === 'composer-menu' && width === 390) {
+        const button = connectionButton(page)
+        const accessibleName = await button.getAttribute('aria-label')
+        await page.setViewportSize({ width: 360, height: desktop.height })
+        expect(await button.getAttribute('aria-label')).toBe(accessibleName)
+        await app.screenshot('composer-menu-360-' + scheme)
+        await page.setViewportSize({ width, height: desktop.height })
+      }
       // Keep the matrix image as evidence before failing a visual regression.
       if (view === 'bundle-overview') await expectOverviewHealthy(page.getByRole('region', { name: uiText['overview.title'], exact: true }))
       if (view === 'composer-menu') await expectMenuSectionsInView(page.getByRole('menu', { name: uiText['menu.aria'], exact: true }))
@@ -127,33 +163,6 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('M2 screenshot m
     expect(app.errors).toEqual([])
   })
 })
-
-/** Use DSH's persisted Appearance setting rather than changing only media queries. */
-async function setTheme(page: Page, preference: ThemePreference): Promise<ThemePreference> {
-  await page.getByRole('button', { name: 'Account menu', exact: true }).click()
-  await page.getByRole('menuitem', { name: 'Settings', exact: true }).click()
-  const settings = page.getByRole('dialog', { name: 'Settings', exact: true })
-  await settings.getByRole('button', { name: 'General', exact: true }).click()
-  const selected = settings.getByRole('button', { name: /^(Light|Dark|System)$/, pressed: true })
-  await selected.waitFor()
-  const previous = (await selected.innerText()).trim()
-  expect(previous).toMatch(/^(Light|Dark|System)$/)
-
-  try {
-    const button = settings.getByRole('button', { name: themeLabels[preference], exact: true })
-    await button.click()
-    await settings.getByRole('button', { name: themeLabels[preference], exact: true, pressed: true }).waitFor()
-    if (preference !== 'system') await expectTheme(page, preference)
-  } finally {
-    await settings.getByRole('button', { name: 'Close', exact: true }).click()
-    await settings.waitFor({ state: 'hidden' })
-  }
-  return previous.toLowerCase() as ThemePreference
-}
-
-async function expectTheme(page: Page, scheme: Scheme): Promise<void> {
-  await page.waitForFunction(dark => document.body.hasAttribute('data-ds-dark-theme') === dark, scheme === 'dark')
-}
 
 /** Both capability headings must actually appear in the screenshot, not just exist offscreen. */
 async function expectMenuSectionsInView(menu: Locator): Promise<void> {

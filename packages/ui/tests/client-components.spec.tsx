@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ConnectionSection, RouteStore } from 'dsh-tool-web-enhanced-core/client'
 import type { ConnectionView, Route, SelectionView } from 'dsh-tool-web-enhanced-core/shared'
 import { PROFILE_PACKAGE, SEARCH, FETCH } from 'dsh-tool-web-enhanced-core/shared'
@@ -10,6 +10,7 @@ import { createSnapshotStore, createWebConnectionsService } from '../src/client/
 import { zh } from '../src/client/locales.ts'
 import overviewCss from '../src/client/ProfileDetailSection.module.css'
 import type { Translate } from '../src/client/ComposerConnectionMenu.tsx'
+import menuCss from '../src/client/ComposerConnectionMenu.module.css'
 
 vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => {
   return {
@@ -102,17 +103,15 @@ function createMockSection(params: {
   order: number
   selectedId?: string | null
   view?: SelectionView | undefined
-  readFailed?: boolean
+  readFailure?: 'invalid-settings' | 'failed'
   connections?: ConnectionView[]
-  routeKind?: 'this' | 'other'
-  otherProvider?: string
   openSettings?: () => void
   setFn?: (update: { connectionId?: string | null }) => Promise<{ ok: boolean; error?: { message: string } }>
 }): MockSectionResult {
   const view =
     'view' in params
       ? params.view
-      : params.readFailed
+      : params.readFailure !== undefined
         ? undefined
         : {
             selection: { connectionId: params.selectedId ?? null, revision: 1, options: {} },
@@ -125,12 +124,8 @@ function createMockSection(params: {
   const selectionStore = createSnapshotStore({
     view,
     saving: false,
-    readFailed: params.readFailed ?? false,
+    readFailure: params.readFailure,
   })
-  const routeStore = createSnapshotStore({
-    kind: params.routeKind ?? 'this',
-    ...(params.otherProvider ? { provider: params.otherProvider, providerId: 'test' } : {}),
-  } as any)
   const settingsStore = createSnapshotStore(params.openSettings)
 
   const loadMock = vi.fn().mockResolvedValue(undefined)
@@ -147,9 +142,6 @@ function createMockSection(params: {
       source: () => selectionStore,
       load: loadMock,
       set: setMock,
-    },
-    route: {
-      source: routeStore,
     },
     describe: conn => ({
       label: conn.label,
@@ -196,7 +188,19 @@ function mockConfigForm(userOverride?: Record<string, unknown>): {
   return { form, mutateMock }
 }
 
+/** The composer button: its name states each side as "<title>：<state>". */
+const trigger = () => screen.getByRole('button', { name: /^Web (Search|Fetch)：/ })
+
 describe('ComposerConnectionMenu', () => {
+  // jsdom does not lay out, so it has no scrollIntoView; record which rows were asked to scroll.
+  let scrolled: { element: Element; options: unknown }[] = []
+  beforeEach(() => {
+    scrolled = []
+    Element.prototype.scrollIntoView = function (this: Element, options?: unknown) {
+      scrolled.push({ element: this, options })
+    }
+  })
+
   it('computes modelKeyOf correctly from session projection', () => {
     expect(modelKeyOf(undefined)).toBe('')
     expect(modelKeyOf({ next: { provider: 'deepseek-official', model: 'deepseek-chat' } })).toBe(
@@ -238,8 +242,8 @@ describe('ComposerConnectionMenu', () => {
       />,
     )
 
-    const button = screen.getByRole('button', { name: t('button.aria') })
-    expect(button).toBeDefined()
+    const button = trigger()
+    expect(button.getAttribute('aria-label')).toBe('Web Search：Connection 1')
     expect(button.textContent).toContain('Connection 1')
 
     expect(loadMock).toHaveBeenCalledWith('sess-1', 'deepseek-official/deepseek-chat')
@@ -264,12 +268,13 @@ describe('ComposerConnectionMenu', () => {
       />,
     )
 
-    const button = screen.getByRole('button', { name: t('button.aria') })
-    expect(button).toBeDefined()
+    const button = trigger()
+    expect(button.getAttribute('aria-label')).toBe('Web Fetch：Connection 2')
     expect(button.textContent).toContain('Connection 2')
+    expect(button.querySelector('[data-capability="search"]')).toBeNull()
   })
 
-  it('renders button showing search connection when 2 sections (search and fetch) are registered', () => {
+  it('shows both sides on the button, search first, and names each side', () => {
     const webConnections = createWebConnectionsService()
     const { section: searchSection } = createMockSection({
       capability: 'search',
@@ -294,8 +299,82 @@ describe('ComposerConnectionMenu', () => {
       />,
     )
 
-    const button = screen.getByRole('button', { name: t('button.aria') })
-    expect(button.textContent).toContain('Connection 1')
+    const button = trigger()
+    expect(button.getAttribute('aria-label')).toBe('Web Search：Connection 1 · Web Fetch：Connection 2')
+    expect(button.getAttribute('title')).toBe('Web Search：Connection 1 · Web Fetch：Connection 2')
+    const sides = [...button.querySelectorAll('[data-capability]')]
+    expect(sides.map(side => [side.getAttribute('data-capability'), side.textContent])).toEqual([
+      ['search', 'Connection 1'],
+      ['fetch', 'Connection 2'],
+    ])
+    expect(button.querySelector('[data-state="warning"]')).toBeNull()
+  })
+
+  /** Which sides of the button carry a needs-attention mark. */
+  const markedSides = (button: HTMLElement) =>
+    [...button.querySelectorAll('[data-state="warning"]')].map(mark => mark.closest('[data-capability]')?.getAttribute('data-capability'))
+
+  it('marks only the side that needs attention and names a non-connection state with its side', () => {
+    const webConnections = createWebConnectionsService()
+    webConnections.register(createMockSection({
+      capability: 'search', order: 10, selectedId: 'conn-1',
+      connections: [mockConnection('conn-1', 'Connection 1', 'needs-credential')],
+    }).section)
+    webConnections.register(createMockSection({ capability: 'fetch', order: 20, selectedId: null }).section)
+    render(<ComposerConnectionMenu sessionId="sess-1" webConnections={webConnections} searchServed fetchServed t={t} />)
+
+    const button = trigger()
+    expect(button.getAttribute('aria-label')).toBe('Web Search：Connection 1（需要处理） · Web Fetch：已关闭')
+    expect(button.querySelector('[data-capability="fetch"]')?.textContent).toBe('Web Fetch：已关闭')
+    expect(markedSides(button)).toEqual(['search'])
+  })
+
+  it('marks a side whose capability the web row routes to another provider', () => {
+    const webConnections = createWebConnectionsService()
+    webConnections.register(createMockSection({ capability: 'search', order: 10, selectedId: 'conn-1' }).section)
+    webConnections.register(createMockSection({ capability: 'fetch', order: 20, selectedId: 'conn-2' }).section)
+    webConnections.registerRoute('fetch', { source: createSnapshotStore<Route>({ kind: 'other', provider: 'http', providerId: FETCH.providerId }) })
+    render(<ComposerConnectionMenu sessionId="sess-1" webConnections={webConnections} searchServed fetchServed t={t} />)
+
+    const button = trigger()
+    expect(button.getAttribute('aria-label')).toBe('Web Search：Connection 1 · Web Fetch：Connection 2（需要处理）')
+    expect(markedSides(button)).toEqual(['fetch'])
+  })
+
+  it('marks a side that could not be read and a side whose connection was removed', () => {
+    const webConnections = createWebConnectionsService()
+    webConnections.register(createMockSection({ capability: 'search', order: 10, readFailure: 'failed' }).section)
+    webConnections.register(createMockSection({ capability: 'fetch', order: 20, selectedId: 'gone' }).section)
+    render(<ComposerConnectionMenu sessionId="sess-1" webConnections={webConnections} searchServed fetchServed t={t} />)
+
+    const button = trigger()
+    expect(button.getAttribute('aria-label')).toBe('Web Search：读取失败（需要处理） · Web Fetch：连接已移除（需要处理）')
+    expect(markedSides(button)).toEqual(['search', 'fetch'])
+  })
+
+  it('keeps each side mark outside its label so a narrow composer can hide the labels and keep the marks', () => {
+    const webConnections = createWebConnectionsService()
+    webConnections.register(createMockSection({ capability: 'search', order: 10, readFailure: 'failed' }).section)
+    webConnections.register(createMockSection({ capability: 'fetch', order: 20, readFailure: 'failed' }).section)
+    render(<ComposerConnectionMenu sessionId="sess-1" webConnections={webConnections} searchServed fetchServed t={t} />)
+
+    for (const side of trigger().querySelectorAll('[data-capability]')) {
+      const label = side.querySelector('.' + menuCss.sideLabel)!
+      const mark = side.querySelector('.' + menuCss.sideMark)!
+      expect(label).not.toBeNull()
+      expect(mark).not.toBeNull()
+      expect(label.contains(mark)).toBe(false)
+    }
+    const rules = [...document.styleSheets].flatMap(sheet => [...sheet.cssRules])
+    // jsdom parses @container rules but does not expose CSSContainerRule as a global.
+    const container = (width: string) => rules.find(rule => rule.cssText.startsWith('@container') && rule.cssText.includes(width)) as CSSGroupingRule
+    const hidden = (rule: CSSGroupingRule) => [...rule.cssRules]
+      .filter(inner => inner instanceof CSSStyleRule && inner.style.getPropertyValue('display') === 'none')
+      .flatMap(inner => (inner as CSSStyleRule).selectorText.split(',').map(selector => selector.trim()))
+    for (const width of ['460px', '380px']) {
+      expect(hidden(container(width))).not.toContain('.' + menuCss.sideMark)
+    }
+    expect(hidden(container('460px'))).toEqual(expect.arrayContaining(['.' + menuCss.sideLabel, '.' + menuCss.sideSeparator]))
   })
 
   it('opens menu on click and displays both sections in order, triggering selection load', () => {
@@ -324,7 +403,7 @@ describe('ComposerConnectionMenu', () => {
       />,
     )
 
-    const button = screen.getByRole('button', { name: t('button.aria') })
+    const button = trigger()
     fireEvent.click(button)
 
     expect(screen.getByRole('menu')).toBeDefined()
@@ -347,7 +426,7 @@ describe('ComposerConnectionMenu', () => {
       webConnections.register(section)
     }
     render(<ComposerConnectionMenu sessionId="sess-1" webConnections={webConnections} searchServed fetchServed t={t} />)
-    fireEvent.click(screen.getByRole('button', { name: t('button.aria') }))
+    fireEvent.click(trigger())
 
     const search = screen.getByRole('button', { name: 'Web Search · Search connection · Chosen for this conversation' })
     const fetch = screen.getByRole('button', { name: 'Web Fetch · Fetch connection · Chosen for this conversation' })
@@ -360,9 +439,55 @@ describe('ComposerConnectionMenu', () => {
     fireEvent.click(fetch)
     expect(fetch.getAttribute('aria-expanded')).toBe('true')
     expect(screen.getByRole('menuitemradio', { name: /Fetch connection/ })).toBeDefined()
-    fireEvent.click(search)
+  })
+
+  it('keeps at most one section open, collapses the open one on its own heading, and reopens on the first', () => {
+    const webConnections = createWebConnectionsService()
+    for (const [capability, order] of [['search', 10], ['fetch', 20]] as const) {
+      webConnections.register(createMockSection({ capability, order }).section)
+    }
+    render(<ComposerConnectionMenu sessionId="sess-1" webConnections={webConnections} searchServed fetchServed t={t} />)
+    const button = trigger()
+    fireEvent.click(button)
+    const search = screen.getByRole('button', { name: /^Web Search ·/ })
+    const fetch = screen.getByRole('button', { name: /^Web Fetch ·/ })
+
+    fireEvent.click(fetch)
+    expect(fetch.getAttribute('aria-expanded')).toBe('true')
     expect(search.getAttribute('aria-expanded')).toBe('false')
-    expect(screen.queryByRole('menuitemradio', { name: /Search connection/ })).toBeNull()
+    expect(document.getElementById(search.getAttribute('aria-controls')!)?.hidden).toBe(true)
+
+    fireEvent.click(fetch)
+    expect(fetch.getAttribute('aria-expanded')).toBe('false')
+    expect(search.getAttribute('aria-expanded')).toBe('false')
+
+    fireEvent.click(search)
+    fireEvent.click(fetch)
+    expect(search.getAttribute('aria-expanded')).toBe('false')
+
+    fireEvent.click(button)
+    fireEvent.click(button)
+    expect(screen.getByRole('button', { name: /^Web Search ·/ }).getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByRole('button', { name: /^Web Fetch ·/ }).getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('scrolls the selected row of a section into view when it opens', () => {
+    const webConnections = createWebConnectionsService()
+    const connections = ['A', 'B', 'C', 'D'].map(name => mockConnection('conn-' + name, 'Connection ' + name))
+    webConnections.register(createMockSection({ capability: 'search', order: 10, selectedId: 'conn-B', connections }).section)
+    webConnections.register(createMockSection({ capability: 'fetch', order: 20, selectedId: 'conn-D', connections }).section)
+    render(<ComposerConnectionMenu sessionId="sess-1" webConnections={webConnections} searchServed fetchServed t={t} />)
+    fireEvent.click(trigger())
+
+    const searchGroup = screen.getByRole('group', { name: 'Web Search' })
+    expect(scrolled).toEqual([{ element: within(searchGroup).getByRole('menuitemradio', { name: /Connection B/ }), options: { block: 'nearest' } }])
+
+    scrolled = []
+    fireEvent.click(screen.getByRole('button', { name: /^Web Fetch ·/ }))
+    const fetchGroup = screen.getByRole('group', { name: 'Web Fetch' })
+    const selected = within(fetchGroup).getByRole('menuitemradio', { name: /Connection D/ })
+    expect(selected.getAttribute('aria-checked')).toBe('true')
+    expect(scrolled).toEqual([{ element: selected, options: { block: 'nearest' } }])
   })
 
   it('exposes keyboard-focusable disclosure buttons and opens them with arrow keys', () => {
@@ -371,18 +496,22 @@ describe('ComposerConnectionMenu', () => {
       webConnections.register(createMockSection({ capability, order }).section)
     }
     render(<ComposerConnectionMenu sessionId="sess-1" webConnections={webConnections} searchServed fetchServed t={t} />)
-    fireEvent.click(screen.getByRole('button', { name: t('button.aria') }))
+    fireEvent.click(trigger())
     const fetch = screen.getByRole('button', { name: /^Web Fetch ·/ })
     expect(fetch.tagName).toBe('BUTTON') // Native Enter/Space activation, no simulated button roles.
     fetch.focus()
     expect(document.activeElement).toBe(fetch)
+    const search = screen.getByRole('button', { name: /^Web Search ·/ })
     fireEvent.keyDown(fetch, { key: 'ArrowRight' })
+    expect(fetch.getAttribute('aria-expanded')).toBe('true')
+    expect(search.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.keyDown(search, { key: 'ArrowLeft' })
     expect(fetch.getAttribute('aria-expanded')).toBe('true')
     fireEvent.keyDown(fetch, { key: 'ArrowLeft' })
     expect(fetch.getAttribute('aria-expanded')).toBe('false')
     fireEvent.keyDown(fetch, { key: 'Escape' })
     expect(screen.queryByRole('menu')).toBeNull()
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: t('button.aria') }))
+    expect(document.activeElement).toBe(trigger())
   })
 
   it('anchors the menu to the button and caps it to the content area on a 390px viewport', () => {
@@ -396,9 +525,9 @@ describe('ComposerConnectionMenu', () => {
       <ComposerConnectionMenu sessionId="sess-1" webConnections={webConnections} searchServed fetchServed t={t} />
     </main>)
     vi.spyOn(container.querySelector('main')!, 'getBoundingClientRect').mockReturnValue(new DOMRect(64, 0, 326, 900))
-    const trigger = screen.getByRole('button', { name: t('button.aria') })
-    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue(new DOMRect(100, 700, 28, 28))
-    fireEvent.click(trigger)
+    const button = trigger()
+    vi.spyOn(button, 'getBoundingClientRect').mockReturnValue(new DOMRect(100, 700, 28, 28))
+    fireEvent.click(button)
     const menu = screen.getByRole('menu')
     expect(menu.style.maxWidth).toBe('314px')
     expect(Number.parseFloat(menu.style.left)).toBeGreaterThanOrEqual(64)
@@ -425,7 +554,7 @@ describe('ComposerConnectionMenu', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: t('button.aria') }))
+    fireEvent.click(trigger())
 
     const conn2Button = screen.getByRole('menuitemradio', { name: /Connection 2/ })
     await act(async () => {
@@ -456,7 +585,7 @@ describe('ComposerConnectionMenu', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: t('button.aria') }))
+    fireEvent.click(trigger())
 
     const offButton = screen.getByRole('menuitemradio', { name: t('menu.offRow') })
     await act(async () => {
@@ -474,7 +603,6 @@ describe('ComposerConnectionMenu', () => {
       capability: 'search',
       order: 10,
       view: undefined,
-      readFailed: false,
     })
     webConnections.register(searchSection)
 
@@ -488,7 +616,7 @@ describe('ComposerConnectionMenu', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: t('button.aria') }))
+    fireEvent.click(trigger())
 
     expect(screen.queryByRole('menuitemradio', { name: t('menu.offRow') })).toBeNull()
     expect(within(screen.getByRole('menu')).getAllByText(t('button.loading'))).toHaveLength(2)
@@ -500,7 +628,7 @@ describe('ComposerConnectionMenu', () => {
       capability: 'search',
       order: 10,
       view: undefined,
-      readFailed: true,
+      readFailure: 'failed',
     })
     webConnections.register(searchSection)
 
@@ -514,7 +642,8 @@ describe('ComposerConnectionMenu', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: t('button.aria') }))
+    expect(trigger().getAttribute('aria-label')).toBe('Web Search：读取失败（需要处理）')
+    fireEvent.click(trigger())
 
     expect(screen.queryByRole('menuitemradio', { name: t('menu.offRow') })).toBeNull()
     const failedBtn = screen.getByRole('button', { name: t('button.readFailed') })
@@ -543,8 +672,47 @@ describe('ComposerConnectionMenu', () => {
       />,
     )
 
-    const button = screen.getByRole('button', { name: t('button.aria') })
+    const button = trigger()
     expect(button.textContent).toContain(t('button.missing'))
+  })
+
+  it('explains invalid settings, offers the section settings and no retry, and marks that side', () => {
+    const openSettings = vi.fn()
+    const webConnections = createWebConnectionsService()
+    const { section, loadMock } = createMockSection({ capability: 'fetch', order: 20, readFailure: 'invalid-settings', openSettings })
+    webConnections.register(createMockSection({ capability: 'search', order: 10, selectedId: 'conn-1' }).section)
+    webConnections.register(section)
+    render(<ComposerConnectionMenu sessionId="sess-1" webConnections={webConnections} searchServed fetchServed t={t} />)
+
+    const button = trigger()
+    expect(button.getAttribute('aria-label')).toBe('Web Search：Connection 1 · Web Fetch：设置无效（需要处理）')
+    expect(markedSides(button)).toEqual(['fetch'])
+
+    fireEvent.click(button)
+    fireEvent.click(screen.getByRole('button', { name: /^Web Fetch ·/ }))
+    const group = screen.getByRole('group', { name: 'Web Fetch' })
+    expect(within(group).getByRole('button', { name: 'Web Fetch · 设置无效' })).toBeDefined()
+    expect(within(group).getByText(t('menu.invalidSettings', { capability: 'Web Fetch' }))).toBeDefined()
+    expect(within(group).queryByRole('button', { name: t('button.readFailed') })).toBeNull()
+    expect(within(group).queryByRole('menuitemradio')).toBeNull()
+    loadMock.mockClear()
+    fireEvent.click(within(group).getByRole('menuitem', { name: t('menu.settings') }))
+    expect(openSettings).toHaveBeenCalledOnce()
+    expect(loadMock).not.toHaveBeenCalled()
+  })
+
+  it('hides a list read before the settings became invalid', () => {
+    const webConnections = createWebConnectionsService()
+    webConnections.register(createMockSection({
+      capability: 'search', order: 10, readFailure: 'invalid-settings',
+      view: { selection: { connectionId: 'conn-1', revision: 1, options: {} }, source: 'session', connections: [mockConnection('conn-1', 'Connection 1')] },
+    }).section)
+    render(<ComposerConnectionMenu sessionId="sess-1" webConnections={webConnections} searchServed fetchServed t={t} />)
+
+    expect(trigger().getAttribute('aria-label')).toBe('Web Search：设置无效（需要处理）')
+    fireEvent.click(trigger())
+    expect(screen.getByText(t('menu.invalidSettings', { capability: 'Web Search' }))).toBeDefined()
+    expect(screen.queryByRole('menuitemradio')).toBeNull()
   })
 
   it('shows disabled capability warning when search row is disabled', () => {
@@ -570,7 +738,7 @@ describe('ComposerConnectionMenu', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: t('button.aria') }))
+    fireEvent.click(trigger())
 
     expect(
       screen.getByText(t('disabled.search')),
@@ -603,7 +771,7 @@ describe('ComposerConnectionMenu', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: t('button.aria') }))
+    fireEvent.click(trigger())
 
     expect(
       screen.getByText(t('disabled.fetch')),
@@ -630,7 +798,7 @@ describe('ComposerConnectionMenu', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: t('button.aria') }))
+    fireEvent.click(trigger())
 
     const conn2Button = screen.getByRole('menuitemradio', { name: /Connection 2/ })
     await act(async () => {
@@ -662,7 +830,8 @@ describe('ComposerConnectionMenu', () => {
       const { section } = createMockSection({
         capability: 'search', order: 10, selectedId: 'conn-1',
       })
-      webConnections.register({ ...section, route })
+      webConnections.registerRoute('search', route)
+      webConnections.register(section)
       const consoleError = vi.spyOn(console, 'error')
       try {
         await act(async () => {
@@ -696,7 +865,7 @@ describe('ComposerConnectionMenu', () => {
         })
         if (surface === 'composer menu') {
           await act(async () => {
-            fireEvent.click(screen.getByRole('button', { name: t('button.aria') }))
+            fireEvent.click(trigger())
           })
         }
         if (surface === 'profile badge') {
@@ -723,6 +892,8 @@ describe('ActivationPrompt', () => {
     render(
       <ActivationPrompt
         packageName={PROFILE_PACKAGE}
+        webConfigForm={mockConfigForm().form}
+        nativeSearchServed={false}
         onDismiss={onDismiss}
         onOpenDetails={onOpenDetails}
         t={t}

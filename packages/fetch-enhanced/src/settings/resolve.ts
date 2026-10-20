@@ -1,10 +1,10 @@
 import { z } from 'zod'
 import { RETIRED_FIELDS } from './retired.ts'
 import { resolveDocument } from 'dsh-tool-web-enhanced-core/shared'
-import { CATALOG, DEFAULT_CONNECTION, DEFAULT_LOCAL_SETTINGS } from '../catalog.ts'
+import { CATALOG, DEFAULT_CONNECTION, DEFAULT_LOCAL_SETTINGS, type AdapterKey, type NativeKey } from '../catalog.ts'
 import { describeProblem, parseCidr, parseHostnameRule } from '../local/rules.ts'
-import type { Connection, LocalSettings, NativeConnection, ResolvedSettings } from './types.ts'
-export type { Connection, LocalConnection, LocalSettings, NativeConnection, ResolvedSettings } from './types.ts'
+import type { Connection, LocalSettings, ResolvedSettings } from './types.ts'
+export type { AdapterConnection, Connection, CustomConnection, LocalConnection, LocalSettings, NativeConnection, ResolvedSettings } from './types.ts'
 
 const localOptions = z.strictObject({
   allowCidrs: z.array(z.string()).default(() => []), allowHostnames: z.array(z.string()).default(() => []),
@@ -18,7 +18,7 @@ const localOptions = z.strictObject({
 
 /** Pure sparse resolution shared by Host and browser. */
 export function resolveSettings(document: unknown = {}): ResolvedSettings {
-  const resolved = resolveDocument({ catalog: CATALOG, document, retiredFields: RETIRED_FIELDS, defaults: { schema: z.strictObject({}), defaultConnection: DEFAULT_CONNECTION }, customAllowed: false, capabilityLabel: 'fetch' })
+  const resolved = resolveDocument({ catalog: CATALOG, document, retiredFields: RETIRED_FIELDS, defaults: { schema: z.strictObject({}), defaultConnection: DEFAULT_CONNECTION }, capabilityLabel: 'fetch' })
   const connections = new Map<string, Connection>()
   for (const [id, connection] of resolved.connections) {
     const { catalogKey, ...base } = connection
@@ -34,8 +34,10 @@ export function resolveSettings(document: unknown = {}): ResolvedSettings {
         if (!result.ok) invalidRule(path, 'allowHostnames', index, describeProblem(result.problem))
       })
       connections.set(id, { ...base, options })
+    } else if (base.kind === 'native') {
+      connections.set(id, { ...base, kind: 'native', native: catalogKey as NativeKey, access: 'api-key' })
     } else {
-      connections.set(id, { ...base, kind: 'native', native: catalogKey as NativeConnection['native'], access: 'api-key' })
+      connections.set(id, { ...base, kind: 'adapter', adapter: catalogKey as AdapterKey })
     }
   }
   return { ...resolved, connections }

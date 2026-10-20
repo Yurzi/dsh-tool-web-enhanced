@@ -47,8 +47,8 @@ describe('/setup-search', () => {
     expect(ids(options)).toEqual([
       'off', 'connection:builtin:exa', 'freshness:auto', 'freshness:fresh', 'freshness:realtime',
     ])
-    // Keyless rows carry no caption since the visual review; only the current marker remains.
-    expect(options[1]).toMatchObject({ label: 'Exa', active: true, detail: tZh('command.current'), group: { name: 'services' } })
+    // Like the composer menu, a ready remote connection says who receives the query.
+    expect(options[1]).toMatchObject({ label: 'Exa', active: true, detail: `${tZh('status.remoteReady', { access: tZh('access.keyless'), name: 'Exa' })} · ${tZh('command.current')}`, group: { name: 'services' } })
     expect(options.at(-1)).toMatchObject({ label: tZh('freshness.realtime'), detail: tZh('command.current') })
     expect(options.filter(option => option.active)).toHaveLength(1)
   })

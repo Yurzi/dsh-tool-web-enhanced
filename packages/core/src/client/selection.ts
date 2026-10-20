@@ -86,7 +86,7 @@ export class ConnectionSelectionStore<V extends SelectionView> implements Select
     }
     if (result.ok) {
       entry.stale = invalidated
-      this.publish(entry, { view: result.value, saving: false, readFailed: false })
+      this.publish(entry, { view: result.value, saving: false, readFailure: undefined })
       if (invalidated) await this.read(entry)
       this.changed()
       return { ok: true }
@@ -110,7 +110,7 @@ export class ConnectionSelectionStore<V extends SelectionView> implements Select
   private entry(sessionId: string): Entry<V> {
     const existing = this.entries.get(sessionId)
     if (existing !== undefined) return existing
-    const store = createSnapshotStore<SelectionState<V>>({ view: undefined, saving: false, readFailed: false })
+    const store = createSnapshotStore<SelectionState<V>>({ view: undefined, saving: false, readFailure: undefined })
     const entry: Entry<V> = {
       sessionId, store, observers: 0, stale: true, modelKey: undefined, epoch: 0, reading: undefined,
       source: {
@@ -146,7 +146,12 @@ export class ConnectionSelectionStore<V extends SelectionView> implements Select
       const result = await this.remote.get({ sessionId: entry.sessionId })
       if (epoch !== entry.epoch) continue
       entry.stale = false
-      this.publish(entry, result.ok ? { view: result.value, readFailed: false } : { readFailed: true })
+      if (result.ok) {
+        this.publish(entry, { view: result.value, readFailure: undefined })
+      } else {
+        const readFailure = result.error.code.endsWith('/invalid-settings') ? 'invalid-settings' : 'failed'
+        this.publish(entry, { readFailure })
+      }
       return
     }
   }

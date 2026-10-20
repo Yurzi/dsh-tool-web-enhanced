@@ -58,7 +58,7 @@ describe('/setup-fetch', () => {
     expect(parseCommandOption('freshness:auto')).toBeUndefined()
   })
   it('localizes unavailable facts, sources and transport failures', () => {
-    expect(connectionText({ id: 'builtin:deepseek-fetch-api', label: 'DeepSeek', kind: 'native', remote: true, access: 'api-key', status: 'needs-credential' }, t).reason).toBe(t('status.needsAccount', { name: 'DeepSeek' }))
+    expect(connectionText({ id: 'builtin:deepseek-fetch-api', label: 'DeepSeek', kind: 'native', remote: true, access: 'api-key', status: 'needs-credential' }, t).reason).toBe('需要 DeepSeek 账号或 API Key')
     expect(sourceText({ selection: { connectionId: null, options: {}, revision: 0 }, source: 'model', connections: [] }, t)).toBe(zh['source.model'])
     expect(writeFailureText(new RemoteError('gateway/internal', 'secret', {}), t)).toBe(zh['write.failed'])
     expect(Object.keys(en)).toEqual(Object.keys(zh))

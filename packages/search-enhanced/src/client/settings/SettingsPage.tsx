@@ -46,7 +46,7 @@ export function SettingsPage({
   if (view === undefined) return null
   const resetDoc = { config: snapshot.value, layers: view.layers, revision: snapshot.revision, editable: snapshot.writable }
   if (view.kind === 'invalid') return <div className={css.page}>
-    <p className={css.warning} role="alert" title={view.diagnostic}>{t('settings.invalid')}</p>
+    <p className={css.warning} role="alert" title={view.diagnostic}>{t('settings.unsupported')}</p>
     <ResetSection doc={resetDoc} write={write} t={t} />
   </div>
   const doc: SettingsDoc = { ...resetDoc, config: view.config, editable: snapshot.writable && !view.needsWriteback }

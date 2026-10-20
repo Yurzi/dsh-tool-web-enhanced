@@ -3,20 +3,21 @@ import { CATALOG, type CatalogKey } from '../../catalog.ts'
 import type { FetchSettings } from '../../settings/types.ts'
 import type { LocaleKey } from '../locales.ts'
 import { CredentialEditor } from './CredentialEditor.tsx'
-import { optionFields, builtinOverride } from './model.ts'
-import { ConnectionExtras } from './ConnectionExtras.tsx'
+import { localExtras } from './LocalExtras.tsx'
+import { catalogLabel, optionCopy, SERVICE_NOTES } from './model.ts'
 import { optionsEditor } from './OptionsEditor.tsx'
 import { settingsParts } from './parts.tsx'
 import * as sparse from './sparse.ts'
 import css from './Settings.module.css'
 export const ServicesSection = createServicesSection<FetchSettings, CatalogKey, LocaleKey>({
   classes: css, parts: settingsParts, CredentialEditor, optionsEditor, sparse, catalog: CATALOG,
-  label: (key, t) => key === 'local' ? t('connection.local') : CATALOG[key].label,
-  overrideOf: builtinOverride, fields: optionFields, extra: props => <ConnectionExtras {...props} />,
+  label: catalogLabel, optionCopy, notes: SERVICE_NOTES, summaries: { local: 'access.local' }, extras: { local: localExtras },
   keys: {
     'services.title': 'services.title',
     'options.hint': 'options.hint',
     'options.keylessMore': 'options.keylessMore',
+    'options.invalid': 'options.invalid',
+    'options.default': 'options.default',
     'services.remoteNotice': 'services.remoteNotice',
     'services.off': 'services.off',
     'services.configureLabel': 'services.configureLabel',
@@ -29,11 +30,15 @@ export const ServicesSection = createServicesSection<FetchSettings, CatalogKey, 
     'services.accessHint.apiKey': 'services.accessHint.apiKey',
     'services.accountHint': 'services.accountHint',
     'services.getKey': 'services.getKey',
+    'services.trust': 'option.native.trust',
     'options.title': 'options.title',
     'services.keyless': 'services.keyless',
     'services.account': 'services.account',
     'services.personalKey': 'services.personalKey',
     'credential.set': 'credential.set',
     'credential.unset': 'credential.unset',
+    'credential.reference': 'credential.reference',
+    'credential.referenceHint': 'credential.referenceHint',
+    'services.trustUnsaved': 'services.trustUnsaved',
   },
 })

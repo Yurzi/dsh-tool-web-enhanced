@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "增强网页抓取",
-    "description": "用每个会话选择的抓取连接提供 web_fetch：可放行运维指定内网网段的本机抓取，或 DeepSeek 抓取 API。"
+    "title": "增强网页获取",
+    "description": "用你选择的网页获取连接提供 web_fetch：本机获取（可选内网放行规则）、DeepSeek Fetch API，或远程读取服务（Exa、Firecrawl、Tavily、Tinyfish）。"
   }
 }

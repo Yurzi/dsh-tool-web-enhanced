@@ -47,6 +47,16 @@ async function save() {
 }
 
 describe('allowlist explicit-save editor', () => {
+  it('renders primitive action buttons with primary and ghost variants and proper disabled states', () => {
+    mount()
+    const saveBtn = saveButton()
+    const resetBtn = screen.getByRole<HTMLButtonElement>('button', { name: en['allowlist.reset'] })
+    expect(saveBtn.disabled).toBe(true)
+    expect(resetBtn.disabled).toBe(true)
+    expect(saveBtn.className).toMatch(/primary/)
+    expect(resetBtn.className).toMatch(/ghost/)
+  })
+
   it('does not write on mount, typing, or blur; warnings can be explicitly saved together', async () => {
     const view = mount()
     expect(saveButton().disabled).toBe(true)

@@ -29,7 +29,7 @@ const defaultsSchema = z.strictObject({ freshness: z.enum(FRESHNESS).default('au
 
 /** Pure sparse resolution shared by Host and browser. */
 export function resolveSettings(document: unknown = {}): ResolvedSettings {
-  const resolved = resolveDocument({ catalog: CATALOG, document, retiredFields: RETIRED_FIELDS, defaults: { schema: defaultsSchema, defaultConnection: DEFAULT_CONNECTION }, customAllowed: true, capabilityLabel: 'search' })
+  const resolved = resolveDocument({ catalog: CATALOG, document, retiredFields: RETIRED_FIELDS, defaults: { schema: defaultsSchema, defaultConnection: DEFAULT_CONNECTION }, capabilityLabel: 'search' })
   const connections = new Map<string, Connection>()
   for (const [id, connection] of resolved.connections) {
     const { catalogKey, ...base } = connection

@@ -1,6 +1,7 @@
 /** Tavily search; anonymous access is the same endpoint with an access-mode header. */
 import { collect } from '../sources.ts'
-import { bearer, count, postJson, rowsAt, type AdapterFor } from './types.ts'
+import { bearer, postJson } from 'dsh-tool-web-enhanced-core/host'
+import { count, rowsAt, type AdapterFor } from './types.ts'
 
 export const tavily: AdapterFor<'tavily'> = {
   request(input, endpoint, auth) {

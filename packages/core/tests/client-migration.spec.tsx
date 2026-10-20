@@ -9,7 +9,7 @@ import { applyOps } from '../src/client/settings/parts.tsx'
 import type { SettingsDocumentSnapshot } from '../src/client/settings/secret-diagnostics.ts'
 
 const migrations: SettingsMigrations = { currentVersion: 3, steps: new Map([[2, document => ({ ...document, showSelector: false })]]) }
-const resolve = (document: unknown) => resolveDocument({ document, migrations, catalog: { local: { kind: 'local', label: 'Local', remote: false, access: { keyless: true, apiKey: false, account: false }, options: {} } }, defaults: { schema: z.strictObject({}), defaultConnection: 'builtin:local' }, customAllowed: false, capabilityLabel: 'test' })
+const resolve = (document: unknown) => resolveDocument({ document, migrations, catalog: { local: { kind: 'local', label: 'Local', remote: false, access: { keyless: true, apiKey: false, account: false }, options: {} } }, defaults: { schema: z.strictObject({}), defaultConnection: 'builtin:local' }, capabilityLabel: 'test' })
 const snapshot = (user: Record<string, unknown>, writable = true): SettingsDocumentSnapshot<Record<string, unknown>> => ({ status: 'ready', value: user, base: {}, user, revision: 7, writable })
 afterEach(cleanup)
 

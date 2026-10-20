@@ -1,16 +1,17 @@
 /** Exa: REST search with bounded page text; keyless through the hosted MCP tool. */
 import type { Freshness } from '../../catalog.ts'
 import { invalidResponse } from '../http.ts'
-import { toolRows, toolTexts, type McpToolResult } from '../mcp.ts'
+import { apiKeyHeader, postJson, toolTexts, type McpToolResult } from 'dsh-tool-web-enhanced-core/host'
+import { toolRows } from './tool-rows.ts'
 import { collect, text, MAX_SNIPPET_LENGTH, type SourceFields } from '../sources.ts'
-import { apiKeyHeader, count, postJson, rowsAt, type AdapterFor } from './types.ts'
+import { count, rowsAt, type AdapterFor } from './types.ts'
 
 const MAX_TOOL_TEXT_LENGTH = 512 * 1024
 const MAX_TOOL_TEXT_LINES = 10_000
 
 const MAX_AGE_HOURS: Record<Freshness, number | undefined> = { auto: undefined, fresh: 24, realtime: 0 }
 
-export const exa: AdapterFor<'exa'> = {
+export const exa = {
   request(input, endpoint, auth) {
     const maxAgeHours = MAX_AGE_HOURS[input.freshness]
     return postJson(endpoint, apiKeyHeader(auth), {
@@ -21,7 +22,7 @@ export const exa: AdapterFor<'exa'> = {
       contents: { text: { maxCharacters: MAX_SNIPPET_LENGTH }, ...(maxAgeHours === undefined ? {} : { maxAgeHours }) },
     })
   },
-  parse: payload => collect(rowsAt(payload, 'results'), row => ({
+  parse: (payload, _input) => collect(rowsAt(payload, 'results'), row => ({
     url: row.url,
     title: row.title,
     snippet: row.text ?? joined(row.highlights),
@@ -34,7 +35,7 @@ export const exa: AdapterFor<'exa'> = {
     arguments: input => ({ query: input.query, ...count('numResults', input.maxResults, 100) }),
     parse: parseTool,
   },
-}
+} satisfies AdapterFor<'exa'>
 
 function parseTool(result: McpToolResult) {
   const toolText = boundedToolText(toolTexts(result))

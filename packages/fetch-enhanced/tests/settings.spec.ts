@@ -14,12 +14,12 @@ function expectReset(config: unknown, field: string): void {
 }
 
 describe('fetch unified settings resolution', () => {
-  it('resolves common defaults with both connections enabled without mutating input', () => {
+  it('resolves common defaults with all catalog connections enabled without mutating input', () => {
     const document = Object.freeze({})
     const settings = resolveSettings(document)
     expect(document).toEqual({})
     expect(settings).toMatchObject({ version: CURRENT_SETTINGS_VERSION, defaultConnection: DEFAULT_CONNECTION, defaults: {}, showSelector: true })
-    expect([...settings.connections.keys()]).toEqual(['builtin:local', 'builtin:deepseek-fetch-api'])
+    expect([...settings.connections.keys()]).toEqual(Object.keys(CATALOG).map(key => 'builtin:' + key))
     expect(settings.connections.get('builtin:local')).toEqual({ id: 'builtin:local', label: 'Local HTTP', kind: 'local', disabled: false, remote: false, access: 'keyless', trustedEndpoint: false, options: DEFAULT_LOCAL_SETTINGS })
     expect(settings.connections.get('builtin:deepseek-fetch-api')).toEqual({ id: 'builtin:deepseek-fetch-api', label: 'DeepSeek Fetch API', kind: 'native', native: 'deepseek-fetch-api', disabled: false, remote: true, access: 'api-key', trustedEndpoint: false, credentialRef: 'DEEPSEEK_API_KEY', endpoint: CATALOG['deepseek-fetch-api'].endpoint, options: {} })
   })
@@ -82,9 +82,35 @@ describe('fetch unified settings resolution', () => {
     for (const baseURL of ['https://user:secret@example.com', 'ftp://example.com', 'https://example.com?token=secret', 'https://example.com#fragment', 'relative']) expect(() => resolveSettings(native({ baseURL }, true))).toThrow('baseURL')
   })
 
-  it.each(['custom:test', 'custom:!'])('rejects custom connection/default %s with reset guidance', id => {
-    expectReset({ connections: { [id]: { kind: 'native' } } }, 'custom fetch connections are not supported')
-    expectReset({ defaultConnection: id }, 'custom fetch connections are not supported')
+  it('derives adapters from catalog kind and applies access, credential and options overrides', () => {
+    for (const adapter of ['exa', 'firecrawl', 'tavily', 'tinyfish']) {
+      const id = 'builtin:' + adapter
+      expect(resolveSettings().connections.get(id)).toMatchObject({ kind: 'adapter', adapter, remote: true })
+    }
+    expect(resolveSettings({ connections: { 'builtin:exa': { access: 'api-key', credentialRef: 'MY_EXA', options: { maxAgeHours: 0, livecrawlTimeout: 90_000 } } } }).connections.get('builtin:exa')).toMatchObject({ kind: 'adapter', adapter: 'exa', access: 'api-key', credentialRef: 'MY_EXA', options: { maxAgeHours: 0, livecrawlTimeout: 90_000 } })
+    for (const options of [{ maxAgeHours: 0 }, { livecrawlTimeout: 1000 }]) {
+      expect(() => resolveSettings({ connections: { 'builtin:exa': { access: 'keyless', options } } })).toThrow('options')
+    }
+    expect(() => resolveSettings({ connections: { 'builtin:tinyfish': { access: 'keyless' } } })).toThrow('access')
+  })
+
+  it('accepts custom adapter connections as defaults, always using API-key access', () => {
+    const custom = { kind: 'adapter', adapter: 'firecrawl', label: ' Private scrape ', credentialRef: 'PRIVATE_KEY', options: { storeInCache: false } }
+    const document = { defaultConnection: 'custom:private', connections: { 'custom:private': custom } }
+    const before = structuredClone(document)
+    expect(resolveSettings(document).connections.get('custom:private')).toMatchObject({ kind: 'adapter', adapter: 'firecrawl', access: 'api-key', label: 'Private scrape', credentialRef: 'PRIVATE_KEY', endpoint: CATALOG.firecrawl.endpoint, options: { storeInCache: false } })
+    expect(resolveSettings(document).defaultConnection).toBe('custom:private')
+    expect(document).toEqual(before)
+    for (const endpoint of ['http://localhost:8000/scrape', 'https://private.example/scrape']) {
+      expect(() => resolveSettings({ connections: { 'custom:private': { ...custom, endpoint } } })).toThrow('trustedEndpoint')
+      expect(resolveSettings({ connections: { 'custom:private': { ...custom, endpoint, trustedEndpoint: true } } }).connections.get('custom:private')).toMatchObject({ endpoint, access: 'api-key', trustedEndpoint: true })
+    }
+    for (const adapter of ['local', 'deepseek-fetch-api', 'missing']) {
+      expect(() => resolveSettings({ connections: { 'custom:private': { ...custom, adapter } } })).toThrow('adapter')
+    }
+    expect(() => resolveSettings({ connections: { 'custom:private': { ...custom, access: 'keyless' } } })).toThrow('access')
+    expect(() => resolveSettings({ defaultConnection: 'custom:gone' })).toThrow('custom:gone')
+    expect(() => resolveSettings({ connections: { 'custom:!': custom } })).toThrow('custom:!')
   })
 
   it.each(['builtin:missing', 'builtin:session-model', 'other:x'])('rejects unknown connection/default id %s with reset guidance', id => {

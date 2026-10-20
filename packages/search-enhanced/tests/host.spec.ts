@@ -98,14 +98,18 @@ function network() {
 }
 
 describe('searchConnections real Host', () => {
-  it.each([{ version: 1 }, { unknownOption: true }, { connections: [] }])('keeps invalid settings %j active and reports a short repair instruction through Seat and Remote get', async rawSettings => {
+  it.each([{ version: 1 }, { unknownOption: true }, { connections: [] }])('keeps invalid settings %j active with a Seat repair instruction but does not expose plugin WebError messages through Remote', async rawSettings => {
     const h = await host({ rawSettings })
     let diagnostic = ''
     try { resolveSettings(rawSettings) } catch (error) { diagnostic = (error as Error).message }
     expect(diagnostic).not.toBe('')
     const failure = { code: 'WEB_PROVIDER_CONFIGURED_UNAVAILABLE', message: 'dsh-web-search-enhanced: search settings are invalid; ask the user to fix them on the settings page' }
     await expect(h.search()).rejects.toMatchObject(failure)
-    await expect(h.get()).rejects.toMatchObject(failure)
+    await expect(h.get()).rejects.toMatchObject({
+      code: 'searchConnections/invalid-settings',
+      message: 'the row settings are invalid; fix them on the settings page',
+      details: {},
+    })
     await h.request()
     await expect(h.search()).rejects.toMatchObject(failure)
   })

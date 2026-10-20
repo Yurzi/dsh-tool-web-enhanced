@@ -1,14 +1,16 @@
 import { join } from 'node:path'
+import { en as searchText } from '../packages/search-enhanced/src/client/locales.ts'
+import { en as fetchText } from '../packages/fetch-enhanced/src/client/locales.ts'
 import { en as uiText } from '../packages/ui/src/client/locales.ts'
 import { afterAll, afterEach, beforeAll, describe, expect, inject, it } from 'vitest'
 import { type App, browserRequired, chromiumPath, openApp, recordBrowserFailure } from './harness/browser.ts'
-import { newSession, openBundle, openConnections } from './harness/navigation.ts'
+import { connectionButton, expandConnectionSection, newSession, openBundle, openConnections } from './harness/navigation.ts'
 import { type WebServer, startWeb } from './harness/web.ts'
 
 const e2e = inject('e2e')
 const cases = [
-  { name: 'search', off: ['search'], remaining: 'Fetch' },
-  { name: 'fetch', off: ['fetch'], remaining: 'Search' },
+  { name: 'search', off: ['search'], remaining: fetchText['section.title'] },
+  { name: 'fetch', off: ['fetch'], remaining: searchText['section.title'] },
   { name: 'both', off: ['search', 'fetch'], remaining: null },
 ] as const
 
@@ -44,13 +46,14 @@ describe.skipIf(chromiumPath === undefined && !browserRequired).each(cases)('$na
     await app.screenshot('menu-' + name + '-disabled-overview')
     await newSession(app.page)
     if (remaining === null) {
-      expect(await app.page.getByRole('button', { name: uiText['button.aria'], exact: true }).count()).toBe(0)
+      expect(await connectionButton(app.page).count()).toBe(0)
       expect(await app.page.getByRole('menu', { name: uiText['menu.aria'], exact: true }).count()).toBe(0)
     } else {
       const menu = await openConnections(app.page)
-      await menu.getByRole('group', { name: new RegExp('^' + remaining + '(?: ·|$)') }).getByRole('menuitemradio', { name: uiText['menu.offRow'], exact: true }).waitFor()
+      const section = await expandConnectionSection(menu, remaining)
+      await section.getByRole('menuitemradio', { name: uiText['menu.offRow'], exact: true }).waitFor()
       expect(await menu.getByRole('group').count()).toBe(1)
-      expect(await menu.getByRole('group', { name: new RegExp('^' + (remaining === 'Search' ? 'Fetch' : 'Search') + '(?: ·|$)') }).count()).toBe(0)
+      expect(await menu.getByRole('group', { name: new RegExp('^' + (remaining === searchText['section.title'] ? fetchText['section.title'] : searchText['section.title']) + '(?: ·|$)') }).count()).toBe(0)
     }
     await app.screenshot('menu-' + name + '-disabled-composer')
     expect(app.errors).toEqual([])

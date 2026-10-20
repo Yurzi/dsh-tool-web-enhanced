@@ -1,4 +1,5 @@
-import type { BuiltinOverride, ResolvedDocument } from 'dsh-tool-web-enhanced-core/shared'
+import type { AccessMode, BuiltinOverride, CustomConnection as SharedCustomConnection, ResolvedDocument } from 'dsh-tool-web-enhanced-core/shared'
+import type { AdapterKey, NativeKey } from '../catalog.ts'
 import type { CURRENT_CONFIG_VERSION } from './version.ts'
 export type { BuiltinOverride } from 'dsh-tool-web-enhanced-core/shared'
 
@@ -12,12 +13,14 @@ export interface LocalSettings {
   readonly maxRedirects: number
 }
 
+export type CustomConnection = SharedCustomConnection<AdapterKey>
+
 export interface FetchSettings {
   version?: typeof CURRENT_CONFIG_VERSION
   showSelector?: boolean
   defaults?: Record<string, never>
   defaultConnection?: string
-  connections?: Record<string, BuiltinOverride>
+  connections?: Record<string, BuiltinOverride | CustomConnection>
 }
 
 interface ConnectionBase {
@@ -37,12 +40,21 @@ export interface LocalConnection extends ConnectionBase {
 export interface NativeConnection extends ConnectionBase {
   readonly kind: 'native'
   readonly access: 'api-key'
-  readonly native: 'deepseek-fetch-api'
+  readonly native: NativeKey
   readonly credentialRef: string
   readonly options: Readonly<Record<string, unknown>>
 }
 
-export type Connection = LocalConnection | NativeConnection
+export interface AdapterConnection extends ConnectionBase {
+  readonly kind: 'adapter'
+  readonly adapter: AdapterKey
+  readonly access: AccessMode
+  readonly endpoint: string
+  readonly credentialRef: string
+  readonly options: Readonly<Record<string, unknown>>
+}
+
+export type Connection = LocalConnection | NativeConnection | AdapterConnection
 
 export type ResolvedSettings = ResolvedDocument<Record<string, never>, Connection>
 

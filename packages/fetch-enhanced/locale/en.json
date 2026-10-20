@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Web Fetch Enhanced",
-    "description": "Serves web_fetch from the fetch connection each conversation chooses: local fetching with an operator allowlist for non-public addresses, or the DeepSeek Fetch API."
+    "description": "Serves web_fetch from the fetch connection you choose: local fetching (with optional private-network rules), the DeepSeek Fetch API, or remote reading services (Exa, Firecrawl, Tavily, Tinyfish)."
   }
 }

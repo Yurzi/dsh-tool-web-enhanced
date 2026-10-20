@@ -1,7 +1,7 @@
 import type { ClientTranslate } from 'dsh-tool-web-enhanced-core/client'
 import type { RemoteFailure } from '@deepseek-ai/dsh-typert-protocol'
 import type { ConnectionText } from 'dsh-tool-web-enhanced-core/client'
-import type { ConnectionView, SelectionView } from 'dsh-tool-web-enhanced-core/shared'
+import type { Access, ConnectionView, SelectionView } from 'dsh-tool-web-enhanced-core/shared'
 import type { LocaleKey } from './locales.ts'
 import { CATALOG } from '../catalog.ts'
 import { builtinId } from 'dsh-tool-web-enhanced-core/shared'
@@ -12,14 +12,24 @@ export function connectionLabel(connection: Pick<ConnectionView, 'id' | 'label'>
   return connection.id === builtinId('local') && connection.label === CATALOG.local.label ? t('connection.local') : connection.label
 }
 
+const ACCESS_LABELS = { keyless: 'access.keyless', 'api-key': 'access.apiKey', account: 'access.account' } as const satisfies Record<Access, LocaleKey>
+
 export function describe(connection: ConnectionView, t: Translate): ConnectionText {
   const label = connectionLabel(connection, t)
   switch (connection.status) {
     case 'disabled': return { label, caption: t('services.off'), reason: t('status.disabled', { name: label }) }
     case 'unsupported': return { label, caption: t('status.short.unsupported'), reason: t('status.unsupported', { name: label }) }
-    case 'needs-credential': return { label, caption: t('status.short.needsCredential'), reason: t('status.needsAccount', { name: label }) }
-    case 'ready': return { label, caption: t(connection.kind === 'local' ? 'access.local' : connection.access === 'account' ? 'access.account' : 'access.apiKey') }
+    // Native connections can also use a DeepSeek account; adapters only take a key.
+    case 'needs-credential': return { label, caption: t('status.short.needsCredential'), reason: t(connection.kind === 'native' ? 'status.needsAccount' : 'status.needsCredential') }
+    case 'ready': return { label, caption: readyCaption(connection, label, t) }
   }
+}
+
+/** How the connection reaches pages, and for a remote one which service receives the URL. */
+function readyCaption(connection: ConnectionView, label: string, t: Translate): string {
+  if (connection.kind === 'local') return t('access.local')
+  const access = t(ACCESS_LABELS[connection.access])
+  return connection.remote ? t('status.remoteReady', { access, name: label }) : access
 }
 
 export function sourceText(view: SelectionView, t: Translate): string {

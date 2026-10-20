@@ -1,14 +1,11 @@
 /** Normalization of untrusted search rows into DSH sources. */
 import type { WebSearchResult, WebSearchSource } from '@deepseek-ai/dsh-web'
 import { sourceUrl } from 'dsh-tool-web-enhanced-core/shared'
+import { isRecord } from 'dsh-tool-web-enhanced-core/host'
 
 const MAX_TITLE_LENGTH = 1000
 /** Also the per-source text budget requested from services that return page text. */
 export const MAX_SNIPPET_LENGTH = 4000
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
 /** A trimmed, non-empty string; anything else is absent. */
 export function text(value: unknown): string | undefined {

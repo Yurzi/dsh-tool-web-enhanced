@@ -79,6 +79,18 @@ export interface BuiltinOverride {
   options?: Record<string, unknown>
 }
 
+/** A persisted operator-defined connection; its grammar is customConnectionSchema, and a test keeps the two identical. */
+export interface CustomConnection<A extends string = string> {
+  readonly kind: 'adapter'
+  readonly adapter: A
+  readonly label: string
+  readonly credentialRef: string
+  readonly endpoint?: string | undefined
+  readonly trustedEndpoint?: boolean | undefined
+  readonly disabled?: boolean | undefined
+  readonly options?: Record<string, unknown> | undefined
+}
+
 export function customConnectionSchema(adapterKeys: readonly string[]) {
   return z.strictObject({
     kind: z.literal('adapter'), adapter: z.enum(adapterKeys), label, credentialRef,
@@ -110,11 +122,10 @@ export interface ResolvedDocument<D, C = ResolvedBase> {
 export type SettingsDescriptor = Descriptor & { readonly endpoint?: string }
 
 /** Resolve the identical document and connection grammar for Host and browser. */
-export function resolveDocument<S extends z.ZodRawShape>({ catalog, document, defaults, customAllowed, capabilityLabel, retiredFields = [], migrations = SETTINGS_MIGRATIONS }: {
+export function resolveDocument<S extends z.ZodRawShape>({ catalog, document, defaults, capabilityLabel, retiredFields = [], migrations = SETTINGS_MIGRATIONS }: {
   readonly catalog: Readonly<Record<string, SettingsDescriptor>>
   readonly document: unknown
   readonly defaults: { readonly schema: z.ZodObject<S>; readonly defaultConnection: string }
-  readonly customAllowed: boolean
   readonly capabilityLabel: string
   readonly retiredFields?: readonly string[]
   readonly migrations?: SettingsMigrations
@@ -138,9 +149,6 @@ export function resolveDocument<S extends z.ZodRawShape>({ catalog, document, de
   const customSchema = customConnectionSchema(adapterKeys)
   const connections = new Map<string, ResolvedBase>()
   const rejectId = (id: string, path: string): never => fail(path, 'unknown connection id "' + id + '"; ' + SETTINGS_RESET_HINT)
-  const rejectCustom = (id: string, path: string): void => {
-    if (!customAllowed && id.startsWith('custom:')) fail(path, 'custom ' + capabilityLabel + ' connections are not supported in this release; ' + SETTINGS_RESET_HINT)
-  }
   const resolve = (id: string, key: string, override: z.infer<typeof builtinOverrideSchema>, customEndpoint?: string): ResolvedBase => {
     const info = catalog[key]!
     const path = 'connections.' + id
@@ -172,13 +180,12 @@ export function resolveDocument<S extends z.ZodRawShape>({ catalog, document, de
   }
   for (const [id, raw] of Object.entries(overrides)) {
     if (connections.has(id)) continue
-    rejectCustom(id, 'connections.' + id)
-    if (!CUSTOM_CONNECTION_ID.test(id) || builtinKey(id) !== undefined) rejectId(id, 'connections.' + id)
+    // A custom connection takes its format from an adapter entry; a catalog without one has no custom connections.
+    if (adapterKeys.length === 0 || !CUSTOM_CONNECTION_ID.test(id) || builtinKey(id) !== undefined) rejectId(id, 'connections.' + id)
     const custom = parse(customSchema, raw, 'connections.' + id)
     connections.set(id, resolve(id, custom.adapter, { ...custom, access: 'api-key' }, custom.endpoint))
   }
   const defaultConnection = settings.defaultConnection ?? defaults.defaultConnection
-  rejectCustom(defaultConnection, 'defaultConnection')
   if (!connections.has(defaultConnection)) rejectId(defaultConnection, 'defaultConnection')
   return { version: migrations.currentVersion, defaultConnection, showSelector: settings.showSelector ?? true, defaults: settings.defaults ?? parse(defaults.schema, {}, 'defaults'), connections }
 }

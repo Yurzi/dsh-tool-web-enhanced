@@ -2,7 +2,7 @@
 
 本文是 dsh-tool-web-enhanced 的设计文档，面向维护者：说明它在 DeepSeek Harness（DSH）里的位置、包怎么划分、一次 web_search / web_fetch 请求怎么走、后端怎么选与怎么扩展，以及哪些约束不能破坏。文件级的现状结构见 [code-structure.md](code-structure.md)，开发流程见 [development.md](development.md)。
 
-状态标记：**[已实现]** 指代码已落地并有测试覆盖（M0–M2 的全部内容）；**[计划]** 指 M3 及以后的设计，尚无代码。没有标记的叙述描述的是当前实现。选择范式在 core 里只有一份实现，两个插件只提供目录、后端和能力参数。
+除第 13 节的路线图和标为 **[计划]** 的条目（M4 及以后，尚无代码）外，本文描述的都是当前实现（M0–M3）。选择范式在 core 里只有一份实现，两个插件只提供目录、后端和能力参数。
 
 ## 1. 一句话
 
@@ -26,9 +26,9 @@ v1 目标：
 2. search 与 fetch 各有多个后端，分别切换，且两侧的选择范式、设置结构、Remote 契约和界面一致；
 3. 默认行为与原生一致：在**全新、未改过原生行配置**的 profile 上，装上即等价于未安装时的 DSH（原生行的自定义覆盖不会被继承，见第 11、14 节）；
 4. 继承两个前身项目的能力：dsh-web-search-enhanced 0.1 的会话级搜索连接，dsh-web-fetch-enhanced 0.1 的可配置 HTTP(S) 本地抓取（成为 fetch 侧的 `builtin:local` 连接）。继承的是能力，不是配置文件：0.1.x 的配置不迁移（第 8、11 节）；
-5. 模块可复用、可扩展：选择、存储、Remote、界面由 core 提供，两个插件各自只提供目录、后端和能力特有的策略；新增一个后端只动后端模块、目录项和文案（实际要碰的位置见第 7 节，fetch 设置页尚有写死的部分，见第 14 节）。
+5. 模块可复用、可扩展：选择、存储、Remote、界面由 core 提供，两个插件各自只提供目录、后端和能力特有的策略；新增一个后端只动后端模块、目录项和文案（实际要碰的位置见第 7 节）；两侧的设置页都由目录驱动，新增后端不改页面代码。
 
-v1 不做：注册自己的模型工具；模型可控的按调用参数；自动重试与 fallback 链；改写 tool-web 的 HTML→Markdown 转换。它们在第 13 节作为扩展点预留。
+v1 不做：注册自己的模型工具与模型可控的按调用参数（计划在 M5 以 `web_*_enhanced` 工具提供，第 13 节）；改写 tool-web 的 HTML→Markdown 转换。不自动重试、不自动 fallback 是不变量（第 10 节），不是待做的功能：一次调用失败后是否改换后端，由 Agent 经 M5 的工具决定。
 
 ## 3. 参照：DSH 自己如何组织 web 能力
 
@@ -104,53 +104,55 @@ flowchart TD
 依赖规则：
 
 - 插件的 Host 产物只能导入 Node 内置模块和 `@deepseek-ai/*`（由 DSH 安装提供，profile 解析会优先使用安装里的同名包）；其他代码包括 core 一律内联，插件没有运行时 `dependencies`。`scripts/verify-packages.ts` 检查打包后的产物与清单；
-- search、fetch、ui 三者互不导入；共享代码只能放进 core；插件与 ui 之间只通过浏览器服务 `webConnections` 相连（第 9 节），类型来自 core。这一条靠评审守住，lint 只检查循环导入；
+- search、fetch、ui 三者的 `src` 互不导入（组合测试可以导入别的包的 `src`）；共享代码只能放进 core；插件与 ui 之间只通过浏览器服务 `webConnections` 相连（第 9 节），类型来自 core。这一条靠评审守住，lint 只检查循环导入；
 - core 不导入插件包，不持有模块级状态（两个插件各内联一份，状态无法共享）；`./shared` 同构，不导入 Node、浏览器或 Host 包；
 - profile 只依赖本仓库发布的包，版本在打包时由 `workspace:*` 变为同一次发布的精确版本（verify-packages 检查）。
 
-### 4.3 core 的模块 [已实现]
+### 4.3 core 的模块
 
 core 承载“选择范式”本身，插件只提供参数。三个入口在 `packages/core/package.json` 的 `exports` 里声明，指向源码：
 
 | 入口 | 模块 | 内容 |
 | --- | --- | --- |
 | `./shared` | `ids` | `PROFILE_PACKAGE`、`SEARCH` / `FETCH`（包名、行 id、provider id）、`UI`（包名、行 id），插件页行配置键 `rowConfigKey()` |
-| | `connections` | 连接 id 语法（`ConnectionId`、`custom:<name>` 的正则）、凭据引用语法 `CREDENTIAL_REF`、访问方式（持久化的 `AccessMode` 与按调用推导的 `Access`）、后端种类、`Descriptor` / `AccessFacts`、`OptionRule`（`enum` / `text` / `url` / `boolean` / `integer` / `list`；`text` 先查 `maxLength`，缺省 `TEXT_MAX_LENGTH` = 2000，再跑正则），以及按目录校验参数的 `validateOptions`（keyless 访问可以拒绝或收窄某个参数） |
-| | `settings` | 两侧共用的配置文档文法（第 8 节）：`documentSchema`、`builtinOverrideSchema`、`customConnectionSchema`，稀疏合并与严格校验 `resolveDocument`，校验前预算，版本识别 `documentVersion` 与迁移管线 `migrateDocument` / `SETTINGS_MIGRATIONS`（N→N+1 表，当前为空），字段表 `SETTINGS_FIELDS` 与 Reset 提示 `SETTINGS_RESET_HINT` |
+| | `connections` | 连接 id 语法（`ConnectionId`、`custom:<name>` 的正则）、凭据引用语法 `CREDENTIAL_REF`、访问方式（持久化的 `AccessMode` 与按调用推导的 `Access`）、后端种类、`Descriptor` / `AccessFacts`、`OptionRule`（`enum` / `text` / `url` / `boolean` / `integer` / `list`；`text` 先查 `maxLength`，缺省 `TEXT_MAX_LENGTH` = 2000，再跑正则），以及按目录校验参数的 `validateOptions`（keyless 访问可以拒绝或收窄某个参数：`enum` 可收窄取值，`text` / `url` / `boolean` / `integer` 可声明 `keyless: false`） |
+| | `settings` | 两侧共用的配置文档文法（第 8 节）：`documentSchema`、`builtinOverrideSchema`、`customConnectionSchema` 与对应的持久化形状 `CustomConnection<A>`，稀疏合并与严格校验 `resolveDocument`（自定义连接的 `adapter` 只能取目录里的 adapter 键；目录没有 adapter 项时 `custom:*` 按未知连接 id 拒绝，没有单独的开关），校验前预算，版本识别 `documentVersion` 与迁移管线 `migrateDocument` / `SETTINGS_MIGRATIONS`（N→N+1 表，当前为空），字段表 `SETTINGS_FIELDS` 与 Reset 提示 `SETTINGS_RESET_HINT` |
 | | `route` | `routeOf(row, field, envProvider, providerId)`：Host 与浏览器共用的路由判断，结果为 `unknown` / `this` / `auto` / `other`（第 9.3 节）。与 `WebRuntime` 的 `config ?? env` 一致：只有字段缺席才回退环境变量，`''` 也算已配置；`isRouted` 只把 `this` 算作路由到本插件 |
 | | `url` | 端点形状校验 `isEndpoint` 与来源 URL 规范化 `sourceUrl`（上限 8192 字符，第 10 节） |
 | | `selection` | 会话选择 `Selection`、来源 `SelectionSource`、模型记忆 `Pairing`、连接状态与视图；`selectionContract({ namespace, packageName, options, extras })` 生成一个能力的 zod 片段与可挂载的 Remote 信息（`<ns>/get`、`<ns>/set`、`<ns>/provider`、`<ns>/pairings`、`<ns>/forgetPairing`），以及合并进 DSH 类型表的 `ConnectionsRemoteMap` / `ConnectionsRemoteErrors`。`providerView` 只含浏览器看不到的两个事实：`providerId` 与 `envProvider`；连接视图不含 `credentialRef` |
 | `./host` | `capability` | `Capability` 接口：插件交给 core 的全部差异，以及 `CapabilitySettings`、`OptionsCodec`、`HostContract`、`CapabilityCall`（6.7） |
 | | `runtime` | `installCapability(ctx, capability)`：装配存储、会话、每步计划、限制、Remote 与唯一的 Seat；返回只读的 `plan(agent?)`，供能力自己的上下文（fetch 的白名单提示）使用 |
-| | `settings-row` | `settingsRow({ identity, capabilityLabel, retiredFields, secretFields, resolve })`：生成插件行的 `Config`（文档字段与退役字段都声明为 `z.any().volatile()`，密钥类退役字段标为 secret），启动时校验一次（无效只记日志）、在 Loader 的 `internal/config` 钩子里校验候选、把每次调用读取的 `settings()` 包成给模型的 `WEB_PROVIDER_CONFIGURED_UNAVAILABLE` |
+| | `settings-row` | `settingsRow({ identity, capabilityLabel, retiredFields, secretFields, resolve })`：生成插件行的 `Config`（文档字段与退役字段都声明为 `z.any().volatile()`，密钥类退役字段标为 secret），启动时校验一次（无效只记日志）、在 Loader 的 `internal/config` 钩子里校验候选、把每次调用读取的 `settings()` 包成给模型的 `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`（`InvalidSettingsError`，`WebError` 的子类，Remote 边界据此识别“设置无效”） |
 | | `sessions` | `Sessions`：按会话排队、revision 比较并写入、fork 继承与 `inherited` 标记、模型记忆、未选择时的解析顺序与来源（6.2）；`peek` 只读不建记录 |
 | | `storage` | storage-domain 的懒打开（facility 更换后可恢复）与 `selections` / `pairings` 两张表；`SessionStorage` 把能力的 `OptionsCodec` 与域绑在一起 |
 | | `pairings` | 模型记忆的读、写、列出与清除 |
 | | `plans` | `Plan` 与 `planFor`（只冻结 `{ connectionId, options }`），`Snapshots` 按 (Agent, turn, step) 保存，同一步的并发捕获共享一次读取 |
 | | `selectable` | `isSelectable`：存在、未停用、不是 `model`；所有判定处只用它 |
 | | `restriction` | `ToolRestriction`：关闭时对 Agent 隐藏工具，路由 guard、`disposed` 标记、`web` 行变化时对已知 Agent 重算 |
-| | `remote` | `createConnectionsService`：在工厂内声明带 `@Remote` 的服务类，每次安装一个新类，生成 `<ns>/get`、`set`、`provider`、`pairings`、`forgetPairing` |
+| | `remote` | `createConnectionsService`：在工厂内声明带 `@Remote` 的服务类，每次安装一个新类，生成 `<ns>/get`、`set`、`provider`、`pairings`、`forgetPairing`；每个方法包在同一个错误边界里（6.2 的 Remote） |
 | | `route` | `routeFacts` / `providerView`：用 Settings 的公开数据（`settings.describe()` 中 `ns = web` 的值）和 `DSH_WEB_SEARCH_PROVIDER` / `DSH_WEB_FETCH_PROVIDER` 判断 `web` 行是否选中本插件；读不到时为 `unknown`，按“未路由”处理 |
 | | `credentials` | `resolveApiKey(ctx, ref)`（只经 DSH Credentials，不回退环境变量，本项目自己的后端用它）；`nativeAuth(ctx, ref)`（交给 `native` 后端的凭据回调：照搬原生行，Credentials 服务缺席时才读 DSH 启动环境的同名变量，账号令牌只在 `deepseek-account` 路由上）；`credentialReadiness`（连接视图的 `ready` / `needs-credential` 与 `account` / `api-key`）；`accountTokenFor` |
 | | `model` | 会话模型：`nextModel`（待生效的切换 → 上次请求 → Agent 路由），`requestModel`（本次请求已解析的路由，账号鉴权只认它） |
 | | `transport` | `createTransport`：有界 HTTP，拒绝重定向、字节上限（先看 Content-Length，再在流上计数）、整体截止时间、状态码→错误消息；给模型的措辞由调用方传入 |
+| | `mcp` | `createMcpClient(transport, errors, { clientInfo, messages })`：最小的 Streamable HTTP MCP 客户端，每次调用发一次 `tools/call`（服务端要求时先 `initialize` + `notifications/initialized`），会话状态不跨一次调用；接受 JSON 或 SSE 回复，SSE 逐行扫描、以空行结束事件（`\r\n`、`\n`、`\r` 可混用），每个字符只看一次；`isError` 的结果报能力给的 `toolFailed`；`toolTexts`、`toolJson`（只有 `SyntaxError` 才算散文） |
+| | `adapter` | 两侧共用的请求/解析线（6.7）：`AdapterWire<I, O>`、`McpRoute`、`Auth`、`KeylessBound`、`AdapterTarget` 与 `adapterTarget`（keyless 永远发往目录端点）、执行骨架 `runAdapter`；请求辅助 `postJson`、`getJson`、`bearer`、`apiKeyHeader`、`isRecord` |
 | | `errors` | `capabilityErrors(prefix)`：`WebError` 构造与取消辅助（`aborted`、`abortable`、`throwIfAborted`），只用已有的 `WEB_*` 码；`OnDiagnostic` 只进 Host 日志 |
 | | `native` | `nativeBackend`（包一层上游 provider 实例，失败时先记诊断再改写）与 `restateNative`（只用能力自己的公开消息重述错误，未知码一律 `WEB_PROVIDER_ERROR`） |
-| `./client` | `section` | 菜单分区契约 `ConnectionSection`、`SelectionStore` / `RouteStore` 接口、浏览器服务 `WebConnectionsService` 的类型，并声明 `Context.webConnections`（6.7、9.2） |
+| `./client` | `section` | 菜单分区契约 `ConnectionSection`、`SelectionStore` / `RouteStore` 接口、浏览器服务 `WebConnectionsService` 的类型（`register` 注册分区，`registerRoute` 独立地提供路由事实，`routes` 是各能力路由的快照），并声明 `Context.webConnections`（6.7、9.2） |
 | | `use-observable` | `useObservable`：每个快照源只订阅一次的 React 读取钩子 |
 | | `selection` | `ConnectionSelectionStore`：每会话一份可观察快照，基于插件的 `<ns>` Remote 读写；模型、设置、凭据变化或重连时失效重读，写入被拒后重读 |
 | | `route` | `RouteStatus`（按 `web` 字段参数化，合并 `configForms.get('web')` 与 `<ns>/provider`）与 `clientRoute` |
 | | `pairings` | `PairingsStatus`：列出、清除模型记忆 |
 | | `credentials` | `CredentialStatus`：由能力给出 `refs(settings)`，只读“是否已配置”，不读密钥 |
 | | `command` | `selectionCommand`：`/setup-<cap>` 命令工厂（关闭、可用连接、能力自定义的选项组），读写同一个 `SelectionStore` |
-| | `settings/*` | 稀疏写入 `createSparseSettings`（含 Reset 的操作）；文档视图 `effectiveDocument` / `editableSettings` / `settingsOperations` / `useSettingsDocument`（校验、revision 栅栏、未来迁移的写回）；`withRetiredSecretDiagnostics`；参数字段 `fields`；行设置页骨架的组件工厂（路由提示、默认值、服务列表、参数、凭据、自定义连接、模型记忆、Reset）。文案由插件传入的 `t` 与键表提供，core 不带词典 |
+| | `settings/*` | 稀疏写入 `createSparseSettings`（含 Reset 的操作）；文档视图 `effectiveDocument` / `editableSettings` / `settingsOperations` / `useSettingsDocument`（校验、revision 栅栏、未来迁移的写回）；`withRetiredSecretDiagnostics`；参数字段 `fields`；目录事实 `model`（`builtinOverride`、`builtinAccess`、`builtinCredential`、`credentialRefs`、`connectionChoices`、`connectionName`、`customConnections`，以及按访问方式去掉或收窄参数的 `catalogFields` 与同一规则下列出已存参数中 keyless 不接受部分的 `keylessRejected`）；自定义 adapter 连接的表单规则 `connection-form` 与编辑器 `ConnectionEditor`；内置连接的通用字段 `ServiceFields`（凭据名称，`url` 参数与“信任此地址”开关）；行设置页骨架的组件工厂（路由提示、默认值、服务列表、参数、凭据、自定义连接、模型记忆、Reset）。服务列表工厂按目录渲染每一项，插件只传入目录、参数文案 `optionCopy`（标签、占位符、字段下方的说明 `hint`）、每项的说明 `notes`、按目录键覆盖的访问摘要 `summaries` 和按目录键注册的附加编辑器 `extras`（声明自己接管哪些参数）；自定义连接工厂只要目录与缺省连接，目录没有 adapter 项时不渲染。`./client` 只导出插件实际调用的工厂与类型，表单、编辑器与大部分目录辅助留在模块内部。文案由插件传入的 `t` 与键表提供，core 不带词典 |
 
-抽取顺序遵守“第二个使用者出现时再抽象”：search 先在自己包里移植前身实现（M1），fetch 接入同一范式时再把共用部分移入 core（M2）。MCP 客户端目前只有 search 使用，留在 search 包里，fetch 也需要时再进入 core。
+抽取遵守“第二个使用者出现时再抽象”：只有两个插件都用到的部分才进 core。
 
 插件里留下的部分：
 
-- search 保留目录、adapter、MCP 客户端、来源规范化、执行层、`native` 后端、实时性和 `settings/resolve.ts`（建在 `resolveDocument` 上，派生 adapter / native 连接）；Host 侧只有把 core 组装成 search 能力的部分（`searchCapability`、连接状态 `describeConnections`、实时性的 `OptionsCodec`）和 Seat 包装 `createSearchSeat`。测试直接从 core 导入，没有转接文件。
-- fetch 保留目录、`local`（白名单文法、地址策略、解析器、后端）、`native` 后端、`settings/`、白名单提示 `prompt.ts` 与能力装配；浏览器面只有白名单编辑器与连接附加项是自己的，其余用 core 的骨架。
+- search 保留目录、各 adapter 的请求与解析（含 MCP 结果的行解析 `toolRows`）、来源规范化、执行层、传输常量与文案、`native` 后端、实时性和 `settings/resolve.ts`（建在 `resolveDocument` 上，派生 adapter / native 连接）；Host 侧只有把 core 组装成 search 能力的部分（`searchCapability`、连接状态 `describeConnections`、实时性的 `OptionsCodec`）和 Seat 包装 `createSearchSeat`。测试直接从 core 导入，没有转接文件。
+- fetch 保留目录、`local`（白名单文法、地址策略、解析器、后端）、`native` 后端、`remote/`（四个 adapter、页面→`WebFetchResult` 的映射、传输常量与文案、执行层）、`settings/`、白名单提示 `prompt.ts` 与能力装配；浏览器面只有 `local` 的附加编辑器（白名单与 User-Agent，按目录键注册）、远程服务的说明和文案是自己的，其余用 core 的骨架。
 
 ### 4.4 发布与命名
 
@@ -228,11 +230,11 @@ flowchart LR
 
 两侧都由 core 的 `installCapability` 装配：Seat 经能力的 `register` 注册一次（search 包一层 `createSearchSeat`，fetch 直接注册 `{ id, available: () => true, fetch }`），调用时取回发起 Agent 本步的计划（6.2），再由能力的 `target` / `execute` 执行。
 
-### 6.2 共同的选择范式 [已实现]
+### 6.2 共同的选择范式
 
 search 与 fetch 用同一套概念、同一份 core 实现：
 
-- **连接（connection）**：到某个后端的一种配置。`builtin:<id>` 来自插件目录，运维可以对它做稀疏覆盖（停用、访问方式、凭据引用、参数）；`custom:<name>` 由运维新建（例如自建端点，需显式 `trustedEndpoint`；本版只有 search 支持）。
+- **连接（connection）**：到某个后端的一种配置。`builtin:<id>` 来自插件目录，运维可以对它做稀疏覆盖（停用、访问方式、凭据引用、参数）；`custom:<name>` 由运维新建（目录里某个 adapter 的另一份配置，例如自建端点，需显式 `trustedEndpoint`；两侧都支持）。
 - **插件行设置**：`{ version, defaultConnection, showSelector, defaults, connections }`（第 8 节），经插件设置页编辑，热生效。它决定会话**能**选什么。
 - **会话选择**：`{ connectionId | null, revision, options }`，存在插件自己的 storage-domain，以 revision 比较并写入，同一会话的读写排队执行；fork 出的会话继承父会话的选择。revision 为 0 表示本会话还没选过，它的连接按下面的“未选择时的解析顺序”得出，并随之变化，直到用户选一次。
   - 存储记录（表 `selections`，键为会话 id）由两部分组成：core 拥有 `connectionId`、`revision`、`inherited?`，会话参数由能力的 `OptionsCodec`（`initial` / `fromRecord` / `toRecord`）编码。search 的记录是 `{ connectionId, revision, freshness?, inherited? }`，与前身相同：`freshness` 缺席的旧记录读到时补上当前默认值（`defaults.freshness`）。fetch 没有会话参数，记录是 `{ connectionId, revision, inherited? }`，历史上多出的字段被忽略。
@@ -252,8 +254,8 @@ search 与 fetch 用同一套概念、同一份 core 实现：
   - **web 行变化**：`settings/document-updated`（`ns = web`）时，对已知的 Agent（捕获过计划或装过限制的）立即重算：路由离开本插件时撤销限制（不读存储），回到本插件时立即为已关闭的会话安装限制，不再等下一个捕获点。重算用只读的 `peek` 读取会话选择，不为没有记录的会话创建记录。还没被捕获过的 Agent 在 `agent/created` / `agent/request` 时同步。
   - **卸载**：插件卸载时置 `disposed` 标记并撤销全部限制；卸载后仍在途的读写不再安装限制，捕获返回失败的计划。Agent 释放时显式撤销并忘记它。
 - **Remote**：`<ns>/get`、`<ns>/set`（带 `expectedRevision`）、`<ns>/provider`、`<ns>/pairings`（列出模型记忆）、`<ns>/forgetPairing`（清除一条）；`get` / `set` 按被寻址的会话资源授权。search 用 `searchConnections`，fetch 用 `fetchConnections`，由 core 的同一个工厂 `createConnectionsService` 生成：带 `@Remote` 的服务类在工厂内声明，每次安装一个新类，不持有模块级状态；构建期装饰器降级对内联的 core 文件同样生效，在 Vitest 与 Rolldown 产物（e2e 的真实 Host）里都已验证。
-  - 契约由 core 的 `selectionContract` 生成，请求与结果两端都是严格 schema。`set` 的连接必须可选（`isSelectable`），否则报 `<ns>/unavailable`；revision 过期报 `<ns>/conflict`；请求不合契约报 `gateway/bad-request`；其余异常原样交给网关（第 14 节）。`provider` 只返回 `{ providerId, envProvider }`，路由由浏览器用 `routeOf` 自己判断。
-- **记忆要看得见**：前身的配对在界面上不可见，用户不知道新会话为什么选了某个连接。现在 `SelectionView` 带上来源（本会话选择 / 继承自父会话 / 模型记忆 / 默认），输入框菜单显示当前选择的来源，设置页列出全部模型记忆并可逐条清除。
+  - 契约由 core 的 `selectionContract` 生成，请求与结果两端都是严格 schema。`set` 的连接必须可选（`isSelectable`），否则报 `<ns>/unavailable`；revision 过期报 `<ns>/conflict`；请求不合契约报 `gateway/bad-request`；sessionController 解析会话时给出的 `RemoteError` 也原样交出。行设置无效时，`settingsRow` 抛出的 `InvalidSettingsError`（`WebError` 的子类）被边界精确识别，`<ns>/get`、`<ns>/set` 返回契约内的 `<ns>/invalid-settings`：消息固定（“the row settings are invalid; fix them on the settings page”），details 为空，不记 warn（诊断已由设置校验记过）。其余异常一律改为 `gateway/internal`，消息固定（“connection request failed; retry or check the Host logs”），不带 cause，原始异常只写进 Host 日志（warn）。浏览器的 `SelectionState.readFailure` 区分 `'invalid-settings'` 与 `'failed'`：菜单对前者说明“<能力>的设置无效，请打开设置修复”并给出设置入口、不提供重试，对后者显示失败态并可重试；`/setup-*` 两种都按读取失败处理。`provider` 只返回 `{ providerId, envProvider }`，路由由浏览器用 `routeOf` 自己判断。
+- **记忆要看得见**：前身的配对在界面上不可见，用户不知道新会话为什么选了某个连接。因此 `SelectionView` 带上来源（本会话选择 / 继承自父会话 / 模型记忆 / 默认），输入框菜单显示当前选择的来源，设置页列出全部模型记忆并可逐条清除。
 
 ### 6.3 两侧的差异只是参数
 
@@ -264,9 +266,10 @@ search 与 fetch 用同一套概念、同一份 core 实现：
 | 默认连接 | `builtin:deepseek-messages`（原生等价） | `builtin:local`（原生等价） |
 | 会话参数 | `freshness`（默认值在 `defaults.freshness`） | 无（`OptionsCodec` 为空，`defaults` 只接受空对象） |
 | 连接视图的附加字段 | `freshness`（当前访问方式下是否支持实时性） | 无 |
-| 自定义连接 | `custom:<name>`，`kind: adapter` | 本版不支持 |
-| 特有的连接种类 | `model`（含跟随会话模型）**[计划，M3]**，本版配置里不接受 | `local`（唯一的 HTTP 传输后端） |
-| 每次调用读取的运维策略 | 连接可选性；adapter 的端点、访问方式、凭据引用与参数；native 的凭据引用与参数 | 连接可选性；`local` 的白名单、User-Agent 与上限；native 的凭据引用与 `baseURL` |
+| 自定义连接 | `custom:<name>`，`kind: adapter`，adapter 取 search 目录的六项 | `custom:<name>`，`kind: adapter`，adapter 取 fetch 目录的四项 |
+| 特有的连接种类 | `model`（含跟随会话模型）**[计划]**（第 13 节 M4），当前配置不接受 | `local`（唯一的 HTTP 传输后端） |
+| 每次调用读取的运维策略 | 连接可选性；adapter 的端点、访问方式、凭据引用与参数；native 的凭据引用与参数 | 连接可选性；`local` 的白名单、User-Agent 与上限；adapter 的端点、访问方式、凭据引用与参数；native 的凭据引用与 `baseURL` |
+| 远程后端的传输上限 | 2 MiB、90 s | 5 MB、120 s，正文 100 000 字符（6.6） |
 | 能力特有的上下文 | 无 | `local` 白名单提示（6.5） |
 
 ### 6.4 后端种类
@@ -274,17 +277,29 @@ search 与 fetch 用同一套概念、同一份 core 实现：
 | 种类 | 用于 | 怎么实现 | 行为基准 |
 | --- | --- | --- | --- |
 | `native` | search：`deepseek-messages`、`deepseek-search-api`；fetch：`deepseek-fetch-api` | 直接实例化 DSH 导出的 provider 类（`DeepSeekSearchProvider`、`DeepSeekSearchApiProvider`、`DeepSeekFetchApiProvider`），凭据与端点解析照搬对应原生行 | 与 DSH 原生 provider 完全一致；只改写错误消息（上游消息带端点、上游错误详情，并指向本 profile 已隐藏的内置“网页搜索”页面） |
-| `adapter` | search 的结构化服务（Exa、Firecrawl、Tavily、Tinyfish、OpenAlex、Semantic Scholar）；fetch 的远程读取服务（Jina Reader、Firecrawl…）**[计划，M3]** | search 提供 `request` / `parse`，传输统一走 core 的有界 HTTP；fetch 的 adapter 接口随 M3 设计（整次调用） | 对齐 DSH 远程 provider 的设计（6.6） |
-| `model` | search **[计划，M3]** | 让带服务端搜索的模型执行搜索，走 core 的有界 HTTP | 同上 |
+| `adapter` | search 的结构化服务（Exa、Firecrawl、Tavily、Tinyfish、OpenAlex、Semantic Scholar）；fetch 的远程读取服务（Exa、Firecrawl、Tavily、Tinyfish） | 两侧都实现 core 的 `AdapterWire`（`request` / `parse` 与可选的 keyless 路由），由 core 的 `runAdapter` 执行，传输统一走 core 的有界 HTTP 与 MCP 客户端（6.7） | 对齐 DSH 远程 provider 的设计（6.6） |
+| `model` | search **[计划]**（第 13 节 M4） | 让带服务端搜索的模型执行搜索，走 core 的有界 HTTP | 同上 |
 | `local` | fetch | DSH 官方 `HttpFetchProvider` + 本插件注入的解析器 | 6.5 |
 
-search 的目录（`src/catalog.ts`，顺序即显示顺序）有 8 项：native `deepseek-messages`（默认，原生等价；参数 `baseURL`、`model`、`apiVersion`、`maxTokens`、`maxUses`，未覆盖的端点与原生行一样可由启动环境的 `DEEPSEEK_SEARCH_BASE_URL` 给出）、`deepseek-search-api`（参数 `baseURL`、`count`（1–50）、`sendOriginalQuestion`，缺省与原生一样附带最近一条用户问题）；adapter `exa`、`firecrawl`、`tavily`、`tinyfish`、`openalex`、`semanticscholar`。两个 native 都只有 API key（缺省 `DEEPSEEK_API_KEY`）或 DeepSeek 账号两种访问方式。前身的 `deepseek` adapter 被 native `deepseek-search-api` 取代；设置文档里的 `builtin:deepseek` 按未知连接 id 拒绝。
+search 的目录（`src/catalog.ts`，顺序即显示顺序）有 8 项：native `deepseek-messages`（默认，原生等价；参数 `baseURL`、`model`、`apiVersion`、`maxTokens`、`maxUses`，未覆盖的端点与原生行一样可由启动环境的 `DEEPSEEK_SEARCH_BASE_URL` 给出）、`deepseek-search-api`（参数 `baseURL`、`count`（1–50）、`sendOriginalQuestion`，缺省与原生一样附带最近一条用户问题）；adapter `exa`、`firecrawl`、`tavily`、`tinyfish`、`openalex`、`semanticscholar`。两个 native 都只有 API key（缺省 `DEEPSEEK_API_KEY`）或 DeepSeek 账号两种访问方式。前身的 `deepseek` adapter 由 native `deepseek-search-api` 代替，设置文档里的 `builtin:deepseek` 按未知连接 id 拒绝。
 
-fetch 的目录有 2 项：`local`（默认，kind `local`，keyless；参数 `allowCidrs`、`allowHostnames`（list，各至多 200 条）、`userAgent`（text，允许空串，发出空的请求头）、`maxResponseBytes`、`maxBodyChars`、`timeoutMs`、`maxRedirects`（integer），默认值等于原生 `web-fetch-http` 行：空白名单、DSH 的默认 User-Agent、5 000 000 字节、100 000 字符、30 000 ms、5 跳）；`deepseek-fetch-api`（kind `native`，实例化 `DeepSeekFetchApiProvider`；API key `DEEPSEEK_API_KEY` 或 DeepSeek 账号；参数 `baseURL`（url），与官方端点不同时需 `trustedEndpoint: true`；凭据与端点解析照搬原生 `web-deepseek-api` 行，错误消息改写为不含端点与上游详情的提示）。远程连接默认不停用。
+fetch 的目录（`src/catalog.ts`）有 6 项：`local`（默认，kind `local`，keyless；参数 `allowCidrs`、`allowHostnames`（list，各至多 200 条）、`userAgent`（text，允许空串，发出空的请求头）、`maxResponseBytes`、`maxBodyChars`、`timeoutMs`、`maxRedirects`（integer），默认值等于原生 `web-fetch-http` 行：空白名单、DSH 的默认 User-Agent、5 000 000 字节、100 000 字符、30 000 ms、5 跳）；`deepseek-fetch-api`（kind `native`，实例化 `DeepSeekFetchApiProvider`；API key `DEEPSEEK_API_KEY` 或 DeepSeek 账号；参数 `baseURL`（url），与官方端点不同时需 `trustedEndpoint: true`；凭据与端点解析照搬原生 `web-deepseek-api` 行，错误消息改写为不含端点与上游详情的提示）；以及四个 adapter：
 
-Exa 与 Tinyfish 的 keyless 路由走托管的 MCP 工具（search 包内的最小 MCP 客户端，一次 `tools/call`，同样经 core 的有界 HTTP），其余 keyless 路由走 REST。`native` 结果与 adapter 结果一样经 `sourceUrl` 过滤来源。
+| 键 | API key 路由 | keyless 路由 | 参数（运维可设） |
+| --- | --- | --- | --- |
+| `exa` | POST `https://api.exa.ai/contents`，`x-api-key`（缺省 `EXA_API_KEY`）；体 `{ urls: [url], text: { maxCharacters: 100000 } }` 加参数 | 托管 MCP `https://mcp.exa.ai/mcp` 的 `web_fetch_exa`（先握手），参数 `{ urls: [url], maxCharacters: 100000 }` | `maxAgeHours`（−1–720）、`livecrawlTimeout`（1–90 000 ms），都只在 API key 下可用 |
+| `firecrawl` | POST `https://api.firecrawl.dev/v2/scrape`，Bearer（缺省 `FIRECRAWL_API_KEY`）；体 `{ url, formats: ['markdown'] }` 加参数 | 同一端点，不带 Authorization | `onlyMainContent`、`maxAge`（ms）、`storeInCache`、`timeout`（1 000–110 000 ms）、`waitFor`（0–60 000 ms）、`proxy`（basic / enhanced / auto） |
+| `tavily` | POST `https://api.tavily.com/extract`，Bearer（缺省 `TAVILY_API_KEY`）；体 `{ urls: [url], include_images: false }` 加参数，从不发 `query` / `chunks_per_source`（它们会把正文变成摘录） | 同一端点，加 `x-tavily-access-mode: keyless` | `extract_depth`（basic / advanced）、`format`（markdown / text）、`timeout`（1–60 s） |
+| `tinyfish` | POST `https://api.fetch.tinyfish.ai`，`x-api-key`（缺省 `TINYFISH_API_KEY`，与 search 的 Tinyfish 同名）；体 `{ urls: [url], format: 'markdown' }` 加参数 | 无 | `ttl`（秒，≥ 0）、`per_url_timeout_ms`（1–110 000） |
 
-### 6.5 fetch 的 local：唯一做地址检查的后端 [已实现]
+- 每个请求体都是先展开参数、再写固定字段，参数改不了 URL 与格式；URL 原样放进请求体（6.6）。
+- 有 keyless 路由的三项缺省为 keyless，Tinyfish 缺省为 API key。远程连接默认不停用；会话选了它们，URL 就会发给对应服务（菜单与设置页都写明）。
+- Tinyfish 只有 API key：官方文档写明 Fetch API 的每个请求都要 `X-API-Key`，托管 MCP 用 OAuth；search 侧使用的匿名请求头只有第三方证据，而且只涉及搜索工具。本项目不向真实服务发探测请求，所以不提供未经证实的匿名路由。
+- 服务端的超时参数上限都不超过 110 000 ms，留在本插件 120 s 的整体截止时间之内（6.6）。
+
+Exa 与 Tinyfish（search）、Exa（fetch）的 keyless 路由走托管的 MCP 工具（core 的最小 MCP 客户端，一次 `tools/call`，同样经 core 的有界 HTTP），其余 keyless 路由走 REST。`native` 结果与 adapter 结果一样经 `sourceUrl` 过滤来源（search）。
+
+### 6.5 fetch 的 local：唯一做地址检查的后端
 
 只有经 HTTP(S) 直接访问目标的后端才需要、也才能做目标地址检查，fetch 里只有 `local` 是这样。
 
@@ -304,14 +319,53 @@ Exa 与 Tinyfish 的 keyless 路由走托管的 MCP 工具（search 包内的最
 
 DSH 对远程抓取的立场（deepseek-harness `.agents/notes/implemented/feature/2026-10-15-deepseek-search-fetch-api.md`）：“选择 DeepSeek 即把页面获取与目标访问策略委托给该服务；Harness 拒绝 API 请求的重定向，保留取消和有界的工具输出。” 本项目的远程后端（search 与 fetch 一样）照此执行：
 
-- 每次操作一个 API 请求；本项目自己的 API 请求一律 `redirect: 'error'`（keyless 的也一样）；凭据按访问方式解析（keyless 不碰密钥；api-key 经 DSH Credentials；DeepSeek 账号会话用账号令牌，只经 `native` 后端）；
-- 不对目标 URL 做地址检查，也不做“披露”检查：URL 原样发给服务，目标是否可达、能否抓取由服务决定。设置页在连接说明中写明“URL 会发送给 <服务>”；
-- fetch 结果 **[计划，M3]**（随 fetch 的 adapter 一起落地）：服务不提供目标状态码与最终 URL 时，返回请求的 URL 与 200（代表“服务取到了页面”，不代表本机看到了目标响应），正文为服务返回的 Markdown / 纯文本（`kind: 'text'`）；服务的非成功响应是 provider 错误；
-- 本项目自己实现的远程后端走 core 的有界 HTTP（search 为 2 MiB、90 s 的整体截止时间）；`native` 后端保持 DSH 原生 provider 的行为，模型可见输出由 tool-web 的 `fetchMaxOutputChars` 和搜索结果数兜底。
+- 每次操作一个 API 请求（或一次 MCP `tools/call`）；本项目自己的 API 请求一律 `redirect: 'error'`（keyless 的也一样）；凭据按访问方式解析（keyless 不碰密钥，永远发往目录端点；api-key 经 DSH Credentials；DeepSeek 账号会话用账号令牌，只经 `native` 后端）；
+- 不对目标 URL 做地址检查，也不做“披露”检查：URL 原样发给服务（不规范化、不解码），目标是否可达、能否抓取由服务决定。e2e `fetch-remote` 证明私网地址与编码过的回环地址都原样转发给服务，目标本身没有被访问；同一个 URL 交给 `local` 时被拒绝。设置页与菜单写明“URL 会发送给 <服务>”；
+- 本项目自己实现的远程后端走 core 的有界 HTTP：search 为 2 MiB、90 s，fetch 为 5 MB、120 s（见下）；`native` 后端保持 DSH 原生 provider 的行为，模型可见输出由 tool-web 的 `fetchMaxOutputChars` 和搜索结果数兜底。
 
-### 6.7 共用的词汇 [已实现]
+**fetch 的结果映射**（`src/remote/page.ts`）：
 
-下面是 core 里实际的接口（省略 `readonly` 与部分泛型约束；以源码为准：`core/src/shared/connections.ts`、`shared/selection.ts`、`shared/settings.ts`、`host/capability.ts`、`host/plans.ts`、`client/section.ts`）。
+1. adapter 的 `parse` 返回 `PageOutcome`：`{ kind: 'page', page }` 或 `{ kind: 'failure', failure }`。`Page` 只有三项：`content`（服务返回的 Markdown 或纯文本）、`target`（服务报告的目标状态码与最终 URL，可缺席）、`truncated`（服务报告，或由它的字符预算可推断，正文被截过）。
+2. 执行层用 `fetchResult(page, request)` 生成 `WebFetchResult`：`body` 固定为 `{ kind: 'text', content }`，tool-web 原样透传，不走 HTML→Markdown。`target` 缺席时用请求的 URL 与 200——这是兼容映射，与 DSH 的 `DeepSeekFetchApiProvider` 一样：200 表示“服务取到了页面”，不表示本机看到目标回了 200。
+3. 服务报告的目标：只在服务给出 100–599 的整数状态码时采用（`reportedTarget`），最终 URL 经 `sourceUrl` 规范化，不可用时退回请求的 URL。Firecrawl 给 `data.metadata.statusCode` 与 `data.metadata.url`；Tinyfish 成功时只给 `final_url`，状态码按兼容映射记为 200；Exa 与 Tavily 都不给，整体按兼容映射。
+4. `statusPage`：服务对这个 URL 报失败、但**明确给出目标的 HTTP 状态**时，结果是该状态码、请求的 URL、空正文，与 DSH“非 2xx 是结果，不是错误”一致。适用于 Tinyfish `errors[0].status`、Exa REST `statuses[0].error.httpStatusCode` 为整数，以及 Firecrawl 正文为空而 `statusCode` 不是 2xx。不从文字标签推断状态码（Exa 的 `CRAWL_NOT_FOUND` 不当成 404）。
+5. 其余逐 URL 的失败用共享词汇 `PageFailure`；执行层用连接的 label 生成给模型的错误（`pageFailure(label, failure)`），从不带服务的原文：
+
+   | `PageFailure` | 来源 | 错误码 |
+   | --- | --- | --- |
+   | `timeout` | Exa `CRAWL_TIMEOUT` / `CRAWL_LIVECRAWL_TIMEOUT`；Tinyfish `timeout` | `WEB_FETCH_TIMEOUT` |
+   | `too-large` | Tinyfish `content_too_large` | `WEB_FETCH_TOO_LARGE` |
+   | `invalid-url` | Tinyfish `invalid_url` / `invalid_redirect_url` | `WEB_INVALID_URL` |
+   | `empty` | 没有结果或正文为空；Exa keyless 的 “No content found…”；Tinyfish `empty_content` | `WEB_PROVIDER_ERROR` |
+   | `rate-limited` | Exa keyless 结果的 `_meta['ai.exa/rateLimited'] === true`（这种限流提示不带 `isError`，不识别就会被当成正文） | `WEB_PROVIDER_ERROR`，提示稍后重试或改用个人密钥 |
+   | `failed` | Firecrawl `success !== true`；Tavily `failed_results` 非空或没有结果；Exa、Tinyfish 的其余错误标签 | `WEB_PROVIDER_ERROR` |
+   | `invalid` | 响应不符合服务文档描述的形状 | `WEB_PROVIDER_ERROR` |
+
+   服务自身的 HTTP 非 2xx（鉴权、额度、限流、5xx）由 core 的传输报 provider 错误；MCP 结果的 `isError` 由 core 的 MCP 客户端报 “<label> could not read the page…”。
+6. 截断：本插件把正文截到 100 000 字符（不切开代理对），截过就 `truncated: true`。服务都不给截断标志：Exa 的请求带字符预算 `maxCharacters: 100000`，返回正文长度 ≥ 预算时视为可能被截断，也记 `truncated: true`；其他服务没有字符参数，`false` 只表示服务没有说、本插件也没截。
+7. 标题不拼进正文，与 DSH 的 DeepSeek Fetch API provider 一致：只返回服务给的正文。
+8. Exa keyless 的工具文本是几行元数据（`# 标题`、`URL:`、`Published:`、`Author:`）、一个空行、正文。解析只在开头 8192 个字符内找第一个空行，之前的每一行都是这几种元数据时才剥掉，否则整段原样作为正文。工具文本整体先限 512 × 1024 个字符、至多 100 个 text 块（超出报 `invalid`），只做逐行的 `indexOf` 推进，不对整段正文跑多行正则。
+
+**能力参数**（fetch 自己的常量，`src/remote/http.ts`、`page.ts`，不是运维参数；给模型的文案由常量生成）：
+
+| 参数 | 值 | 理由 |
+| --- | --- | --- |
+| 响应字节上限 | 5 000 000（文案写 “5 MB”） | 等于 `local` 缺省的 `maxResponseBytes`；页面比搜索结果大，search 的 2 MiB 会让正常的长页面整体失败 |
+| 整体截止时间 | 120 000 ms（覆盖读凭据、MCP 握手与读正文） | 覆盖 Tinyfish 的 120 s 批量上限与 Firecrawl 的缺省超时；目录里服务端超时参数的上限都不超过 110 000 ms；tool-web 缺省 30 s 的工具超时通常先到 |
+| 正文字符上限 | 100 000 | 等于原生 `maxBodyChars` 的缺省；接受字符预算的服务（Exa）按同一个值请求 |
+
+**每家服务的缓存与隐私**：只写 2026-10-20 读公开文档与源码时核实过的说法；设置页每个远程服务的说明与此一致。
+
+| 服务 | 已核实 | 未核实 |
+| --- | --- | --- |
+| Exa | keyless 走 Exa 托管 MCP 的 `web_fetch_exa`，免登录、限流，额度不公布；内容可能来自 Exa 的索引缓存（REST 的 `maxAgeHours` 控制，MCP 不能设置）；零数据保留只对 Enterprise 开通；MCP 网关按会话保存客户端信息（clientInfo，即本插件的名称与版本，以及 User-Agent），带过期时间 | 是否用查询或 URL 训练；匿名额度的线上取值 |
+| Firecrawl | keyless 是同一 REST 端点、不带 Authorization，按 IP 每天限额（数字不公布）；缺省可返回 2 天内的缓存（`maxAge`），结果缺省存入 Firecrawl 的缓存与索引（`storeInCache`）；零数据保留只对企业开通 | 训练用途；keyless 下受限的参数 |
+| Tavily | keyless 是同一端点加 `X-Tavily-Access-Mode: keyless`，额度不公布，错误格式与带 key 时不同；FAQ 写零数据保留，隐私政策写保留到提供服务所需的期限 | Extract 是否缓存；训练用途 |
+| Tinyfish | 只接受个人密钥；缺省可能返回已有缓存（`ttl` 控制）；服务条款授予 Tinyfish 用客户数据训练与改进其模型的许可 | 匿名抓取；该条款之后的限制条件；保留期 |
+
+### 6.7 共用的词汇
+
+下面是 core 里实际的接口（省略 `readonly` 与部分泛型约束；以源码为准：`core/src/shared/connections.ts`、`shared/selection.ts`、`shared/settings.ts`、`host/capability.ts`、`host/plans.ts`、`host/adapter.ts`、`host/mcp.ts`、`client/section.ts`）。
 
 ~~~ts
 // ./shared —— Host 与浏览器同构，不导入 Node、浏览器或 Host 包
@@ -325,11 +379,11 @@ type OptionRule =
   | { kind: 'text'; pattern: RegExp; maxLength?: number; keyless?: false }  // 先查长度（缺省 2000）再跑正则
   | { kind: 'url'; keyless?: false }                                        // isEndpoint
   | { kind: 'boolean'; keyless?: false }
-  | { kind: 'integer'; min: number; max: number }
+  | { kind: 'integer'; min: number; max: number; keyless?: false }
   | { kind: 'list'; pattern: RegExp; max: number }                          // 能力再加语义检查（CIDR）
 
 interface AccessFacts { keyless: boolean; apiKey: { credentialRef: string } | false; account: boolean }
-interface Descriptor {                     // 目录事实；能力扩展它（search：endpoint、freshness；fetch native：endpoint）
+interface Descriptor {                     // 目录事实；能力扩展它（search：endpoint、freshness；fetch 的 native 与 adapter：endpoint）
   label: string
   homepage?: string
   kind: BackendKind
@@ -356,7 +410,11 @@ type ResolvedBase = { id: string; label: string; disabled: boolean; remote: bool
   | { kind: 'local'; access: 'keyless' }
   | { kind: 'native' | 'adapter'; access: AccessMode; credentialRef: string; endpoint: string })
 declare function resolveDocument(input: { catalog; document: unknown; defaults: { schema; defaultConnection: string }
-  customAllowed: boolean; capabilityLabel: string; retiredFields?: string[]; migrations? }): ResolvedDocument<D>
+  capabilityLabel: string; retiredFields?: string[]; migrations? }): ResolvedDocument<D>
+interface CustomConnection<A extends string = string> {   // 持久化形状；文法是 customConnectionSchema(目录的 adapter 键)
+  kind: 'adapter'; adapter: A; label: string; credentialRef: string
+  endpoint?: string; trustedEndpoint?: boolean; disabled?: boolean; options?: Record<string, unknown>
+}
 
 // ./host —— 只在 Host
 interface CapabilitySettings<C extends { id: string; disabled: boolean; kind: BackendKind }> {
@@ -388,8 +446,41 @@ type Plan<O> = { kind: 'off' } | { kind: 'failed'; error: WebError } | { kind: '
 declare function isSelectable(connection): boolean   // 存在、未停用、不是 model
 declare function installCapability(ctx: Context, capability: Capability): { plan(agent?: Agent): Plan<O> | undefined }
 
+// ./host 的 adapter 与 mcp —— 两侧远程后端共用的请求/解析线
+type Auth = { kind: 'keyless' } | { kind: 'api-key'; key: string }   // 账号令牌只经 native 后端
+interface McpToolCall { url: string; tool: string; arguments: Record<string, unknown>; handshake: boolean; headers?: Record<string, string> }
+interface McpRoute<I, O> extends Omit<McpToolCall, 'arguments'> {
+  arguments(input: I): Record<string, unknown>
+  parse(result: McpToolResult, input: I): O
+}
+interface AdapterWire<I, O> {
+  request(input: I, endpoint: string, auth: Auth): HttpRequest
+  parse(payload: unknown, input: I): O
+  keyless?: 'rest' | McpRoute<I, O>         // 'rest'：同一个 request，以 keyless 身份发往目录端点
+}
+/** 目录标为 keyless 的项缺 keyless 路由即编译失败。 */
+type KeylessBound<Facts extends { keyless: boolean }, W extends AdapterWire<never, unknown>> =
+  Facts['keyless'] extends true ? W & Required<Pick<W, 'keyless'>> : W
+type AdapterTarget =
+  | { access: 'keyless'; label: string; endpoint: string }                       // 总是目录端点
+  | { access: 'api-key'; label: string; endpoint: string; credentialRef: string }
+declare function adapterTarget(connection: AdapterTarget, catalogEndpoint: string): AdapterTarget   // keyless 改写为目录端点
+interface AdapterIO {
+  errors: CapabilityErrors; transport: Transport; mcp: McpClient
+  credential(ref: string): Promise<string | undefined>
+  onDiagnostic?: OnDiagnostic
+  credentialMissing(ref: string): string     // 没有存密钥
+  credentialInvalid(ref: string): string     // 密钥含可见 ASCII 与空格以外的字符
+}
+/**
+ * 在 transport.withDeadline 内：keyless → 'rest' 发 request(input, 目录端点, keyless)，或一次 MCP tools/call，不读凭据；
+ * api-key → 读凭据并去掉首尾空白，为空或含非法字符都报 WEB_PROVIDER_CREDENTIAL_MISSING（消息只有凭据名称，
+ * 不发请求、不进诊断），再发往 target.endpoint；最后 parse。不改写非 WebError：能力的执行层负责。
+ */
+declare function runAdapter<I, O>(io: AdapterIO, wire: AdapterWire<I, O>, target: AdapterTarget, input: I, signal: AbortSignal | undefined): Promise<O>
+
 // ./client —— 只在浏览器
-interface SelectionState<V> { view: V | undefined; saving: boolean; readFailed: boolean }
+interface SelectionState<V> { view: V | undefined; saving: boolean; readFailure: 'invalid-settings' | 'failed' | undefined }
 interface SelectionUpdate { connectionId?: string | null; options?: Record<string, unknown> }
 type WriteResult = { ok: true } | { ok: false; error: RemoteFailure }
 interface SelectionStore<V extends SelectionView = SelectionView> {
@@ -404,7 +495,6 @@ interface ConnectionSection {
   order: number                                             // 菜单中的位置，小的在前
   title: () => string                                       // 已本地化
   selection: SelectionStore
-  route: RouteStore
   describe: (connection: ConnectionView) => ConnectionText
   sourceText: (view: SelectionView) => string
   writeFailureText: (error: RemoteFailure) => string
@@ -412,6 +502,8 @@ interface ConnectionSection {
   settings: ObservableSnapshot<(() => void) | undefined>    // 打开本插件的设置；插件页不可用时为 undefined
 }
 interface WebConnectionsService {
+  registerRoute(capability: 'search' | 'fetch', route: RouteStore): () => void   // 路由事实，与分区无关（9.2）
+  routes: ObservableSnapshot<ReadonlyMap<'search' | 'fetch', Route>>   // 缺条目 = 没有运行中的插件提供环境变量事实
   register(section: ConnectionSection): () => void          // 在注册者的 effect 里调用，随其 fiber 释放
   sections: ObservableSnapshot<readonly ConnectionSection[]>   // 按 order 排序
 }
@@ -423,77 +515,86 @@ interface WebConnectionsService {
 - `Selection.connectionId` 是 `string | null`，id 语法由设置校验保证；Remote 层再限制长度（≤128）。
 - core 只处理“用哪个连接”；`T`（执行目标）与后端接口都归能力。
 
-后端接口按能力分开：
+后端接口：两侧的 adapter 都是上面的 `AdapterWire`，能力只给出输入与解析结果的类型：
 
 ~~~ts
-// search（src/search/adapters/types.ts、src/search/execute.ts）：请求/解析对，传输统一
-type Auth = { kind: 'keyless' } | { kind: 'api-key'; key: string }   // 账号令牌只经 native 后端
-interface Adapter {
-  request(input: SearchInput, endpoint: string, auth: Auth): HttpRequest
-  parse(payload: unknown, input: SearchInput): WebSearchSource[]
-  keyless?: 'rest' | McpRoute               // 目录标为 keyless 的项必须有，否则编译失败（AdapterFor<K>）
-}
+// search（src/search/adapters/types.ts、src/search/execute.ts）
+type Adapter = AdapterWire<SearchInput, WebSearchSource[]>
+type AdapterFor<K extends AdapterKey> = KeylessBound<typeof CATALOG[K]['access'], Adapter>
 const ADAPTER_WIRES = { exa, firecrawl, tavily, tinyfish, openalex, semanticscholar } satisfies { [K in AdapterKey]: AdapterFor<K> }
 type SearchTarget =
-  | { kind: 'adapter'; connection: AdapterConnection; freshness: Freshness }
+  | { kind: 'adapter'; connection: AdapterConnection; freshness: Freshness }   // executeSearch → runAdapter
   | { kind: 'native'; provider: WebSearchProvider }          // 包装后的上游实例
 
-// fetch（src/host/runtime.ts）：执行目标直接是一个 WebFetchProvider
-//   local  → createLocalBackend(() => connection.options)
-//   native → createNativeFetchBackend(…)（包装后的 DeepSeekFetchApiProvider）
-// execute 调用它的 fetch。fetch 的 adapter 接口（整次调用）随 M3 设计。
+// fetch（src/remote/types.ts、src/remote/page.ts）
+interface FetchInput { url: string; options: Record<string, unknown> }    // URL 原样；参数已按访问方式校验
+type FetchWire = AdapterWire<FetchInput, PageOutcome>
+type FetchWireFor<K extends AdapterKey> = KeylessBound<typeof CATALOG[K]['access'], FetchWire>
+const ADAPTER_WIRES = { exa, firecrawl, tavily, tinyfish } satisfies { [K in AdapterKey]: FetchWireFor<K> }
+interface ReportedTarget { statusCode: number; url: string }
+interface Page { content: string; target: ReportedTarget | undefined; truncated: boolean }
+type PageFailure = 'timeout' | 'too-large' | 'invalid-url' | 'empty' | 'rate-limited' | 'failed' | 'invalid'
+type PageOutcome = { kind: 'page'; page: Page } | { kind: 'failure'; failure: PageFailure }
+// fetch 的执行目标是一个 WebFetchProvider（src/host/runtime.ts），execute 调用它的 fetch：
+//   local   → createLocalBackend(() => connection.options)
+//   native  → createNativeFetchBackend(…)（包装后的 DeepSeekFetchApiProvider）
+//   adapter → createRemoteBackend(connection, deps)：runAdapter → pageFailure(label, failure) 或 fetchResult(page, request)
 ~~~
 
-**刻意不统一的部分**：请求/结果类型（DSH 本来就分开）；search 的请求/解析对与 fetch 的整次调用；上限数值（search 固定，fetch 的 `local` 由运维配置）；search 独有的实时性、模型连接、来源规范化；fetch 独有的 `local` 白名单、解析器、白名单提示。共享的是选择范式与机制，不是数值和能力语义。
+两侧的执行层（search `executeSearch`、fetch `createRemoteBackend`）形状相同：先查取消；`runAdapter`（目标由 `adapterTarget(connection, 目录端点)` 构造）；`WebError` 原样交出，其余异常先进诊断，再改写为固定的 `WEB_PROVIDER_ERROR`；已取消时优先报 `WEB_ABORTED`。
 
-## 7. 新增一个后端 [已实现]
+**刻意不统一的部分**：请求/结果类型（DSH 本来就分开）；输入与解析结果（search 是来源列表，fetch 是 `PageOutcome`），以及 fetch 自己的页面→`WebFetchResult` 映射；传输数值（6.3；fetch 的 `local` 由运维配置）；search 独有的实时性、模型连接、来源规范化；fetch 独有的 `local` 白名单、解析器、白名单提示。共享的是选择范式与机制，不是数值和能力语义。
+
+**为什么 fetch 的 adapter 也是请求/解析对**：另一种做法是让 fetch 的 adapter 承担整次调用（`fetch(request, signal) → WebFetchResult`）。本设计让两侧都实现同一个 `AdapterWire`，由 core 的 `runAdapter` 执行，理由：调研的四个抓取服务都是一次 API 请求（或一次 MCP 调用）就取到页面；“keyless 永不读取密钥”“keyless 永远发往目录端点”“密钥只含合法的请求头字符”这几条安全规则因此只有一处实现、一组测试（core `adapter.spec.ts`）；两侧真正不同的只有输入、解析结果和 fetch 的页面映射。若以后某个服务必须多步调用，再单独设计。
+
+## 7. 新增一个后端
 
 总的步骤：
 
 1. 在插件的 `src/catalog.ts` 加一条 Descriptor（位置即显示顺序，键成为 `builtin:<键>`），写明 `kind`、`remote`、访问方式、端点和参数规则；
 2. 实现并登记后端（位置见下表）；`native` 只需实例化上游类并照搬原生行的凭据/端点解析（用 core 的 `nativeAuth` 与 `nativeBackend`）；
 3. 文案：连接说明（远程服务写明会收到什么）、参数名、占位符、枚举值（zh / en 同键）；
-4. 测试：本地 HTTP 服务充当远程 API，覆盖请求形状、响应映射、API 重定向被拒且目标未被访问、取消、错误改写；`native` 只测凭据解析与错误改写。
+4. 测试：adapter 的测试覆盖请求形状（URL 原样、请求头、请求体）与解析映射；传输边界（API 重定向被拒且目标未被访问、字节上限、截止时间、取消、keyless 不发送密钥）在 core 与能力的执行层各测一次（search 的 adapter 测试仍用本地 HTTP 服务充当远程 API）；`native` 只测凭据解析与错误改写。
 
 | 插件 · 种类 | 要碰的位置 |
 | --- | --- |
 | search · adapter | `src/search/adapters/<键>.ts`；`catalog.ts` 的 `ADAPTER_KEYS`；`adapters/index.ts` 的 `ADAPTER_WIRES`。`settings/resolve.ts` 把非 native 的目录项自动派生为 adapter 连接，设置页与菜单由目录驱动，不用改 |
 | search · native | `src/backends/<键>.ts`；`catalog.ts` 的 `NATIVE_KEYS`；`backends/native.ts` 的 `createNativeBackend`；`settings/resolve.ts` 的 native 分支与 `NativeConnection['native']`（两项写死） |
-| fetch · native | `src/backends/<键>.ts`；`catalog.ts` 的 `NATIVE_KEYS`；`backends/native.ts` 的 `createNativeFetchBackend`（目前只有一项）；`settings/types.ts` 的 `NativeConnection['native']`；浏览器面的 `client/settings/ConnectionExtras.tsx` 与 `client/settings/model.ts`（凭据引用）——这两处按 `deepseek-fetch-api` 写死 |
-| fetch · adapter | **[计划，M3]**：fetch 的目录类型与 `resolveSettings` 目前只认 `local` 与 `native` |
+| fetch · adapter | `src/remote/adapters/<键>.ts`（`export const <键>: FetchWireFor<'<键>'>`）；`catalog.ts` 的 `ADAPTER_KEYS`；`remote/adapters/index.ts` 的 `ADAPTER_WIRES`；服务说明（`client/settings/model.ts` 的 `SERVICE_NOTES`）与参数文案。`resolveSettings` 按目录项的 `kind` 派生连接，设置页、菜单与自定义连接的格式列表由目录驱动，不用改 |
+| fetch · native | `src/backends/<键>.ts`；`catalog.ts` 的 `NATIVE_KEYS`；`backends/native.ts` 的 `createNativeFetchBackend`（目前只有一项，直接返回 `deepseekFetchApi`；加第二项时改为按键选择）。浏览器面不用改：凭据名称、`baseURL` 与信任开关由 core 的服务列表按目录渲染 |
 
 不需要改 profile、`web` 行、Seat、Planner 或输入框菜单：菜单只渲染 Host 给出的连接视图。新增后端时同步第 6.4 节的目录说明与插件 README。
 
-## 8. 配置、状态与凭据 [已实现]
+## 8. 配置、状态与凭据
 
 | 位置 | 内容 | 编辑方 |
 | --- | --- | --- |
 | `web` 行 | 两个 provider id | 只有 profile patch；用户层覆盖视为用户主动退出（第 11 节的预检会提示） |
 | `web-search-enhanced` 行 | 统一配置文档（8.1）；`defaults.freshness` | 插件设置页，经 Settings（volatile 字段，热生效） |
-| `web-fetch-enhanced` 行 | 统一配置文档；`connections['builtin:local'].options` 含 `allowCidrs`、`allowHostnames`、`userAgent`、`maxResponseBytes`、`maxBodyChars`、`timeoutMs`、`maxRedirects` | 同上 |
+| `web-fetch-enhanced` 行 | 统一配置文档；`connections['builtin:local'].options` 含 `allowCidrs`、`allowHostnames`、`userAgent`、`maxResponseBytes`、`maxBodyChars`、`timeoutMs`、`maxRedirects`；远程 adapter 的覆盖与自定义连接 | 同上 |
 | storage-domain `web_search_enhanced` / `web_fetch_enhanced` | 表 `selections`（每会话的选择）与 `pairings`（模型记忆），域版本 1；记录形状见 6.2，与 0.1.x 相同 | `searchConnections` / `fetchConnections` Remote；记忆由会话里的选择写入，设置页可清除 |
 | DSH Credentials | API 密钥 | 设置页经 `remote.credentials`；配置里只存 `credentialRef` |
 
 ### 8.1 统一配置文档
 
-两个插件的行配置是同一份文法（core `shared/settings.ts`），Host 与浏览器用同一个纯函数解析（各插件的 `resolveSettings` 建在 `resolveDocument` 上）；两侧的差别只有目录、`defaults` 的字段和是否允许自定义连接。全部字段可选，缺省由目录给出；设置页的写入是稀疏的，只记录与下层或目录不同的部分。
+两个插件的行配置是同一份文法（core `shared/settings.ts`），Host 与浏览器用同一个纯函数解析（各插件的 `resolveSettings` 建在 `resolveDocument` 上）；两侧的差别只有目录和 `defaults` 的字段。全部字段可选，缺省由目录给出；设置页的写入是稀疏的，只记录与下层或目录不同的部分。
 
 顶层字段：
 
 | 字段 | 类型与限制 | 缺省 | 说明 |
 | --- | --- | --- | --- |
 | `version` | 只接受 `2` | 省略时按 2 读取 | 见 8.3 |
-| `defaultConnection` | 连接 id，≤200 字符，必须是存在的连接 | search `builtin:deepseek-messages`，fetch `builtin:local` | 未选择过的会话用它（6.2）；不检查是否停用；fetch 不接受 `custom:*` |
+| `defaultConnection` | 连接 id，≤200 字符，必须是存在的连接 | search `builtin:deepseek-messages`，fetch `builtin:local` | 未选择过的会话用它（6.2）；不检查是否停用；可以是 `custom:*` |
 | `showSelector` | boolean | `true` | `false` 时不向输入框菜单注册本能力的分区，`/setup-*` 与设置页照常 |
 | `defaults` | 严格对象 | search `{ freshness: 'auto' }`，fetch `{}` | search：`freshness` 为 `auto` / `fresh` / `realtime`；fetch 没有会话参数 |
-| `connections` | 记录，至多 200 个键，键 ≤200 字符 | `{}` | 键为 `builtin:<目录键>`（覆盖）或 `custom:<name>`（自定义，只有 search） |
+| `connections` | 记录，至多 200 个键，键 ≤200 字符 | `{}` | 键为 `builtin:<目录键>`（覆盖）或 `custom:<name>`（自定义） |
 
 连接字段：
 
-| 字段 | 内置覆盖 `builtin:*` | 自定义 `custom:*`（search） |
+| 字段 | 内置覆盖 `builtin:*` | 自定义 `custom:*` |
 | --- | --- | --- |
 | `kind` | 不接受 | 必填，只接受 `adapter` |
-| `adapter` | 不接受 | 必填，search 目录里的 adapter 键 |
+| `adapter` | 不接受 | 必填，本插件目录里的 adapter 键（search 六项，fetch 四项） |
 | `label` | 可选，1–200 字符 | 必填，1–200 字符 |
 | `disabled` | 可选，缺省 `false` | 同左 |
 | `access` | 可选，`keyless` / `api-key`，只能是目录允许的；缺省有 keyless 路由时为 `keyless`，否则 `api-key` | 不接受，总是 `api-key` |
@@ -543,6 +644,16 @@ connections:
     credentialRef: DEEPSEEK_API_KEY
     trustedEndpoint: true
     options: { baseURL: https://deepseek-proxy.example.internal/v1/tools }
+  builtin:firecrawl:
+    access: api-key                     # 缺省 keyless；改用个人密钥（缺省 credentialRef 为 FIRECRAWL_API_KEY）
+    options: { storeInCache: false, maxAge: 0 }
+  custom:team-firecrawl:
+    kind: adapter
+    adapter: firecrawl
+    label: Team Firecrawl
+    credentialRef: TEAM_FIRECRAWL_KEY
+    endpoint: https://firecrawl.example.internal/v2/scrape
+    trustedEndpoint: true               # endpoint 不同于官方端点，必须确认
 ~~~
 
 校验规则（`resolveDocument`，能力的 `resolveSettings` 在其上派生自己的连接形状）：
@@ -550,17 +661,17 @@ connections:
 - **校验前预算**：在复制、迁移或解析文档之前，先遍历一次并拒绝过大的输入：任何容器至多 200 项、文本与键至多 2000 字符、嵌套深度至多 20、总节点至多 100 000；任意层级出现 `__proto__` / `constructor` / `prototype` 键即拒绝。迁移的每一步之后再查一次。
 - 文档与连接都是严格对象：未知字段、未知连接 id 拒绝。文本参数至多 `TEXT_MAX_LENGTH`（2000）字符，或规则自己更小的 `maxLength`；fetch 白名单每个数组至多 200 条。
 - `options` 按目录的 `OptionRule` 校验；fetch 再用 `local/rules.ts` 检查每条 CIDR 与主机名规则，错误点名第几条。
-- fetch 对任何 `custom:*`（包括指向它的 `defaultConnection`）报“本版本不支持自定义抓取连接”。search 的 `model` 连接随 M3 带着自己的字段设计回来，本版的 `builtin:session-model` 按未知 id 拒绝，`kind: model` / `kind: structured` 按非法值拒绝。
+- 自定义连接的 `adapter` 只能取本插件目录里的 adapter 键，总是 api-key，参数按 api-key 访问校验；目录没有 adapter 项时任何 `custom:*` 都按未知连接 id 拒绝并附 Reset 提示（没有单独的开关）。持久化形状 `CustomConnection` 与 `customConnectionSchema` 有类型级的相等断言。search 的 `model` 连接是计划（第 13 节 M4），字段随它一起设计；当前 `builtin:session-model` 按未知 id 拒绝，`kind: model` / `kind: structured` 按非法值拒绝。
 - 错误消息点名字段路径；未知字段、未知连接 id 与参数错误附带 “this release does not read 0.1.x settings; remove the field or use Reset on the settings page”。
 
 校验在哪里发生：
 
-- Host（core `settingsRow`）：插件启动时校验一次（无效只记日志，插件照常激活，以便设置页能修复）；Loader 的 `internal/config` 钩子在写入前校验，非法候选不落盘；每次调用经 `settings()` 读取，当前文档无效时报 `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`，诊断进 Host 日志。插件的 `Config` schema 把每个文档字段和退役字段都声明为 `z.any().volatile()`，校验全部留给共享的解析函数。
-- 浏览器：设置页对有效文档（两层叠加后的结果）显示正常的编辑器，每次写入前对“写入后的完整候选文档”再校验一次；文档无效时只显示一条提示（诊断在提示的 title 里）和 Reset。目前两侧的提示文案不同：fetch 用“无法读取这些设置……”（`settings.unsupported`），search 仍复用写入失败的“设置无效，未保存。”（`settings.invalid`）；统一为前者列入 M3。
+- Host（core `settingsRow`）：插件启动时校验一次（无效只记日志，插件照常激活，以便设置页能修复）；Loader 的 `internal/config` 钩子在写入前校验，非法候选不落盘；每次调用经 `settings()` 读取，当前文档无效时报 `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`；具体诊断只在启动校验与写入钩子里记入 Host 日志，不给模型。插件的 `Config` schema 把每个文档字段和退役字段都声明为 `z.any().volatile()`，校验全部留给共享的解析函数。
+- 浏览器：设置页对有效文档（两层叠加后的结果）显示正常的编辑器，每次写入前对“写入后的完整候选文档”再校验一次；文档无效时只显示一条提示（诊断在提示的 title 里）和 Reset；两侧的提示都是“无法读取这些设置，可能来自 0.1.x 或更新的版本……”（`settings.unsupported`），“设置无效，未保存。”（`settings.invalid`）只用于写入前的校验失败与迁移写回失败。
 
 ### 8.2 0.1.x 的配置不迁移
 
-用户决定从本版重新设计配置格式，不兼容 0.1.x 的配置。退役的 0.1.x 顶层字段（各插件 `src/settings/retired.ts`）：
+配置格式在 0.2 重新设计（用户的决定），不兼容 0.1.x 的配置。退役的 0.1.x 顶层字段（各插件 `src/settings/retired.ts`）：
 
 - search：`providerId`、`freshness`（顶层；现为 `defaults.freshness`）、`modelMode`、`protocol`、`baseURL`、`model`、`fallbackModel`、`apiKey`、`apiKeyEnv`、`apiVersion`、`toolIdentifier`、`maxTokens`、`maxUses`、`chatSearchMode`、`searchContextSize`；
 - fetch：`schemaVersion`、`providerId`、`allowCidrs`、`allowHostnames`、`userAgent`、`maxResponseBytes`、`maxBodyChars`、`timeoutMs`、`maxRedirects`（现为 `connections['builtin:local'].options` 的同名参数）。
@@ -576,18 +687,25 @@ connections:
 - 设置页对需要迁移的旧版本文档先显示迁移后的视图并锁定编辑，按 revision 把迁移结果写回一次（写入带 `expectedRevision`，revision 变了就不再写）；Host 从不静默改写文档。
 - 设置页的写入只要含 `set` 就顺带写上 `version: 2`；纯 `unset`（包括 Reset）不写。新增可选字段不提升版本；只有不兼容的变化才提升版本（`CURRENT_SETTINGS_VERSION`），并同时增加一个迁移步骤。
 
-## 9. 浏览器面 [已实现]
+## 9. 浏览器面
 
 ### 9.1 谁注册什么
 
 | 槽位 / 入口 | 注册者 | 说明 |
 | --- | --- | --- |
 | `commandUi`：`/setup-search`、`/setup-fetch` | 各插件 | 用命令选择或关闭本会话的连接；不依赖 ui 包，ui 包停用时仍可用。两者都由 core 的 `selectionCommand` 生成：`/setup-search` 列出关闭、各个可用连接、所选连接支持时的实时性；`/setup-fetch` 列出关闭与各个可用连接（fetch 没有会话参数） |
-| `plugins.row.config`（键 `rowConfigKey()`） | 各插件 | 行设置页：路由提示、默认连接、服务列表、自定义连接（只有 search）、凭据、模型记忆（可逐条清除）、Reset。只在本行运行时注册（`configForms.whileServed`），由 core 的骨架组成，写入前用本插件的 `resolveSettings` 校验写入后的完整文档；文档无效时只显示无效提示与 Reset（第 8 节）。fetch 的 `local` 白名单编辑器保留显式“保存”：逐行诊断（语法、可一键套用的修正、重复行，以及过宽、含回环、含云元数据地址、公网范围这类不阻止保存的提醒），点“保存”时用一次写入同时设置 `allowCidrs` 与 `allowHostnames` 两个数组；说明里写明经代理访问的域名由代理解析、规则无法限制。其余字段（含 User-Agent）在编辑结束时稀疏保存。`deepseek-fetch-api` 的说明写明 URL 会发送给 DeepSeek |
+| `plugins.row.config`（键 `rowConfigKey()`） | 各插件 | 行设置页：路由提示、默认连接、服务列表、自定义连接、模型记忆（可逐条清除）、Reset。只在本行运行时注册（`configForms.whileServed`），由 core 的骨架按目录组成，写入前用本插件的 `resolveSettings` 校验写入后的完整文档；文档无效时只显示无效提示与 Reset（第 8 节）。服务列表给每个目录项：启用开关；访问方式（目录同时有 keyless 与 API key 时）；凭据名称与只写的密钥输入；`url` 参数与“信任此地址”开关；其余参数的自动保存表单（boolean 参数是“默认 / 开 / 关”三态菜单，“默认”即不写，不把服务的缺省显示成“关”）。行的副标题只显示访问方式摘要；展开面板里写明“URL（或查询）会发送给 <服务>”，fetch 的四个远程服务另有一条缓存与保留说明（6.6）。fetch 的 `local` 注册了自己的附加编辑器：白名单编辑器保留显式“保存”，逐行诊断（语法、可一键套用的修正、重复行，以及过宽、含回环、含云元数据地址、公网范围这类不阻止保存的提醒），点“保存”时用一次写入同时设置 `allowCidrs` 与 `allowHostnames` 两个数组，说明里写明经代理访问的域名由代理解析、规则无法限制；User-Agent 编辑器允许空串并可一键恢复缺省。其余字段在编辑结束时稀疏保存。自定义连接区两侧相同：每行写明 URL（或查询）会发送给哪个服务（目录里的服务名，自定义端点时附上主机名）；编辑器、信任确认、删除时的默认复原见下 |
 | 浏览器服务 `webConnections` | ui 包提供 | 菜单分区的注册表；search 注册 order 10 的分区，fetch 注册 order 20 的分区 |
 | `conversation.input.right`（一个按钮） | ui 包 | 两个能力共用的连接菜单 |
-| `plugins.bundle.activation`（键为 profile 包名） | ui 包 | 首次启用提示，覆盖两个能力。该键只能有一个注册者，ui 包是自然的主人：说明用法并提供打开详情页的按钮，不做预检 |
-| `plugins.detail.section` | ui 包 | profile 详情页的概览：两个能力是否路由到本插件、插件行是否停用、第 11 节的预检结果 |
+| `plugins.bundle.activation`（键为 profile 包名） | ui 包 | 首次启用提示，覆盖两个能力。该键只能有一个注册者，ui 包是自然的主人：说明用法并提供打开详情页的按钮；它跑与 bundle 概览相同的预检（第 11 节），发现问题时改为提示“之前的设置可能让本组合包无法接管网页工具”，引导到详情页处理 |
+| `plugins.detail.section` | ui 包 | profile 详情页的概览：两个能力是否路由到本插件（取自插件提供的路由事实，见 9.2）、插件行是否停用、第 11 节的预检结果 |
+
+设置页的写入规则（core 骨架，两侧相同）：
+
+- **信任绑定到确认过的地址**：内置连接的 `url` 参数（如 native 的 `baseURL`）填了非官方地址时，要打开“信任此地址”才写入，地址与 `trustedEndpoint: true` 在同一次写入里保存。已信任地址 A 后改成 B，开关显示为关、不写入，并提示“尚未保存：请先确认信任此地址”；确认后才写入 B。关闭生效中的信任时，一次写入清除该连接所有非官方的 `url` 参数并写 `trustedEndpoint: false`；下层也有非官方值时，在用户层写官方值，保证生效的端点确实回到官方。清空地址即回到官方值。自定义连接编辑器同理：同意绑定到目的地（格式、端点与 `url` 参数），目的地变了要重新勾选；编辑一个已信任、目的地未变的连接时保持已同意。
+- **切到 keyless**：访问方式切回 keyless 时，同一次写入清掉 keyless 不接受的参数（`keylessRejected`，与 `catalogFields` 同一规则：规则为 `keyless: false`，或枚举值不在 keyless 列表里），否则写入后的文档会被校验拒绝；切回 API key 不清理。
+- **删除自定义连接**：只有它正是 `defaultConnection` 时，才在同一次写入里把默认复原为目录缺省。
+- **凭据名称**：内置连接可以改用另一个 DSH Credentials 名称，清空即回到目录给的名称；两侧文案都叫“凭据名称”。
 
 可视化的连接选择集中在 ui 包；插件只负责“本能力的数据与命令”。命令和菜单读写同一个 `SelectionStore`，在任一处切换，另一处立即反映。
 
@@ -612,10 +730,11 @@ ctx.inject(['webConnections'], ui => {
   - 恢复：插件行重新启用后分区重新注册，按钮回来，不需要刷新页面。
   - 判断来源：bundle 概览用插件页传入的 `subject.pkg.rows` 中各行的 `enabled`；菜单对 search 与 fetch 都用 `configForms.whileServed` 判断。e2e `menu-rows-off` 覆盖 search、fetch、两者分别停用：菜单只剩可用的分区，两者都停用时没有按钮，概览说明不可用的能力。
 - **`showSelector: false`**：该插件不向 `webConnections` 注册分区（两侧相同；两个都关掉时按钮消失），`/setup-*` 与行设置页照常工作；改回 `true` 时分区重新注册。
-- **分区折叠**：菜单里第一个分区展开，其余收起；每个分区的标题行总是显示“标题 · 当前连接 · 来源”，点击或左右方向键展开、收起。分区标题在滚动时吸顶，底部的“设置”入口吸底。
-- **菜单内容**：每个分区列出 Host 给出的连接（`ready` 可选，其余显示原因）、关闭行、当前选择的来源说明、分区的 `Options` 和“设置”入口；首次读取前显示加载中，读取失败时按钮与分区显示失败态并可重试；`web` 行把该能力路由给别的 provider 时，分区顶部给出路由提示；写入被拒时用提示条显示 `writeFailureText`。会话模型变化（`modelSelection` 投影）时各分区按新模型重读。
+- **路由事实与分区解耦**：插件在注入 `webConnections` 后用 `registerRoute(capability, route)` 提供路由事实（它的 `RouteStatus`：`web` 行加 `<ns>/provider` 给出的 `envProvider`），与分区的注册互相独立；`showSelector: false` 只撤下分区，路由事实照常提供。ui 读 `routes` 快照：菜单各分区的路由提示、菜单底部的停用提示与 bundle 概览都用它，因此看得到 `DSH_WEB_*_PROVIDER`。某个能力没有条目时（插件行未运行），浏览器没有环境变量的来源，只能按 `web` 行的值判断（ui 的 `routeFor`：有条目用条目，没有时 `routeOf(value, field, null, providerId)`）；这是已知限制（第 14 节）。
+- **分区手风琴**：任一时刻至多一个分区展开，每次打开菜单展开第一个分区；每个分区的标题行总是显示“标题 · 当前连接 · 来源”。点已展开的标题收起它；→ 展开本分区并收起其他，← 收起本分区。分区展开（或展开后连接列表加载完）时，把选中的行滚动到可见处。分区标题在滚动时吸顶，底部的“设置”入口吸底。
+- **菜单内容**：每个分区列出 Host 给出的连接（`ready` 可选，说明行是访问方式摘要，远程连接再写明接收方，例如 search “No key needed · the query is sent to Exa”、fetch “API key · the URL is sent to Firecrawl”；其余显示原因）、关闭行、当前选择的来源说明、分区的 `Options` 和“设置”入口；首次读取前显示加载中；读取失败时分区显示失败态并可重试，设置无效时说明“<能力>的设置无效，请打开设置修复”并给出设置入口（不提供重试）；`web` 行把该能力路由给别的 provider 时，分区顶部给出路由提示；写入被拒时用提示条显示 `writeFailureText`。会话模型变化（`modelSelection` 投影）时各分区按新模型重读。
 - **能力特有的界面归插件**：search 的实时性等会话参数由插件以 `Options` 组件提供，ui 包只负责外壳、布局、收起和通用行（连接列表、状态、来源、关闭）。这样新增一种会话参数不需要改 ui 包。
-- **一个按钮**：按钮显示 search 的当前连接（最常用；没有 search 分区时用第一个分区），菜单里按 `order` 列出各分区；输入栏变窄时按 container query 逐级收起（≤460px 隐藏文字，≤380px 只剩图标），不用 JavaScript 测量。
+- **一个按钮**：按钮按分区 `order` 显示每个已注册分区的当前状态（连接名，或带分区名的“已关闭”“读取失败”“设置无效”“连接已移除”等），两侧以“·”分隔；某侧需要处理（读取失败、设置无效、所选连接被移除或未就绪、路由给了别的 provider）时该侧带警示点。按钮的可访问名称与 title 是逐侧的状态，例如 “Search: Exa · Fetch: Local HTTP”，需要处理的一侧加 “(needs attention)”。输入栏变窄时按 container query 逐级收起：≤460px 隐藏文字，警示点移到地球图标上（search 在右上、fetch 在右下）；≤380px 只剩图标，警示点保留；不用 JavaScript 测量。
 - **契约版本**：两个插件与 ui 包同一节奏发布，profile 精确锁定版本，所以分区契约不需要跨版本兼容；契约变化时三个包一起改。
 
 ### 9.3 共同约束
@@ -630,11 +749,11 @@ ctx.inject(['webConnections'], ui => {
 
 1. 本项目自己发出的 API 请求（含带凭据的）一律 `redirect: 'error'`，回归测试证明重定向目标未被访问；
 2. core 的有界 HTTP 执行字节上限（先看 Content-Length，再在流上计数）和整体截止时间（覆盖鉴权、握手和读正文）；
-3. 不自动重试，不自动 fallback；
-4. keyless 永不读取、发送或回退到密钥；
-5. 密钥只在 DSH Credentials；配置只存引用；每次调用解析，不跨调用缓存。本项目自己的后端只经 Credentials 解析（`resolveApiKey`）；`native` 后端照搬原生行（`nativeAuth`）：Credentials 服务存在时只读它，缺席时才读 DSH 启动环境的同名变量；
-6. 自定义端点需显式 `trustedEndpoint`，内置 adapter 端点不可改；例外是内置 `native` 连接的 `baseURL`：为提供与原生行同等的参数（第 14 节）允许覆盖，但覆盖值与官方端点不同时必须同时写 `trustedEndpoint: true`，否则校验拒绝。设置校验还拒绝 `__proto__` / `constructor` / `prototype` 键，并在复制或展开文档之前先按预算拒绝过大的输入：容器最多 200 项、文本与键最长 2000 字符、嵌套深度最多 20、总节点最多 100 000（8.1）；
-7. 给模型的错误只含错误码和可操作的简短英文提示，不含端点、上游正文、cause 或密钥——`native` 后端的错误同样改写（未知码一律 `WEB_PROVIDER_ERROR`）；fetch 的 `local` 对官方 `HttpFetchProvider` 抛出的 `WebError` 原文透传（它们本就是 DSH 给模型的安全消息），只有本插件白名单的拒绝用本插件文案，其余异常给固定文案；白名单提示按规范化、去重后的规则生成，总长度有预算（2000 字符），超出时给出计数摘要和部分示例而不是全文；诊断细节只进 Host 日志；
+3. 不自动重试，不自动 fallback；改换后端只由 Agent 显式选择（第 13 节 M5）；
+4. keyless 永不读取、发送或回退到密钥，并且永远发往目录端点（core `adapterTarget`）；
+5. 密钥只在 DSH Credentials；配置只存引用；每次调用解析，不跨调用缓存。本项目自己的后端只经 Credentials 解析（`resolveApiKey`）；`native` 后端照搬原生行（`nativeAuth`）：Credentials 服务存在时只读它，缺席时才读 DSH 启动环境的同名变量。本项目自己的后端在发请求前校验密钥：去掉首尾空白后只能含可见 ASCII 与空格，否则报 `WEB_PROVIDER_CREDENTIAL_MISSING`（消息只有凭据名称，提示重新录入），不发请求，密钥与异常都不进诊断——含换行等控制字符的值会让 `fetch` 构造请求头时抛出带整个头值的异常；
+6. 自定义端点需显式 `trustedEndpoint`，内置 adapter 端点不可改；例外是内置 `native` 连接的 `baseURL`：为提供与原生行同等的参数（第 14 节）允许覆盖，但覆盖值与官方端点不同时必须同时写 `trustedEndpoint: true`，否则校验拒绝。设置页的信任确认绑定到确认时的地址：地址变了要重新确认，关闭信任即撤销并回到官方端点（9.1）。设置校验还拒绝 `__proto__` / `constructor` / `prototype` 键，并在复制或展开文档之前先按预算拒绝过大的输入（8.1）；
+7. 给模型的错误只含错误码和可操作的简短英文提示，不含端点、上游正文、cause 或密钥——`native` 后端的错误同样改写（未知码一律 `WEB_PROVIDER_ERROR`）；fetch 的 `local` 对官方 `HttpFetchProvider` 抛出的 `WebError` 原文透传（它们本就是 DSH 给模型的安全消息），只有本插件白名单的拒绝用本插件文案，其余异常给固定文案；白名单提示按规范化、去重后的规则生成，总长度有预算（2000 字符），超出时给出计数摘要和部分示例而不是全文；诊断细节只进 Host 日志。Remote 服务对浏览器同理：契约外的异常一律报 `gateway/internal` 加固定消息，原始异常只进 Host 日志；
 8. `available()` 只做本地判断；
 9. 本项目自己的出站一律用全局 `fetch`，继承 DSH 安装的代理策略，不自建 dispatcher。
 
@@ -650,12 +769,13 @@ fetch 的 `local`：
 远程后端（两侧）：
 
 14. 目标访问策略由服务负责，本项目不对目标 URL 做地址检查；连接说明写明查询或 URL 会发给谁；
-15. 会话只能在运维启用的连接之间选择；冻结的只是“用哪个连接”（和会话参数），连接是否停用、是否为 `model` 这类运维策略在每次调用时按当前设置判定（core 的 `isSelectable`），连接的端点、凭据引用与参数也在每次调用时读当前值。关闭时的工具限制只在确认 `web` 行选中本插件时安装，未路由或无法判断时不隐藏，以免藏掉别的 provider 的同名工具；插件卸载后不再安装限制。
+15. fetch 的远程结果只来自服务的回答：正文一律 `text`；服务没给目标状态时用请求的 URL 与 200（兼容映射，不表示本机见过目标）；只有服务明确给出的目标状态码才成为非 2xx 结果，不从文字标签推断；正文按 100 000 字符截断并如实标记（6.6）；
+16. 会话只能在运维启用的连接之间选择；冻结的只是“用哪个连接”（和会话参数），连接是否停用、是否为 `model` 这类运维策略在每次调用时按当前设置判定（core 的 `isSelectable`），连接的端点、凭据引用与参数也在每次调用时读当前值。关闭时的工具限制只在确认 `web` 行选中本插件时安装，未路由或无法判断时不隐藏，以免藏掉别的 provider 的同名工具；插件卸载后不再安装限制。
 
 search：
 
-16. 来源只保留无用户信息的 http(s) URL，长度有上限（8192）；`native` 后端的结果同样经过这道过滤；
-17. 发起调用的会话来自 `currentInitiator()`，从不来自工具参数。
+17. 来源只保留无用户信息的 http(s) URL，长度有上限（8192）；`native` 后端的结果同样经过这道过滤；
+18. 发起调用的会话来自 `currentInitiator()`，从不来自工具参数。
 
 ## 11. 从 0.1.x 升级
 
@@ -675,12 +795,13 @@ search：
 - **数据保留**：插件管理器移除 bundle 时只取消选择、重载组合，再 `pnpm remove`，不删除用户层中的任何覆盖（deepseek-harness `packages/boot/plugin-manager/src/index.ts` 的 `removeBundle` / `selectBundle`）；storage-domain 的数据也留在 DSH home。行 id 与 search 的存储域名不变，所以这些数据在安装 profile 后仍然挂在同名的行和域上。
 - **数据可用**：配置不迁移。两个插件都不读 0.1.x 的配置：Host 拒绝它（插件照常激活，调用报 `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`，Host 日志点名退役字段并提示 Reset），设置页显示无效提示、在 title 里点名字段并提供 Reset；被保留的旧配置在用户确认 Reset 或手工删除之前原样留在用户层，从不被静默改写。storage-domain 里的会话选择与模型记忆照常可用：记录格式没有变，关闭搜索的旧会话在 Reset 之后仍是关闭。
 - **路由残留（需要预检）**：被保留的还有用户层里对 `web` 行的覆盖和行的启用状态。前身共存模式写下的自定义 provider id（现已无人注册）、内置开关写下的原生或 API 选择、重新启用的 `web-search-deepseek`，都会压过 profile 的选择，让本插件收不到流量。
-  - 预检在 bundle 概览里，检查三项：(a) 用户层 `web` 行把某个字段改成了原生或 API provider（search：`deepseek-official`、`deepseek-search-api`；fetch：`http`、`deepseek-fetch-api`）；(b) 用户层字段是前身共存模式留下的自定义 id（既不是本插件的，也不是原生的）；(c) `web-search-deepseek` 被重新启用（`configForms.whileServed`）。(a)(b) 旁边提供“移除遗留设置”（只在可修复的项旁出现）：确认后对用户层执行 `unset`，只移除这些字段；取消不写任何东西。(c) 不是本包能写的，只说明并指引到插件页。首次启用提示只说明用法并引导到详情页，不自己做预检（**[计划，M3]**）。
+  - 预检在 bundle 概览里，检查三项：(a) 用户层 `web` 行把某个字段改成了原生或 API provider（search：`deepseek-official`、`deepseek-search-api`；fetch：`http`、`deepseek-fetch-api`）；(b) 用户层字段是前身共存模式留下的自定义 id（既不是本插件的，也不是原生的）；(c) `web-search-deepseek` 被重新启用（`configForms.whileServed`）。(a)(b) 旁边提供“移除遗留设置”（只在可修复的项旁出现）：确认后对用户层执行 `unset`，只移除这些字段；取消不写任何东西。(c) 不是本包能写的，只说明并指引到插件页。首次启用提示跑同一个预检（`checkUpgradePreflight`）：没有问题时说明用法，有问题时提示之前的设置可能让本组合包无法接管网页工具，并引导到详情页处理；它自己不写任何东西。
+  - 预检看不到已停用的原生 `web-search-deepseek` 行上的用户覆盖（`baseURL`、`model` 等）：浏览器只为运行中的行投影配置（第 14 节）。
   - e2e `upgrade` 覆盖两侧：真实的前身 0.1.x bundle（含共存模式、search 与 fetch 的已保存设置、关闭搜索的会话）→ 移除 → 安装 profile；组合后的配置与用户层文件不变；Host 拒绝两份旧配置、日志点名字段且不改写它们；概览的修复取消时不写、确认后才执行，修复后 (c) 仍在提示；两个设置页显示无效提示，Reset 后行配置为空、两侧恢复默认连接；冷启动后旧会话的关闭仍然保留。
 
 升级前的人工预检清单：先移除两个 0.1.x bundle 再安装 profile；记下旧设置里要保留的内容（白名单、自定义连接），升级后在设置页重新录入；密钥留在 DSH Credentials，不受 Reset 影响。
 
-## 12. 构建、测试与发布 [已实现]
+## 12. 构建、测试与发布
 
 - **构建**：`build/tsdown.ts` 是所有插件的唯一构建定义（每个包的 `tsdown.config.ts` 只有 `pluginBuild(import.meta.url)`）。Host 产物为 ESM，内联非 `@deepseek-ai/*` 依赖；有 `./client` 导出时同时产出浏览器产物。`build/plugins.ts` 提供标准装饰器降级（DSH 的 `@Remote`，对内联的 core 文件同样生效）和 CSS Modules，构建与 Vitest 共用。fetch 的 `ipaddr.js` 是 devDependency，构建时内联进 Host 产物。
 - **检查**：`pnpm run check` = typecheck → oxlint（type-aware）→ build → vitest → verify:package。`verify-packages` 用 pnpm 打包每个可发布包，检查：清单里没有残留 `workspace:` / `catalog:`；所有包的 `engines.dsh` 相同，`@deepseek-ai/dsh-*` peer 与之一致；插件没有 `dependencies`，Host 产物只导入 Node 内置和 `@deepseek-ai/*`；profile 依赖的版本等于本次发布的插件版本；导出目标、图标、`locale/{en,zh}.json` 的 `meta` 都在包里；最后跑 publint。
@@ -697,28 +818,31 @@ search：
 | **M0 [已完成]** | monorepo、构建与检查工具链、profile 组合（含 ui 行）、两个插件各一个原生等价后端、空的 ui 包、单元/组合/e2e 测试（含插件行停用的组合） |
 | **M1 search 切片 [已完成]** | 在 search 包内移植前身的会话选择、模型记忆（含可见的来源与清除）、每步计划、关闭与隐藏、Remote、`/setup-search`、行设置页；ui 包的浏览器面（`webConnections`、共用菜单、首次启用提示、插件行停用时的说明），search 注册第一个分区；`native` 连接 `deepseek-messages`、`deepseek-search-api` 与六个 `adapter`；第 11 节的路由预检；在真实 Web preset Agent 上的 e2e |
 | **M2 fetch 对齐 [已完成]** | 把选择范式抽进 core（`./host`、`./client`、`./shared/settings`），search 迁移到 core 且行为断言未改；两侧统一的配置文档、退役字段的诊断与 Reset、版本识别与（空的）迁移表，不读 0.1.x 配置；fetch 的目录（`builtin:local`、`builtin:deepseek-fetch-api`）、`local` 白名单与提示、会话选择、模型记忆、关闭与隐藏、`fetchConnections`、`/setup-fetch`、行设置页（白名单编辑器）与菜单分区；ui 菜单的分区折叠与观感修复；`web` 行变化时的重算 |
-| **M3 [计划]** | search 的 `model` 后端与“跟随会话模型”（含它的配置字段设计）；fetch 的远程 `adapter`（Firecrawl…）及其接口与结果语义（6.6），fetch 的自定义连接；fetch 也需要 MCP 时把 MCP 客户端移入 core；Remote 未知异常的脱敏；首次启用提示里的预检；原生 `web-search-deepseek` 行覆盖（`baseURL`、`model` 等）的迁移提示；fetch 设置页的连接附加项改为目录驱动；e2e 补“ui 行停用”的组合 |
-| **M4（可选）[计划]** | 自有增强工具（如批量抓取、带选项的搜索），以 preset 行的形式提供；显式配置的 fallback 列表（只对可重试的传输错误） |
+| **M3 fetch 远程后端 [已完成]** | MCP 客户端与 adapter 的请求/解析线、执行骨架移入 core（`AdapterWire`、`runAdapter`、`adapterTarget`），search 改用，MCP 的 SSE 改为逐行线性扫描；fetch 的四个远程 adapter（Exa、Firecrawl、Tavily、Tinyfish）与结果映射、能力参数（6.4、6.6），fetch 的自定义连接；设置页完全由目录驱动（凭据名称、`url` 参数与信任开关、按目录键注册的附加编辑器，自定义连接区移入 core），信任绑定到确认过的地址，两侧无效文档文案统一；API key 的请求头值校验；Remote 未知异常的脱敏；首次启用提示里的预检；路由事实与菜单分区解耦；e2e 补“ui 行停用”的组合、真实 Host 上的远程抓取、远程连接的菜单与设置页、截图。原生 `web-search-deepseek` 行覆盖的迁移提示没有干净的数据来源，记入第 14 节 |
+| **M4 [计划]** | ① core 的统一 provider 抽象：一个服务（如 Exa、Firecrawl）在 core 里只实现一次，按能力提供 `search` 与 `fetch` 两个可选方法，两个插件从同一份 provider 表取用；只做搜索或只做抓取的服务只实现其一，两侧不强求共用同一组 provider（现状：两侧只共用 `AdapterWire` / `runAdapter` 与 MCP 客户端，同一服务的 search 与 fetch adapter 各写一份）。② search 的 `model` 后端与“跟随会话模型”：`model` 后端参考前身 0.1 的实现（`src/search/model.ts`）移植；跟随会话模型参考前身的 `src/host/follow-model.ts`，但 DSH 已更新 provider 设置的范式，需要按当前范式重新解析会话模型的路由，并对 DeepSeek 官方 provider 做专门处理；两者的配置字段按统一配置文档（第 8 节）重新设计 |
+| **M5 [计划]** | 自有增强工具：带参数的 `web_search_enhanced` 与 `web_fetch_enhanced`，让 Agent 在运维启用的连接中自己选择本次调用的后端；辅助工具 `list_web_search_providers` 与 `list_web_fetch_providers` 列出当前可用的连接及其能力，设计参考 DSH 官方“列出可用子 agent 路由”的做法。工具以 preset 行的形式由 bundle 组合（见下方扩展原则），可选范围仍受行设置与可选性规则（`isSelectable`）约束。不提供自动 fallback：Agent 可在一次调用失败后用 `web_*_enhanced` 自行选择另一个后端重试 |
+| **M6 [计划]** | 支持 [dsh-tui](https://github.com/ccch1mneyyy/dsh-TUI)：在终端界面里提供与浏览器面对应的连接选择与状态（Host 侧的选择、Remote 与 `/setup-*` 语义不变） |
 
 扩展原则：新能力优先落在 Planner（选什么）或 Backend（怎么取），不改 Seat 与 `web` 行；每个插件只注册一个 provider。增加模型工具时遵循 DSH 的做法——由 bundle 在 agent preset 中组合工具行，而不是全局注册同名工具：全局同名注册在 base profile 会直接失败，在 Web profile 会被 preset 内的原生工具遮蔽。
 
-## 14. 风险与已知差距
+## 14. 风险与已知限制
 
 风险：
 
 - **`web` 行被更晚的层覆盖**：其他 bundle 或用户层改写 `web` 行会覆盖我们的选择（只写一个字段时还会丢掉另一个）。对策：路由提示、第 11 节的预检和 e2e 断言组合；不做运行时自我修复。
-- **原生 `web-search-deepseek` 行的用户配置不被继承**：停用后其 `baseURL`、`model`、`apiKeyEnv` 等覆盖不再生效。`builtin:deepseek-messages` 提供同等参数（`baseURL`、`model`、`apiVersion`、`maxTokens`、`maxUses` 与 `credentialRef`，`baseURL` 需 `trustedEndpoint: true`），但预检还不检查原生行的这些覆盖（M3）。
-- **内置 native 连接的 `baseURL` 可改**（search 的两项与 fetch 的 `deepseek-fetch-api`）：这让密钥或账号令牌可能发往运维指定的端点；以显式 `trustedEndpoint: true` 作为确认，与官方端点相同的值视为未覆盖。
+- **原生 `web-search-deepseek` 行的用户配置不被继承**：停用后其 `baseURL`、`model`、`apiKeyEnv` 等覆盖不再生效。`builtin:deepseek-messages` 提供同等参数（`baseURL`、`model`、`apiVersion`、`maxTokens`、`maxUses` 与 `credentialRef`，`baseURL` 需 `trustedEndpoint: true`），但预检看不到原生行的这些覆盖（见下方已知限制），只能靠文档提醒。
+- **内置 native 连接的 `baseURL` 可改**（search 的两项与 fetch 的 `deepseek-fetch-api`）：自定义连接的端点也可改：这让密钥或账号令牌可能发往运维指定的端点；以显式 `trustedEndpoint: true` 作为确认，与官方端点相同的值视为未覆盖，设置页的确认绑定到确认时的地址。
+- **远程服务的行为由服务决定**：fetch 的目录、请求形状与结果映射依据 2026-10-20 读到的公开文档与源码，测试与调研都没有向真实服务发请求。服务改了字段或错误形状时，adapter 报 `invalid` 或 provider 错误，不猜测；URL 与读到的内容会交给服务，各服务的缓存与保留以 6.6 的表为准。
 - **`native` 后端随 DSH 版本变化**：它们直接使用上游类和原生行的解析逻辑，升级 DSH 基线时要逐一对照（见 development.md）。fetch 的 `local` 同样依赖 `HttpFetchProvider` 的构造签名、解析器接缝与它对 IP 字面量、代理的处理；`rules.ts` 的非公网范围表依赖 `ipaddr.js` 的版本。
 - **0.1.x 配置被拒绝**：升级后旧配置让对应能力不可用，直到用户 Reset 或手工删除；这是用户的决定（第 8、11 节）。设置页与 Host 日志都点名字段；密钥类退役字段（`apiKey`）在设置视图里被遮蔽，只能提示手工删除。
-- **ui 包是可选的**：插件对 `webConnections` 只做可选注入，ui 包停用或加载失败时，连接仍可通过 `/setup-*` 命令和行设置页管理。单元测试覆盖插件在没有 ui 服务时照常注册命令与设置页，e2e 还没有覆盖“ui 行停用”的组合。
+- **ui 包是可选的**：插件对 `webConnections` 只做可选注入，ui 包停用或加载失败时，连接仍可通过 `/setup-*` 命令和行设置页管理。单元测试覆盖插件在没有 ui 服务时照常注册命令与设置页，e2e `ui-row-off` 在真实 GUI 里停用 ui 行，验证两个设置页仍能从插件页打开、两个 `/setup-*` 命令的选择能持久化。
 - **构建期装饰器降级**：`@Remote` 依赖 `build/plugins.ts` 的 `standardDecorators()`（构建与 Vitest 各接一次）。换构建器或升级 TypeScript 时，要同时复查单元测试与 e2e 真实 Host 两条路径。
 - **e2e 依赖 DSH 的启动积木**：`e2e/harness/host.ts` 用 `@deepseek-ai/dsh-app-boot` 的公开导出按 CLI 的步骤启动 Host，它们不是文档化的嵌入 API；DSH 版本变化时这是唯一要调整的地方。
 
-已知差距（实现与上文设计不一致，排在 M3）：
+已知限制：
 
-- 首次启用提示不做预检，预检只在 bundle 概览里（第 11 节）。
-- Remote 服务只把选择冲突、不可选的连接和不合契约的请求映射为契约内的错误，其余异常原样交给网关，尚未统一脱敏。
-- fetch 的设置页不完全由目录驱动：`local` 与 `deepseek-fetch-api` 的附加编辑器、凭据引用列表按目录键写死（第 7 节）。
-- bundle 概览在菜单分区缺席（插件行未运行或 `showSelector: false`）时，只按 `web` 行的值判断路由，不看 `DSH_WEB_*_PROVIDER` 环境变量；菜单的“插件行停用”提示同样只看 `web` 行的值。
-- 无效文档时两侧设置页的提示文案不同（search `settings.invalid`、fetch `settings.unsupported`，第 8 节）；应统一为 fetch 的措辞。
+- **停用的原生 `web-search-deepseek` 行在浏览器里没有配置命名空间**：Settings 只为运行中的行投影 schema 与值，profile 停用这一行后，浏览器读不到它的用户覆盖（`baseURL`、`model`、`apiKeyEnv` 等），预检因此无法提示把它们迁移到 `builtin:deepseek-messages`。
+- **插件行未运行时浏览器无法得知 `DSH_WEB_*_PROVIDER`**：环境变量事实来自插件的 `<ns>/provider`，插件行停用后，菜单的停用提示与 bundle 概览只按 `web` 行的值判断（9.2）。
+- **Tinyfish 只提供 API key**：匿名抓取没有官方依据，也没有实测（6.4）。
+- **Exa 的 keyless 不能设置 `maxAgeHours` / `livecrawlTimeout`**：托管 MCP 工具只接受 URL 与字符预算，目录用 `keyless: false` 拒绝这两个参数，缓存策略按服务缺省。
+- **服务调研中未核实的行为**：社区报告 Firecrawl v2 对目标 404 / 503 / 拦截页可能统一返回 HTTP 500（`SCRAPE_ALL_ENGINES_FAILED`），这时本插件报 provider 错误而不是 404 结果；Tavily 对目标 404 的表现、keyless 的错误体形状、Extract 是否缓存；Firecrawl keyless 下受限的参数；Exa 匿名额度的线上取值；各服务是否用收到的数据训练（Tinyfish 的条款允许）。adapter 对这些情形都按 provider 错误处理，等有真实样本再调整。

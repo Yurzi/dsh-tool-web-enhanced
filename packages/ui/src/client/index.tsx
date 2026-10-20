@@ -6,7 +6,7 @@
  * - plugins.detail.section: profile bundle overview and upgrade preflight
  */
 import type { Context } from '@deepseek-ai/cordis'
-import type { PluginDetailProps } from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
+import type { PluginActivationOwnerProps, PluginDetailProps } from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
@@ -131,6 +131,10 @@ export function apply(ctx: Context): void {
   )
 
   // 2. Activation prompt
+  function ActivationSlot(props: PluginActivationOwnerProps & PropsLocale<typeof NS>) {
+    const served = useObservable(servedStore)
+    return <ActivationPrompt {...props} webConfigForm={webConfigForm} nativeSearchServed={served.nativeSearchServed} />
+  }
   ctx.slots.inject('plugins.bundle.activation', () =>
     ctx.slots.register(
       {
@@ -138,7 +142,7 @@ export function apply(ctx: Context): void {
         key: PROFILE_PACKAGE,
         locale: NS,
       },
-      ActivationPrompt,
+      ActivationSlot,
     ),
   )
 

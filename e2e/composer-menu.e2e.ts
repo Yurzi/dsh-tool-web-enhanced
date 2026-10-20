@@ -2,6 +2,7 @@ import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import type { scopeOf } from '@deepseek-ai/dsh-scope'
 import type {} from '../packages/search-enhanced/src/host/remote.ts'
+import { en as fetchText } from '../packages/fetch-enhanced/src/client/locales.ts'
 import { en as searchText } from '../packages/search-enhanced/src/client/locales.ts'
 import { en as uiText } from '../packages/ui/src/client/locales.ts'
 import { afterAll, afterEach, beforeAll, describe, expect, inject, it } from 'vitest'
@@ -10,7 +11,7 @@ import { type App, browserRequired, chromiumPath, openApp, recordBrowserFailure 
 import { addPlugins, enterIsolatedEnvironment } from './harness/environment.ts'
 import { upgradeEnvironment } from './harness/upgrade.ts'
 import { bootHost, type Host } from './harness/host.ts'
-import { newSession, openConnections } from './harness/navigation.ts'
+import { connectionButton, expandConnectionSection, newSession, openConnections } from './harness/navigation.ts'
 import { type WebServer, startWeb } from './harness/web.ts'
 
 // Do not race other specs' persisted draft restoration when opening the workspace picker.
@@ -42,13 +43,22 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Composer search
     const sessionId = await newSession(page)
     const connections = await openConnections(page)
     await connections.getByRole('group', { name: /^Fetch(?: ·|$)/ }).waitFor()
-    const menu = connections.getByRole('group', { name: new RegExp('^' + searchText['section.title'] + '(?: ·|$)') })
-    await expect.poll(() => menu.getByRole('button', { name: /^Search ·/ }).getAttribute('aria-label')).toContain(searchText['source.default'])
-    expect(await page.getByRole('button', { name: uiText['button.aria'], exact: true }).count()).toBe(1)
+    const menu = await expandConnectionSection(connections, searchText['section.title'])
+    await expect.poll(() => menu.getByRole('button', { name: new RegExp('^' + searchText['section.title'] + ' ·') }).getAttribute('aria-label')).toContain(searchText['source.default'])
+    const button = connectionButton(page)
+    const sideName = (capability: string, state: string) => uiText['button.side'].replace('{capability}', capability).replace('{state}', state)
+    const searchAttention = uiText['button.sideAttention'].replace('{capability}', searchText['section.title']).replace('{state}', 'DeepSeek Messages')
+    const localName = sideName(fetchText['section.title'], fetchText['connection.local'])
+    await expect.poll(() => button.getAttribute('aria-label')).toBe(searchAttention + ' · ' + localName)
+    expect(await button.locator('span[data-capability]').count()).toBe(2)
+    expect(await button.getAttribute('title')).toBe(await button.getAttribute('aria-label'))
     await menu.getByRole('menuitemradio', { name: uiText['menu.offRow'], exact: true }).click()
-    await expect.poll(() => page.getByRole('button', { name: uiText['button.aria'], exact: true }).textContent()).toBe(uiText['button.off'])
+    await expect.poll(() => button.getAttribute('aria-label')).toBe(sideName(searchText['section.title'], uiText['button.off']) + ' · ' + localName)
+    expect(await button.locator('span[data-capability="search"]').textContent()).toBe(sideName(searchText['section.title'], uiText['button.off']))
+    expect(await button.locator('span[data-capability="fetch"]').textContent()).toBe(fetchText['connection.local'])
     await openConnections(page)
-    await expect.poll(() => menu.getByRole('button', { name: /^Search ·/ }).getAttribute('aria-label')).toContain(searchText['source.session'])
+    await expandConnectionSection(connections, searchText['section.title'])
+    await expect.poll(() => menu.getByRole('button', { name: new RegExp('^' + searchText['section.title'] + ' ·') }).getAttribute('aria-label')).toContain(searchText['source.session'])
     expect(await menu.getByRole('menuitemradio', { name: uiText['menu.offRow'], exact: true }).getAttribute('aria-checked')).toBe('true')
     await browser.screenshot('composer-search-off')
     expect(browser.errors).toEqual([])

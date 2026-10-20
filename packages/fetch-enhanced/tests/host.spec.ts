@@ -106,14 +106,18 @@ async function server(handler: (request: IncomingMessage, response: ServerRespon
 const localSettings = (allowCidrs: string[]): FetchSettings => ({ version: 2, connections: { 'builtin:local': { options: { allowCidrs } } } })
 
 describe('fetchConnections real Host', () => {
-  it.each([{ version: 1 }, { unknownOption: true }, { connections: [] }])('keeps invalid settings %j active and reports a short repair instruction through Seat and Remote get', async rawSettings => {
+  it.each([{ version: 1 }, { unknownOption: true }, { connections: [] }])('keeps invalid settings %j active with a Seat repair instruction but does not expose plugin WebError messages through Remote', async rawSettings => {
     const h = await host({ rawSettings })
     let diagnostic = ''
     try { resolveSettings(rawSettings) } catch (error) { diagnostic = (error as Error).message }
     expect(diagnostic).not.toBe('')
     const failure = { code: 'WEB_PROVIDER_CONFIGURED_UNAVAILABLE', message: 'dsh-web-fetch-enhanced: fetch settings are invalid; ask the user to fix them on the settings page' }
     await expect(h.fetch()).rejects.toMatchObject(failure)
-    await expect(h.get()).rejects.toMatchObject(failure)
+    await expect(h.get()).rejects.toMatchObject({
+      code: 'fetchConnections/invalid-settings',
+      message: 'the row settings are invalid; fix them on the settings page',
+      details: {},
+    })
     await h.request()
     await expect(h.fetch()).rejects.toMatchObject(failure)
   })
@@ -239,11 +243,23 @@ describe('fetchConnections real Host', () => {
     expect((await h.get()).connections).toEqual([
       { id: 'builtin:local', label: 'Local HTTP', kind: 'local', remote: false, access: 'keyless', status: 'ready' },
       { id: 'builtin:deepseek-fetch-api', label: 'DeepSeek Fetch API', kind: 'native', remote: true, access: 'api-key', status: 'needs-credential' },
+      { id: 'builtin:exa', label: 'Exa', kind: 'adapter', remote: true, access: 'keyless', status: 'ready' },
+      { id: 'builtin:firecrawl', label: 'Firecrawl', kind: 'adapter', remote: true, access: 'keyless', status: 'ready' },
+      { id: 'builtin:tavily', label: 'Tavily', kind: 'adapter', remote: true, access: 'keyless', status: 'ready' },
+      { id: 'builtin:tinyfish', label: 'Tinyfish', kind: 'adapter', remote: true, access: 'api-key', status: 'needs-credential' },
     ])
     const tokenEndpoints: string[] = []
     h.ctx.provide('deepseekAccount', { resolveToken: async (endpoint: string) => { tokenEndpoints.push(endpoint); return 'account-token' } } as never)
     const agent = await h.add('account', { agentOptions: { provider: 'deepseek-account', model: 'chat' } })
-    expect((await h.get(agent)).connections[1]).toMatchObject({ access: 'account', status: 'ready' })
+    const connections = (await h.get(agent)).connections
+    expect(connections[1]).toMatchObject({ access: 'account', status: 'ready' })
+    expect(connections[5]).toMatchObject({ access: 'api-key', status: 'needs-credential' })
+    expect(tokenEndpoints).toHaveLength(1)
+    h.configure({ connections: { 'builtin:exa': { disabled: true }, 'builtin:tinyfish': { disabled: true }, 'builtin:firecrawl': { access: 'api-key' } } })
+    const changed = (await h.get(agent)).connections
+    expect(changed[2]).toMatchObject({ access: 'keyless', status: 'disabled' })
+    expect(changed[3]).toMatchObject({ access: 'api-key', status: 'needs-credential' })
+    expect(changed[5]).toMatchObject({ access: 'api-key', status: 'disabled' })
     expect(tokenEndpoints.length).toBeGreaterThan(0)
     expect((await h.get(agent)).connections.every(connection => !Object.hasOwn(connection, 'credentialRef'))).toBe(true)
   })

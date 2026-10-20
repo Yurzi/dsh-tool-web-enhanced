@@ -1,7 +1,8 @@
 /** Firecrawl v2 search; anonymous access uses the same REST endpoint. */
 import { invalidResponse } from '../http.ts'
-import { collect, isRecord } from '../sources.ts'
-import { bearer, count, envelope, postJson, type AdapterFor } from './types.ts'
+import { collect } from '../sources.ts'
+import { isRecord, bearer, postJson } from 'dsh-tool-web-enhanced-core/host'
+import { count, envelope, type AdapterFor } from './types.ts'
 
 const DAY_MS = 86_400_000
 

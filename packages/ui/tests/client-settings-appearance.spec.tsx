@@ -12,6 +12,7 @@ import type { SearchSettings } from '../../search-enhanced/src/settings/types.ts
 import type { FetchSettings } from '../../fetch-enhanced/src/settings/types.ts'
 import searchCss from '../../search-enhanced/src/client/settings/Settings.module.css'
 import fetchCss from '../../fetch-enhanced/src/client/settings/Settings.module.css'
+import menuCss from '../src/client/ComposerConnectionMenu.module.css'
 
 const translate = <K extends string>(locale: Record<K, string>) => (key: string, params?: Record<string, unknown>): string =>
   (locale[key as K] ?? key).replace(/\{(\w+)\}/g, (match, name: string) => params && name in params ? String(params[name]) : match)
@@ -63,7 +64,7 @@ describe('settings appearance regressions', () => {
   it('warns about the default native credentials and clears the warning when configured', () => {
     const config = doc<FetchSettings>({ version: 2, defaultConnection: 'builtin:deepseek-fetch-api' })
     const { rerender } = render(<FetchDefaults doc={config} write={write} credentials={{ DEEPSEEK_API_KEY: 'missing' }} t={fetchT} />)
-    expect(screen.getByRole('status').textContent).toContain('needs a DeepSeek account model or an API key')
+    expect(screen.getByRole('status').textContent).toContain('Needs a DeepSeek account or API key')
     rerender(<FetchDefaults doc={config} write={write} credentials={{ DEEPSEEK_API_KEY: 'configured' }} t={fetchT} />)
     expect(screen.queryByRole('status')).toBeNull()
   })
@@ -73,5 +74,27 @@ describe('settings appearance regressions', () => {
     const warning = screen.getByRole('status')
     expect(warning.querySelector('[data-state="warning"]')).not.toBeNull()
     expect(warning.textContent).toContain('Local HTTP is turned off')
+  })
+
+  it('menu rowCaption and sectionSource meet minimum WCAG AA contrast (>= 4.5:1) in light theme', () => {
+    expect(menuCss.rowCaption).toBeDefined()
+    expect(menuCss.sectionSource).toBeDefined()
+
+    // Light mode colors from dsh-client-ui-theme design platform:
+    // White background: #ffffff, --dsw-alias-label-secondary: #61666b (neutral-bluish-700)
+    const sRGBToLuminance = (r: number, g: number, b: number): number => {
+      const channel = (c: number) => {
+        const val = c / 255
+        return val <= 0.04045 ? val / 12.92 : Math.pow((val + 0.055) / 1.055, 2.4)
+      }
+      return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+    }
+    const contrastRatio = (l1: number, l2: number): number =>
+      (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05)
+
+    const bgLum = sRGBToLuminance(255, 255, 255)
+    const textLum = sRGBToLuminance(0x61, 0x66, 0x6b)
+    const ratio = contrastRatio(bgLum, textLum)
+    expect(ratio).toBeGreaterThanOrEqual(4.5)
   })
 })

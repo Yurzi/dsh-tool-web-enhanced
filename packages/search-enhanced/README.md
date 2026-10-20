@@ -24,8 +24,9 @@ points to a deleted or disabled connection is skipped.
 Off makes `web_search` fail for that conversation and hides the tool from its
 Agent from the next request step, as long as the `web` row routes search to
 this plugin. Whether a connection is enabled, and its endpoint, access, key
-reference and options, are read again on every call. Changing only freshness also counts as a choice (the conversation
-then keeps its current connection) but does not update model memory.
+reference and options, are read again on every call. Changing only freshness
+also counts as a choice (the conversation then keeps its current connection)
+but does not update model memory.
 
 ## Connections
 
@@ -44,7 +45,9 @@ Every connection sends the query to the service named in its label. Keys live
 in DSH Credentials; settings store only the reference name. Native connections
 keep the behaviour of DSH's own providers; only their error messages are
 restated. Adapters use one bounded transport (redirects refused, 2 MiB, 90 s),
-and sources from every connection are reduced to public http(s) URLs.
+and sources from every connection are reduced to public http(s) URLs. An API
+key containing a line break or another control character is refused before
+any request.
 
 ## Settings
 
@@ -77,14 +80,22 @@ connections:
   `credentialRef`, `access` (`keyless` only where the service has a keyless
   route), `trustedEndpoint` and `options`. Adapter endpoints cannot be
   changed; a native `baseURL` can, with `trustedEndpoint: true`.
+- The settings page edits all of this per connection: the credential name
+  (leave it empty for the catalog's name), the key, the options, and for
+  `baseURL` an "I trust this address" switch. The trust applies to the
+  address you confirmed; changing it asks again, and turning the switch off
+  returns to the official endpoint. Switching a service back to keyless
+  removes the options its keyless route does not accept.
 - Custom connections are `custom:<name>` with `kind: adapter`, always use an
   API key (`credentialRef` is required), and need `trustedEndpoint: true`
-  for a non-official endpoint.
+  for a non-official endpoint. The settings page shows which service receives
+  the query, and removing a custom connection resets `defaultConnection` only
+  when it named that connection.
 - Validation is strict and names the offending field: unknown fields and
   connection ids, unsafe keys (`__proto__`, `constructor`, `prototype`),
   overlong text and more than 200 connections are rejected before anything is
-  saved. Model connections (`builtin:session-model`, `kind: model`) are not
-  part of this release and are rejected like any unknown value.
+  saved. Model connections (`builtin:session-model`, `kind: model`) are
+  planned for a later release and are rejected like any unknown value.
 - An omitted `version` always reads as 2. Later formats will be upgraded by
   the settings page, never silently by the Host.
 
@@ -104,9 +115,10 @@ this package alone removes its row.
   `builtin:deepseek-search-api`) and `kind: structured` (use
   `kind: adapter`). The plugin still loads, but searches fail with
   `WEB_PROVIDER_CONFIGURED_UNAVAILABLE` and a message naming the fields, and
-  the settings page shows "Invalid settings". Press **Restore default settings**
-  (Reset) on the settings page, or delete the fields by hand, then set up your connections again. A
-  stored `apiKey` is hidden from the page; remove it by hand.
+  the settings page says the settings can't be read. Press **Restore default
+  settings** (Reset) on the settings page, or delete the fields by hand, then
+  set up your connections again. A stored `apiKey` is hidden from the page;
+  remove it by hand.
 - Stored conversation choices and model memories are kept: a conversation you
   turned search off in stays off.
 - The bundle overview on the Plugins page flags `web` overrides left by the

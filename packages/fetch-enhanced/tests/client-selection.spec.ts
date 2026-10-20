@@ -137,6 +137,6 @@ describe('FetchSelectionStore', () => {
     await selections.load('s1')
     remote.get.mockResolvedValueOnce({ ok: false, error: new RemoteError('gateway/internal', 'Host unreachable', {}) } as never)
     await selections.refresh('s1')
-    expect(selections.source('s1').getSnapshot()).toMatchObject({ readFailed: true, view: { selection: { revision: 1 } } })
+    expect(selections.source('s1').getSnapshot()).toMatchObject({ readFailure: 'failed', view: { selection: { revision: 1 } } })
   })
 })

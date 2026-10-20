@@ -1,5 +1,6 @@
 import { Context } from '@deepseek-ai/cordis'
-import { CredentialProvider, credentialRef, type CredentialRef } from '@deepseek-ai/dsh-credentials'
+import { credentialRef } from '@deepseek-ai/dsh-credentials'
+import { MemoryCredentials } from './fixtures/credentials.ts'
 import DeepSeekAccount from '@deepseek-ai/dsh-deepseek-account'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
@@ -15,22 +16,6 @@ import { fetchApiOptions } from '../src/backends/deepseek-fetch-api.ts'
 import { createNativeFetchBackend, type NativeOverrides } from '../src/backends/native.ts'
 
 // Public service implementations for the seam; only their outbound network is mocked.
-class MemoryCredentials extends CredentialProvider {
-  readonly values = new Map<CredentialRef, string>()
-  override async resolve(ref: CredentialRef) {
-    const value = this.values.get(ref)
-    return value === undefined ? undefined : { value, source: 'memory' }
-  }
-  override async describe(ref: CredentialRef) { return { configured: this.values.has(ref), writable: true } }
-  override async set(ref: CredentialRef, value: string) { this.values.set(ref, value) }
-  override async unset(ref: CredentialRef) { this.values.delete(ref) }
-  override readRecord(): never { throw new Error('record API not used') }
-  override describeRecord(): never { throw new Error('record API not used') }
-  override listRecords(): never { throw new Error('record API not used') }
-  override modifyRecord(): never { throw new Error('record API not used') }
-  override deleteRecord(): never { throw new Error('record API not used') }
-}
-
 class NetworkAccount extends DeepSeekAccount {
   override async resolveToken(endpoint: string) { return (await fetch(endpoint)).text() }
   override getState(): never { throw new Error('account state not used') }

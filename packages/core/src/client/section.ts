@@ -2,9 +2,9 @@
  * The browser-side seam between the two plugins and the ui package
  * (docs/architecture.md section 9.2). The ui package provides the
  * `webConnections` service and renders one composer menu from the registered
- * sections; each plugin registers one section through optional injection and
- * supplies the capability-specific pieces (its selection store, route store,
- * labels, and an optional options component). Kept to what the ui package
+ * sections. Each plugin registers its route facts independently of the optional
+ * section and supplies the capability-specific selection store, labels, and
+ * options component. Kept to what the ui package
  * reads; a plugin's own store may offer more to its command and settings page.
  */
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
@@ -22,7 +22,7 @@ export interface SelectionState<V extends SelectionView = SelectionView> {
   /** Whether a write is crossing the wire. */
   readonly saving: boolean
   /** Whether the last read failed; cleared by the next successful read or write. */
-  readonly readFailed: boolean
+  readonly readFailure: 'invalid-settings' | 'failed' | undefined
 }
 
 /** One change to a Session's selection; the store supplies the observed revision. */
@@ -69,7 +69,6 @@ export interface ConnectionSection {
   /** Localized title of the section. */
   readonly title: () => string
   readonly selection: SelectionStore
-  readonly route: RouteStore
   /** Localized text of a connection the Host listed. */
   readonly describe: (connection: ConnectionView) => ConnectionText
   /** Localized text of the selection source shown beside the current connection. */
@@ -84,6 +83,10 @@ export interface ConnectionSection {
 
 /** The browser service the ui package provides. */
 export interface WebConnectionsService {
+  /** Register Host-aware routing independently of the optional composer section. */
+  registerRoute(capability: CapabilityName, route: RouteStore): () => void
+  /** Missing entries have no running plugin to supply environment facts; unknown entries must not be guessed. */
+  readonly routes: ObservableSnapshot<ReadonlyMap<CapabilityName, Route>>
   /** Register a section; the returned disposer removes it (run it in the registrant's effect). */
   register(section: ConnectionSection): () => void
   /** Registered sections in `order`. */

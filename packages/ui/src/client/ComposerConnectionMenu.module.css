@@ -9,8 +9,8 @@
   align-items: center;
   gap: 4px;
   min-width: 0;
-  max-width: 200px;
-  max-width: min(240px, 32cqw);
+  max-width: 260px;
+  max-width: min(320px, 42cqw);
   height: 28px;
   padding: 0 4px 0 8px;
   border: none;
@@ -38,18 +38,35 @@
   flex: 0 0 auto;
 }
 
-.label {
+/* One side per registered section, in menu order: "<search> · <fetch>". */
+.sides {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.side {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.sideLabel {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  display: block;
 }
 
-.attention {
-  position: absolute;
-  top: 3px;
-  left: 19px;
+.sideSeparator {
+  flex: none;
+  color: var(--dsw-alias-label-caption);
+}
+
+.sideMark {
+  flex: none;
   pointer-events: none;
 }
 
@@ -67,9 +84,27 @@
   transform: rotate(180deg);
 }
 
+/* Without labels the marks sit on the globe: search at its top-right corner, fetch at its bottom-right. */
 @container (max-width: 460px) {
-  .label {
+  .sideLabel,
+  .sideSeparator {
     display: none;
+  }
+
+  .sides {
+    position: absolute;
+    inset: 0;
+  }
+
+  .sideMark {
+    position: absolute;
+    top: 3px;
+    left: 19px;
+  }
+
+  .side[data-capability='fetch'] .sideMark {
+    top: auto;
+    bottom: 3px;
   }
 }
 
@@ -83,6 +118,10 @@
   .chevron,
   .busy {
     display: none;
+  }
+
+  .sideMark {
+    left: 17px;
   }
 }
 
@@ -172,7 +211,7 @@
 .sectionSource {
   flex: 0 2 auto;
   max-width: 40%;
-  color: var(--dsw-alias-label-caption);
+  color: var(--dsw-alias-label-secondary);
 }
 
 .sectionContents {
@@ -242,9 +281,9 @@
 }
 
 .rowCaption {
-  font-size: 11px;
-  line-height: 15px;
-  color: var(--dsw-alias-label-caption);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-secondary);
 }
 
 .rowCaptionWarn {

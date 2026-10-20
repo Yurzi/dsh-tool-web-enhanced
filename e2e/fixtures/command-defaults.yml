@@ -1,0 +1,4 @@
+# A ready keyless default makes command round trips independent of credentials.
+- id: web-search-enhanced
+  config:
+    defaultConnection: builtin:openalex

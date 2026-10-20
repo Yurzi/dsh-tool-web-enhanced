@@ -1,6 +1,7 @@
 /** OpenAlex works search: scholarly metadata, anonymous by default. */
-import { authors, collect, firstSourceUrl, isRecord, MAX_SNIPPET_LENGTH, summary, text } from '../sources.ts'
-import { getJson, rowsAt, type AdapterFor } from './types.ts'
+import { authors, collect, firstSourceUrl, MAX_SNIPPET_LENGTH, summary, text } from '../sources.ts'
+import { isRecord, getJson } from 'dsh-tool-web-enhanced-core/host'
+import { rowsAt, type AdapterFor } from './types.ts'
 
 /** OpenAlex asks anonymous clients to identify themselves for the polite pool. */
 const DEFAULT_MAILTO = 'dsh-web-search@users.noreply.github.com'
@@ -8,15 +9,14 @@ const DEFAULT_MAILTO = 'dsh-web-search@users.noreply.github.com'
 export const openalex: AdapterFor<'openalex'> = {
   request(input, endpoint, auth) {
     const { filter, is_oa: openAccess, mailto, sort } = input.options
-    const url = new URL(endpoint)
-    url.searchParams.set('search', input.query)
-    if (input.maxResults !== undefined) url.searchParams.set('per-page', String(Math.min(input.maxResults, 100)))
-    url.searchParams.set('mailto', typeof mailto === 'string' ? mailto : DEFAULT_MAILTO)
-    if (auth.kind === 'api-key') url.searchParams.set('api_key', auth.key)
+    const query: Record<string, string> = { search: input.query }
+    if (input.maxResults !== undefined) query['per-page'] = String(Math.min(input.maxResults, 100))
+    query.mailto = typeof mailto === 'string' ? mailto : DEFAULT_MAILTO
+    if (auth.kind === 'api-key') query.api_key = auth.key
     const filters = [text(filter), typeof openAccess === 'boolean' ? `is_oa:${openAccess}` : undefined].filter(value => value !== undefined)
-    if (filters.length > 0) url.searchParams.set('filter', filters.join(','))
-    if (typeof sort === 'string') url.searchParams.set('sort', sort)
-    return getJson(url)
+    if (filters.length > 0) query.filter = filters.join(',')
+    if (typeof sort === 'string') query.sort = sort
+    return getJson(endpoint, query)
   },
   parse: payload => collect(rowsAt(payload, 'results'), row => {
     const openAccessUrl = isRecord(row.open_access) ? text(row.open_access.oa_url) : undefined

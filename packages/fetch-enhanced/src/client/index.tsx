@@ -76,8 +76,9 @@ export async function apply(ctx: Context): Promise<void> {
     scope.effect(() => scope.configForms.whileServed([FETCH.rowId], () => scope.slots.inject('plugins.row.config', () => scope.slots.register({
       name: 'plugins.row.config', key: rowConfigKey(FETCH), locale: NS, inject: () => page,
     }, SettingsPage))), 'fetch: settings page')
-    const section = fetchSection(selection, route, navigation, t)
+    const section = fetchSection(selection, navigation, t)
     scope.inject(['webConnections'], ui => {
+      ui.effect(() => ui.webConnections.registerRoute('fetch', route), 'fetch: route facts')
       ui.effect(() => {
         let unregister: (() => void) | undefined
         const sync = () => {

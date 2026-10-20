@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { abortable } from '../src/search/errors.ts'
 import { executeSearch } from '../src/search/execute.ts'
 import { resolveSettings } from '../src/settings/resolve.ts'
-import { MAX_RESPONSE_BYTES, readText, requestJson, TIMEOUT_MS, withDeadline, type HttpRequest, type Upstream } from '../src/search/http.ts'
+import { MAX_RESPONSE_BYTES, mcp, transport, requestJson, TIMEOUT_MS, withDeadline, type HttpRequest, type Upstream } from '../src/search/http.ts'
 
 /** The error a promise rejects with. */
 async function rejection(pending: Promise<unknown>): Promise<Error> {
@@ -118,7 +118,7 @@ describe('HTTP transport', () => {
   it('rejects bodies that are not JSON without echoing them', async () => {
     stub(async () => new Response('private-invalid-json'))
     const error = await rejection(search())
-    expect(error).toMatchObject({ code: 'WEB_PROVIDER_ERROR' })
+    expect(error).toMatchObject({ code: 'WEB_PROVIDER_ERROR', message: expect.stringContaining('the search service returned a body that is not JSON; choose another search connection or report the incompatible response') })
     expect(error.message).not.toContain('private')
   })
 
@@ -135,7 +135,7 @@ describe('HTTP transport', () => {
     const chunk = new Uint8Array(MAX_RESPONSE_BYTES / 2 + 1)
     const body = new ReadableStream<Uint8Array>({ pull: c => { c.enqueue(chunk) }, cancel })
     stub(async () => new Response(body, { headers: declared ? { 'content-length': String(MAX_RESPONSE_BYTES + 1) } : {} }))
-    await expect(search()).rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR', message: expect.stringContaining('exceeds 2 MiB') })
+    await expect(search()).rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR', message: expect.stringContaining(`exceeds ${MAX_RESPONSE_BYTES / (1024 * 1024)} MiB`) })
     if (!declared) expect(cancel).toHaveBeenCalled()
   })
 
@@ -163,7 +163,10 @@ describe('HTTP transport', () => {
     vi.useFakeTimers()
     const { body, cancel } = stalledBody()
     stub(stall === 'request' ? hanging : async () => new Response(body))
-    const pending = expect(search()).rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR' })
+    const pending = expect(search()).rejects.toMatchObject({
+      code: 'WEB_PROVIDER_ERROR',
+      message: `dsh-web-search-enhanced: search timed out after ${TIMEOUT_MS / 1000} s; retry later or choose another search connection`,
+    })
     await vi.advanceTimersByTimeAsync(TIMEOUT_MS)
     await pending
     if (stall === 'body') expect(cancel).toHaveBeenCalled()
@@ -204,6 +207,21 @@ async function localServer(handler: RequestListener) {
 }
 
 describe('real HTTP boundary', () => {
+  it('restates a failed MCP search tool with an actionable connection-specific message', async () => {
+    const server = await localServer((_req, res) => {
+      res.setHeader('content-type', 'application/json')
+      res.end(JSON.stringify({ jsonrpc: '2.0', id: 1, result: { isError: true, content: [{ type: 'text', text: 'private tool details' }] } }))
+    })
+    try {
+      await expect(withDeadline(undefined, signal => mcp.callTool({
+        url: server.url, tool: 'search', arguments: {}, handshake: false,
+      }, signal, UPSTREAM))).rejects.toMatchObject({
+        code: 'WEB_PROVIDER_ERROR',
+        message: 'dsh-web-search-enhanced: Fixture could not complete the search; retry later or choose another search connection',
+      })
+    } finally { await server.close() }
+  })
+
   it('rejects the API redirect without accessing its target or leaking credentials', async () => {
     let targetVisits = 0
     let authorization: string | undefined
@@ -231,7 +249,7 @@ describe('real HTTP boundary', () => {
     })
     try {
       await expect(withDeadline(undefined, signal => requestJson({ ...REQUEST, url: server.url }, signal, UPSTREAM))).rejects.toMatchObject({
-        code: 'WEB_PROVIDER_ERROR', message: expect.stringContaining('exceeds 2 MiB'),
+        code: 'WEB_PROVIDER_ERROR', message: expect.stringContaining(`exceeds ${MAX_RESPONSE_BYTES / (1024 * 1024)} MiB`),
       })
     } finally { await server.close() }
   })
@@ -243,7 +261,7 @@ describe('real HTTP boundary', () => {
     try {
       const pending = withDeadline(controller.signal, async signal => {
         const response = await fetch(server.url, { signal, redirect: 'error' })
-        for await (const chunk of readText(response, signal)) { if (chunk !== '') received.resolve() }
+        for await (const chunk of transport.readText(response, signal)) { if (chunk !== '') received.resolve() }
       })
       await received.promise
       controller.abort('private abort reason')

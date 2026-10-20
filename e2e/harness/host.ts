@@ -39,9 +39,10 @@ const HOST_PLANE = join(import.meta.dirname, '../fixtures/host-plane.yml')
 /**
  * @param e2e - the run's install and environment; `process.env` must already be the isolated one.
  * @param overlays - extra patch files, applied after the profile's own layers like `dsh --patch`.
+ * @param prepare - register public observers before the profile's plugins initialize.
  * @returns the booted host plane.
  */
-export async function bootHost(e2e: E2EContext, overlays: readonly string[] = []): Promise<Host> {
+export async function bootHost(e2e: E2EContext, overlays: readonly string[] = [], prepare: (ctx: Context) => void = () => {}): Promise<Host> {
   const anchor = join(e2e.install, 'node_modules/@deepseek-ai/dsh/package.json')
   const require = createRequire(anchor)
   const app = require('@deepseek-ai/dsh-app-boot') as AppBoot
@@ -70,6 +71,7 @@ export async function bootHost(e2e: E2EContext, overlays: readonly string[] = []
     root.provide(DSH_LAUNCH_ENVIRONMENT_KEY, createLaunchEnvironmentSnapshot([{ source: 'process', values: process.env }]))
     await root.plugin(app.PluginPackages as Parameters<Context['plugin']>[0], { resolution })
     provideCmdline(root, { args: [], exit: (code: number) => { throw new Error(`unexpected exit ${code}`) }, ready: { onReady: () => () => {} } })
+    prepare(root)
   })
 
   const web = ctx.get('web')

@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import type { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type { scopeOf } from '@deepseek-ai/dsh-scope'
 import type {} from '../packages/fetch-enhanced/src/host/remote.ts'
+import { en as searchText } from '../packages/search-enhanced/src/client/locales.ts'
 import { en as fetchText } from '../packages/fetch-enhanced/src/client/locales.ts'
 import { en as uiText } from '../packages/ui/src/client/locales.ts'
 import { afterAll, afterEach, beforeAll, describe, expect, inject, it } from 'vitest'
@@ -11,7 +12,7 @@ import { type App, browserRequired, chromiumPath, openApp, recordBrowserFailure 
 import { addPlugins, enterIsolatedEnvironment } from './harness/environment.ts'
 import { upgradeEnvironment } from './harness/upgrade.ts'
 import { bootHost, type Host } from './harness/host.ts'
-import { expandConnectionSection, newSession, openConnections } from './harness/navigation.ts'
+import { connectionButton, expandConnectionSection, newSession, openConnections } from './harness/navigation.ts'
 import { type WebServer, startWeb } from './harness/web.ts'
 
 // A dedicated home keeps this multi-restart GUI flow independent of other specs' draft layouts.
@@ -78,7 +79,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Composer fetch 
     const sessionId = await newSession(page)
     selectedSession = sessionId
     const menu = await openConnections(page)
-    await menu.getByRole('group', { name: /^Search(?: ·|$)/ }).waitFor()
+    await menu.getByRole('group', { name: searchText['section.title'], exact: true }).waitFor()
     const fetch = await expandConnectionSection(menu, fetchText['section.title'])
     await expect.poll(() => fetch.getByRole('button', { name: /^Fetch ·/ }).getAttribute('aria-label')).toContain(fetchText['source.default'])
     expect(await menu.getByRole('group').count()).toBe(2)
@@ -110,6 +111,11 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Composer fetch 
     const fetch = await expandConnectionSection(menu, fetchText['section.title'])
     await fetch.getByRole('menuitemradio', { name: uiText['menu.offRow'], exact: true }).click()
     await menu.waitFor({ state: 'hidden' })
+    const offName = uiText['button.side'].replace('{capability}', fetchText['section.title']).replace('{state}', uiText['button.off'])
+    const trigger = connectionButton(app.page)
+    await expect.poll(() => trigger.getAttribute('aria-label')).toContain(offName)
+    expect(await trigger.locator('span[data-capability]').count()).toBe(2)
+    expect(await trigger.getAttribute('title')).toBe(await trigger.getAttribute('aria-label'))
     await openConnections(app.page)
     await expandConnectionSection(menu, fetchText['section.title'])
     await expect.poll(() => fetch.getByRole('button', { name: /^Fetch ·/ }).getAttribute('aria-label')).toContain(fetchText['source.session'])

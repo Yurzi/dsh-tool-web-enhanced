@@ -180,6 +180,9 @@ export type ConnectionsRemoteMap<NS extends string, V, C = SelectionChange> = {
 
 /** The error details a capability merges into `RemoteErrorDetailsMap`. */
 export type ConnectionsRemoteErrors<NS extends string> = {
+  /** The row document is invalid; repair it on the settings page. */
+  [K in `${NS}/invalid-settings`]: {}
+} & {
   /** The selection changed after the caller read it; re-read and retry. */
   [K in `${NS}/conflict`]: {}
 } & {

@@ -4,7 +4,7 @@ import { documentVersion, migrateDocument, resolveDocument, type SettingsMigrati
 
 const catalog = { local: { kind: 'local', label: 'Local', remote: false, access: { keyless: true, apiKey: false, account: false }, options: {} } } as const
 const future: SettingsMigrations = { currentVersion: 3, steps: new Map([[2, document => ({ ...document, showSelector: false })]]) }
-const resolve = (document: unknown, migrations = future) => resolveDocument({ catalog, document, defaults: { schema: z.strictObject({}), defaultConnection: 'builtin:local' }, customAllowed: false, capabilityLabel: 'test', migrations })
+const resolve = (document: unknown, migrations = future) => resolveDocument({ catalog, document, defaults: { schema: z.strictObject({}), defaultConnection: 'builtin:local' }, capabilityLabel: 'test', migrations })
 
 describe('injected future document migrations', () => {
   it.each([{}, { version: 2 }])('always interprets omitted versions as v2, then migrates %j', document => {
@@ -62,11 +62,11 @@ describe('bounded shared document validation', () => {
 
   it('does not normalize connection identities or hardcode capability error language', () => {
     expect(() => resolve({ version: 3, defaultConnection: ' builtin:local ' })).toThrow('unknown connection id')
-    expect(() => resolve({ version: 3, defaultConnection: 'custom:test' })).toThrow('custom test connections are not supported in this release;')
+    expect(() => resolve({ version: 3, defaultConnection: 'custom:test' })).toThrow('defaultConnection: unknown connection id "custom:test"; this release does not read')
   })
 
   it('parses provided capability defaults once', () => {
-    const result = resolveDocument({ catalog, document: { defaults: { value: 'input' } }, defaults: { schema: z.strictObject({ value: z.string().transform(value => value + '!') }), defaultConnection: 'builtin:local' }, customAllowed: false, capabilityLabel: 'test' })
+    const result = resolveDocument({ catalog, document: { defaults: { value: 'input' } }, defaults: { schema: z.strictObject({ value: z.string().transform(value => value + '!') }), defaultConnection: 'builtin:local' }, capabilityLabel: 'test' })
     expect(result.defaults).toEqual({ value: 'input!' })
   })
 })

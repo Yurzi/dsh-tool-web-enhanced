@@ -1,0 +1,3 @@
+# Keep both capability rows running without the shared composer menu.
+- id: tool-web-enhanced-ui
+  disabled: true

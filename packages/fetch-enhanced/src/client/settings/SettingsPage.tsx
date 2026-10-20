@@ -3,6 +3,7 @@ import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-cli
 import { createResetSection, createRouteNotice, useSettingsDocument } from 'dsh-tool-web-enhanced-core/client'
 import type { SettingsPageInjected } from '../injected.ts'
 import type { NS, LocaleKey } from '../locales.ts'
+import { CustomConnectionsSection } from './CustomConnections.tsx'
 import { DefaultsSection } from './DefaultsSection.tsx'
 import { PairingsSection } from './PairingsSection.tsx'
 import { resolveSettings } from '../../settings/resolve.ts'
@@ -39,6 +40,7 @@ export function SettingsPage({ useSettings, useCredentials, useRoute, usePairing
     <RouteNotice route={route} t={t} />
     <DefaultsSection doc={doc} write={write} credentials={credentials} t={t} />
     <ServicesSection doc={doc} write={write} credentials={credentials} saveCredential={saveCredential} t={t} />
+    <CustomConnectionsSection doc={doc} write={write} credentials={credentials} saveCredential={saveCredential} t={t} />
     <PairingsSection pairingsState={pairings} config={doc.config} forgetPairing={forgetPairing} t={t} />
     <ResetSection doc={resetDoc} write={write} t={t} />
   </div>

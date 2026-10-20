@@ -42,7 +42,7 @@ export type OptionRule =
   /** An absolute http(s) URL without credentials, query or fragment (see `isEndpoint`). */
   | { readonly kind: 'url'; readonly keyless?: false }
   | { readonly kind: 'boolean'; readonly keyless?: false }
-  | { readonly kind: 'integer'; readonly min: number; readonly max: number }
+  | { readonly kind: 'integer'; readonly min: number; readonly max: number; readonly keyless?: false }
   /** A list of strings, each matching `pattern`; capabilities add semantic checks (CIDR syntax) on top. */
   | { readonly kind: 'list'; readonly pattern: RegExp; readonly max: number }
 

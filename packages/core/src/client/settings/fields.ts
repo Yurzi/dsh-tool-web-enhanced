@@ -13,6 +13,8 @@ export interface OptionField<K extends string = string> {
   readonly max?: number
   /** Localized example or the default value. */
   readonly placeholder: (t: ClientTranslate<K>) => string | undefined
+  /** A note below the field, such as what a special value means or a unit conversion. */
+  readonly hint?: K
 }
 
 /** Editor text per field name. */
@@ -33,10 +35,10 @@ export function isValidText<K extends string>(field: OptionField<K>, text: strin
     case 'enum': return field.values.includes(text)
     case 'boolean': return text === 'true' || text === 'false'
     case 'integer': {
-      if (text !== '0' || field.min !== 0) {
-        if (!/^[1-9]\d{0,8}$/u.test(text)) return false
-      }
+      // Canonical decimal text only: no leading zeros, no "-0", no exponent.
+      if (!/^(?:0|-?[1-9]\d{0,15})$/u.test(text)) return false
       const num = Number(text)
+      if (!Number.isSafeInteger(num)) return false
       if (field.min !== undefined && num < field.min) return false
       if (field.max !== undefined && num > field.max) return false
       return true

@@ -1,21 +1,20 @@
 /** Tinyfish search: REST with a key, the hosted MCP tool without one. */
 import { invalidResponse } from '../http.ts'
-import { toolRows, type McpToolResult } from '../mcp.ts'
+import { apiKeyHeader, getJson, type McpToolResult } from 'dsh-tool-web-enhanced-core/host'
+import { toolRows } from './tool-rows.ts'
 import { collect, type SourceFields } from '../sources.ts'
-import { apiKeyHeader, getJson, rowsAt, type AdapterFor } from './types.ts'
+import { rowsAt, type AdapterFor } from './types.ts'
 
 const fields = (row: Record<string, unknown>): SourceFields => ({ url: row.url, title: row.title, snippet: row.snippet, publishedAt: row.date })
 
-export const tinyfish: AdapterFor<'tinyfish'> = {
+export const tinyfish = {
   // The API has no count parameter; the web seam caps the result.
   request(input, endpoint, auth) {
-    const url = new URL(endpoint)
-    url.searchParams.set('query', input.query)
-    url.searchParams.set('page', '0')
-    for (const [key, value] of Object.entries(input.options)) url.searchParams.set(key, String(value))
-    return getJson(url, apiKeyHeader(auth))
+    const query: Record<string, string> = { query: input.query, page: '0' }
+    for (const [key, value] of Object.entries(input.options)) query[key] = String(value)
+    return getJson(endpoint, query, apiKeyHeader(auth))
   },
-  parse: payload => collect(rowsAt(payload, 'results'), fields),
+  parse: (payload, _input) => collect(rowsAt(payload, 'results'), fields),
   keyless: {
     url: 'https://agent.tinyfish.ai/mcp',
     tool: 'search',
@@ -28,4 +27,4 @@ export const tinyfish: AdapterFor<'tinyfish'> = {
       return collect(rows, fields)
     },
   },
-}
+} satisfies AdapterFor<'tinyfish'>

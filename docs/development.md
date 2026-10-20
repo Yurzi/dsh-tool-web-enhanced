@@ -48,10 +48,10 @@ export PNPM_HOME=$PWD/.pnpm-home \
 | 位置 | 包 | 一句话 |
 | --- | --- | --- |
 | `packages/profile` | `dsh-tool-web-enhanced-profile` | bundle：`cordis.patch.yml`、locale、icon，没有代码 |
-| `packages/search-enhanced` | `dsh-web-search-enhanced` | search 插件：目录、adapter、MCP 客户端、native 后端、实时性、设置解析、Host 装配与浏览器面 |
-| `packages/fetch-enhanced` | `dsh-web-fetch-enhanced` | fetch 插件：目录、`local`（白名单、解析器）、native 后端、白名单提示、设置解析、Host 装配与浏览器面 |
+| `packages/search-enhanced` | `dsh-web-search-enhanced` | search 插件：目录、adapter 的请求与解析、native 后端、实时性、设置解析、Host 装配与浏览器面 |
+| `packages/fetch-enhanced` | `dsh-web-fetch-enhanced` | fetch 插件：目录、`local`（白名单、解析器）、native 后端、远程 adapter 与页面映射（`src/remote/`）、白名单提示、设置解析、Host 装配与浏览器面 |
 | `packages/ui` | `dsh-tool-web-enhanced-ui` | 空的 Host 面；浏览器面提供 `webConnections`、输入框菜单、首次启用提示、bundle 概览 |
-| `packages/core` | `dsh-tool-web-enhanced-core`（private） | 源码级共享：`./shared`（同构）、`./host`（选择范式）、`./client`（分区契约与设置页骨架），构建时内联 |
+| `packages/core` | `dsh-tool-web-enhanced-core`（private） | 源码级共享：`./shared`（同构）、`./host`（选择范式、有界传输、MCP 客户端、adapter 执行骨架）、`./client`（分区契约与设置页骨架），构建时内联 |
 | `build/` | — | 唯一的 tsdown 构建工厂、平台模块表、装饰器与 CSS Modules 插件、测试用的 `primitivesStub` |
 | `scripts/` | — | 工作区发现与打包、发布前检查、清理 |
 | `e2e/` | — | 隔离的真实 DSH 套件：`harness/`、`fixtures/`、`*.e2e.ts` |
@@ -66,10 +66,12 @@ export PNPM_HOME=$PWD/.pnpm-home \
 | --- | --- | --- |
 | **设置格式**（文档字段、连接字段、预算、版本） | 文法与预算：`core/src/shared/settings.ts`；插件派生：`<pkg>/src/settings/resolve.ts`、`types.ts`、`retired.ts`；Host 行：`core/src/host/settings-row.ts`；浏览器：`core/src/client/settings/document.ts`、`sparse.ts` | core 的 `settings-grammar`、`settings-migration`、`client-document`、`client-sparse`、`client-migration`；插件的 `settings.spec.ts`、`client-settings.spec.tsx` |
 | **目录**（连接项、参数规则、默认值） | `<pkg>/src/catalog.ts`（fetch 的 `DEFAULT_LOCAL_SETTINGS` 是原生行的副本）；文案在 `<pkg>/src/client/locales.ts` | 插件的 `catalog.spec.ts`、`settings.spec.ts`、`client-settings*.spec.tsx` |
-| **后端** | 见第 5 节 | 插件的 `adapters` / `native` / `local-provider` / `transport` / `mcp` 等对应测试，加 `host.spec.ts` |
-| **选择范式**（会话、计划、限制、Remote） | `core/src/host/*`；两个插件的能力装配在 `<pkg>/src/host/runtime.ts` | core 的 `sessions`、`plans`、`snapshots`、`restriction`、`storage`；两个插件的 `agent.spec.ts`、`host.spec.ts`（search 还有 `selections.spec.ts`）——两侧都要绿 |
-| **文案** | 界面文字：各包 `src/client/locales.ts`（zh 与 en 同键；键集的类型来源目前 search / fetch 取自 `en`、ui 取自 `zh`，新增键两边都要加）；插件页的标题与描述：`locale/{zh,en}.json` 的 `meta`（只放这些）；给模型的消息：Host 代码里的英文 `WebError` 文案 | 各包 `client-locales.spec.ts`（键集一致）；`verify:package` 检查 `meta`；改了给模型的消息要更新断言它的测试 |
-| **样式** | 各包的 `*.module.css`（插件 `client/settings/Settings.module.css`、fetch `Allowlist.module.css`、ui `ComposerConnectionMenu.module.css`、`ProfileDetailSection.module.css`）；只用 DSH 的 `--dsw-*` 变量；窄屏用 container query | ui 的 `client-settings-appearance.spec.tsx`、`client-components.spec.tsx`；改观感后跑 e2e `screenshots` 看截图 |
+| **后端** | 见第 5 节 | search：`adapters`、`native`、`transport`、`mcp`；fetch：`adapter-<键>`、`remote-page`、`remote-execute`、`composition`、`native`、`local-provider`；两侧再加 `host.spec.ts` |
+| **adapter 骨架、MCP 客户端、传输**（两侧共用） | `core/src/host/adapter.ts`、`mcp.ts`、`transport.ts`；能力的常量与文案在 search `src/search/http.ts`、fetch `src/remote/http.ts` | core 的 `adapter`、`mcp`；search 的 `transport`、`adapters`；fetch 的 `remote-execute`、`composition`——两侧都要绿 |
+| **设置页**（服务列表、凭据名称、信任开关、自定义连接） | 骨架在 `core/src/client/settings/*`（`ServicesSection`、`ServiceFields`、`CustomConnections`、`ConnectionEditor`、`connection-form`、`model`）；插件只给目录、文案、说明（fetch `SERVICE_NOTES`）与按目录键注册的附加编辑器（fetch `LocalExtras`） | core 的 `client-settings`、`client-catalog`、`client-fields`；两侧的 `client-settings.spec.tsx`；ui 的 `client-settings-appearance` |
+| **选择范式**（会话、计划、限制、Remote） | `core/src/host/*`；两个插件的能力装配在 `<pkg>/src/host/runtime.ts` | core 的 `sessions`、`plans`、`snapshots`、`restriction`、`storage`、`remote`；两个插件的 `agent.spec.ts`、`host.spec.ts`（search 还有 `selections.spec.ts`）——两侧都要绿 |
+| **文案** | 界面文字：各包 `src/client/locales.ts`（zh 与 en 同键；键集的类型来源目前 search / fetch 取自 `en`、ui 取自 `zh`，新增键两边都要加）；插件页的标题与描述：`locale/{zh,en}.json` 的 `meta`（只放这些）；给模型的消息：Host 代码里的英文 `WebError` 文案（传输与 MCP 的文案在各能力的 `http.ts`，含数字的由常量生成；fetch 的逐页失败文案在 `src/remote/page.ts`） | 各包 `client-locales.spec.ts`（键集一致）；`verify:package` 检查 `meta`；改了给模型的消息要更新断言它的测试 |
+| **样式** | 各包的 `*.module.css`（插件 `client/settings/Settings.module.css`——两包的这份文件保持完全一致，search `client/Section.module.css`、fetch `Allowlist.module.css`、ui `ComposerConnectionMenu.module.css`、`ProfileDetailSection.module.css`）；只用 DSH 的 `--dsw-*` 变量（等宽字体 `--dsw-font-mono`），控件优先用界面原语；窄屏用 container query | ui 的 `client-settings-appearance.spec.tsx`、`client-components.spec.tsx`；改观感后跑 e2e `screenshots` 看截图 |
 | **身份**（包名、行 id、provider id） | 只在 `core/src/shared/ids.ts`；profile 的 patch 要同步 | `packages/profile/tests/profile.spec.ts`；e2e `profile`、`plugins-page` |
 | **profile 组合** | `packages/profile/cordis.patch.yml`（`web` 行两个字段必须一起写） | `profile.spec.ts`；必须跑 e2e |
 | **构建 / 打包** | `build/*`、`scripts/*`、各包 `package.json` | `pnpm run check`（含 `verify:package`）；改到客户端产物或 Host 产物形状时跑 e2e |
@@ -80,21 +82,32 @@ export PNPM_HOME=$PWD/.pnpm-home \
 
 ## 5. 新增一个后端
 
-以 search 的 adapter 为例（其他种类的位置见下面的表与 architecture.md 第 7 节）：
+两个插件的 adapter 都实现 core 的 `AdapterWire`，由 core 的 `runAdapter` 执行（architecture.md 6.7）；设置页、菜单和自定义连接的格式列表都由目录驱动，新增后端不改页面代码。其他种类的位置见下面的表与 architecture.md 第 7 节。
 
-1. 在 `src/catalog.ts` 加一条 Descriptor：`label`、`kind`、`remote`、`endpoint`、`homepage`、`access`（`keyless` / `apiKey.credentialRef` / `account`）、`freshness`（哪些访问方式支持实时性）、`options`（`OptionRule`）。位置就是显示顺序；
+**search · adapter**：
+
+1. 在 `src/catalog.ts` 加一条 Descriptor：`label`、`kind: 'adapter'`、`remote`、`endpoint`、`homepage`、`access`（`keyless` / `apiKey.credentialRef` / `account`）、`freshness`（哪些访问方式支持实时性）、`options`（`OptionRule`；keyless 不接受的参数写 `keyless: false`，只接受部分枚举值时写 `keyless: [...]`）。位置就是显示顺序；
 2. 把键加进 `ADAPTER_KEYS`；
-3. 新建 `src/search/adapters/<键>.ts`，实现 `Adapter` 的 `request` / `parse`；目录标为 keyless 时必须提供 `keyless: 'rest'` 或一个 `McpRoute`，否则 `ADAPTER_WIRES` 的 `satisfies` 编译失败；
+3. 新建 `src/search/adapters/<键>.ts`，实现 `Adapter`（`AdapterWire<SearchInput, WebSearchSource[]>`）的 `request` / `parse`；目录标为 keyless 时必须提供 `keyless: 'rest'` 或一个 `McpRoute`，否则 `ADAPTER_WIRES` 的 `satisfies` 编译失败；
 4. 在 `src/search/adapters/index.ts` 的 `ADAPTER_WIRES` 登记；
-5. 文案：`src/client/locales.ts` 里的连接说明（远程服务写明查询会发给谁）、参数名、占位符、枚举值，zh 与 en 同键；
-6. 测试（`tests/adapters.spec.ts` 一类）：用本地 HTTP 服务充当远程 API，覆盖请求形状与请求头、响应映射与来源过滤、API 重定向被拒且目标未被访问、取消、HTTP 错误与畸形响应的改写、keyless 不发送密钥；
+5. 文案：`src/client/locales.ts` 里的参数名、占位符、枚举值（zh 与 en 同键），`client/settings/model.ts` 的 `OPTION_COPY`；
+6. 测试（`tests/adapters.spec.ts`）：用本地 HTTP 服务充当远程 API，覆盖请求形状与请求头、响应映射与来源过滤、keyless 不发送密钥、HTTP 错误与畸形响应的改写；
 7. 同步 architecture.md 6.4 的目录说明、search 的 README 与 CHANGELOG。
+
+**fetch · adapter**：
+
+1. 在 `src/catalog.ts` 加一条 Descriptor：`label`、`kind: 'adapter'`、`remote: true`、`endpoint`（API key 路由的端点，也是 `'rest'` keyless 路由的端点）、`homepage`、`access`、`options`。服务端超时一类参数的上限要留在 `TIMEOUT_MS`（120 000 ms）之内；只写调研核实过的访问方式（没有官方匿名路由就 `keyless: false`）；
+2. 把键加进 `ADAPTER_KEYS`；
+3. 新建 `src/remote/adapters/<键>.ts`，导出名就是键名：`export const <键>: FetchWireFor<'<键>'> = { request, parse, keyless? }`。`request` 用 core 的 `postJson` / `getJson` 与 `bearer` / `apiKeyHeader`，请求体先展开 `input.options` 再写 URL 等固定字段，URL 原样发送；服务接受字符预算时按 `MAX_BODY_CHARS` 请求。`parse` 返回 `PageOutcome`：`{ kind: 'page', page: { content, target, truncated } }` 或 `{ kind: 'failure', failure }`。服务给目标状态与最终 URL 时用 `reportedTarget`，对单个 URL 的失败明确给出目标 HTTP 状态时用 `statusPage`，其余失败映射到 `PageFailure`，形状不符一律 `invalid`；不从文字标签猜状态码，不把服务原文放进结果。解析有界：先限长，再逐行 `indexOf` 推进，不对整段正文跑多行正则；
+4. 在 `src/remote/adapters/index.ts` 的 `ADAPTER_WIRES` 登记（`satisfies { [K in AdapterKey]: FetchWireFor<K> }`，目录标为 keyless 而缺 keyless 路由即编译失败）；
+5. 文案：`client/settings/model.ts` 的 `OPTION_COPY`（参数名与占位符）和 `SERVICE_NOTES`（这个服务的缓存与保留说明，只写核实过的），`src/client/locales.ts` 的对应键（zh 与 en 同键）；“URL 会发送给 <服务>”由 core 按 `remote: true` 自动显示；
+6. 测试分工：`tests/adapter-<键>.spec.ts` 只测请求形状（端点、请求头、请求体、URL 原样）与 `parse` 的映射（成功、目标状态、各种失败、畸形响应、有界解析）；传输边界（重定向拒绝、字节上限、截止时间、取消、凭据缺失与非法、keyless 不读不发密钥）只在 core（`adapter.spec.ts`、`mcp.spec.ts`）与 fetch 的 `remote-execute.spec.ts`（用真实的 `http.ts` 常量与文案）各测一次，不在 adapter 测试里复制；
+7. 同步 architecture.md 6.4（目录表）与 6.6（映射、缓存与隐私表）、fetch 的 README 与 CHANGELOG。
 
 | 插件 · 种类 | 额外要碰的位置 |
 | --- | --- |
 | search · native | `src/backends/<键>.ts`（实例化上游类，凭据用 core 的 `nativeAuth`，包装用 `nativeBackend`）；`NATIVE_KEYS`；`backends/native.ts` 的 `createNativeBackend`；`settings/resolve.ts` 的 native 分支与 `NativeConnection['native']`。测试只测凭据与端点解析、错误改写（`native.spec.ts`） |
-| fetch · native | `src/backends/<键>.ts`；`NATIVE_KEYS`；`backends/native.ts` 的 `createNativeFetchBackend`；`settings/types.ts` 的 `NativeConnection['native']`；浏览器面 `client/settings/ConnectionExtras.tsx` 与 `client/settings/model.ts` 里按 `deepseek-fetch-api` 写死的分支 |
-| fetch · adapter | 还没有：需要先设计 fetch 的 adapter 接口与结果语义（architecture.md 6.6，M3） |
+| fetch · native | `src/backends/<键>.ts`；`NATIVE_KEYS`；`backends/native.ts` 的 `createNativeFetchBackend`（目前只有一项，加第二项时改为按键选择）。`resolveSettings` 按 `kind` 派生连接，浏览器面不用改：凭据名称、`baseURL` 与信任开关由 core 的服务列表按目录渲染 |
 
 不需要改 profile、`web` 行、Seat、Planner 或输入框菜单。新行为只能进 Planner（选哪个后端）或某个后端（怎么取），不能注册第二个 provider。
 
@@ -104,7 +117,7 @@ export PNPM_HOME=$PWD/.pnpm-home \
 
 1. **身份**：在 `core/src/shared/ids.ts` 加 `PluginIdentity`（npm 名 `dsh-web-<能力>-enhanced`，行 id 去掉 `dsh-`，provider id）；放宽 `Capability.tool` / `field`、`CapabilityName`、`WEB_FIELD` / `WEB_ENV`；
 2. **包骨架**：`packages/<能力>-enhanced/`，`package.json` 照抄现有插件（`type: module`、`main`、`exports` 含 `./client`、`files`、`engines`、`dsh.client.inject`；`@deepseek-ai/*` 只放 peer 与 devDependencies，范围等于 `engines.dsh`；没有 `dependencies`；`dsh-tool-web-enhanced-core` 为 `workspace:*` devDependency），`tsdown.config.ts` 一行 `pluginBuild(import.meta.url)`，`locale/{zh,en}.json` 的 `meta`，`icon.svg`，README；
-3. **目录与设置**：`src/catalog.ts`；`src/settings/resolve.ts` 建在 `resolveDocument` 上（`defaults` schema、默认连接、是否允许自定义连接）；`retired.ts`（新包可为空数组）；
+3. **目录与设置**：`src/catalog.ts`（有 adapter 项才接受自定义连接）；`src/settings/resolve.ts` 建在 `resolveDocument` 上（`defaults` schema、默认连接，再按目录项的 `kind` 派生连接形状）；`retired.ts`（新包可为空数组）；
 4. **契约**：`src/contract.ts` 用 `selectionContract({ namespace, packageName, options, extras })`，并把 `ConnectionsRemoteMap` / `ConnectionsRemoteErrors` 合并进 DSH 的类型表；
 5. **Host**：`src/host/options.ts`（`OptionsCodec`）、`connections.ts`（`describe`，用 `credentialReadiness`）、`runtime.ts`（`Capability` 对象 + `installCapability`）、`remote.ts`（服务类型声明）；`src/index.ts` 用 `settingsRow` 导出 `name`、`inject`、`Config`、`apply`；
 6. **浏览器面**：`locales.ts`、`ConnectionSelectionStore`、`RouteStatus`、`PairingsStatus` / `CredentialStatus`、`ConnectionSection`（取一个新的 `order`）、`selectionCommand` 生成 `/setup-<能力>`、用 core 的组件工厂拼设置页；`src/client/index.tsx` 注册行设置页（`configForms.whileServed`）、可选注入 `webConnections`、命令；
@@ -152,6 +165,8 @@ export PNPM_HOME=$PWD/.pnpm-home \
 
 ### 8.3 规格与覆盖点
 
+2026-10-20 的最终全套为 14 个规格文件、85 个用例，全部通过，Vitest 用时约 9.5 分钟（最长的是 `review-settings-visuals` 约 230 s、`upgrade` 约 100 s），截图 98 张；证据留在 `.e2e/review/2026-10-20-final-3/`。
+
 | 规格 | 需要浏览器 | 覆盖 |
 | --- | --- | --- |
 | `profile` | 否 | 安装后 bundle 层被选中、插件装在它下面；组合（`--dump-config`）：`web` 行两个字段、停用 `web-search-deepseek`、插入三行；进程内 Host 的路由：search 落到本插件（无密钥时 `WEB_PROVIDER_CREDENTIAL_MISSING`），fetch 落到本插件并保持 public-only（`WEB_BLOCKED_URL`）；search、fetch、两者分别停用时菜单行照常、被停用的能力报 `WEB_PROVIDER_CONFIGURED_MISSING` |
@@ -161,17 +176,25 @@ export PNPM_HOME=$PWD/.pnpm-home \
 | `composer-menu` | 是（独立 home） | 在菜单里关闭搜索：选择持久化，真实 Web preset 的 `web_search` 被隐藏，恢复后回来 |
 | `fetch-menu` | 是（独立 home） | 在菜单第二个分区选 DeepSeek Fetch API 并持久化为会话选择；关闭抓取不影响搜索，再恢复 Local HTTP。结束时清掉测试写入的密钥与模型记忆 |
 | `menu-rows-off` | 是 | search、fetch、两者分别停用：菜单只剩可用的分区（两者都停用时没有按钮），bundle 概览说明不可用的能力 |
-| `upgrade` | 是（独立 home） | 真实前身 0.1.x bundle（共存模式、两侧已保存设置、关闭搜索的会话）→ 移除 → 安装 profile；组合与用户层文件不变；Host 拒绝旧配置且日志点名字段；概览修复取消不写、确认才写；两个设置页显示无效提示，Reset 后行配置为空；冷启动后旧会话的关闭保留、新会话用默认连接 |
-| `screenshots` | 是 | 1280 / 768 / 390 三种宽度 × 浅色 / 深色 × search 设置页 / fetch 设置页 / 菜单 / 概览；断言概览健康（含标题对比度 ≥ 4.5、运行中的能力不被报告为停用）、菜单里两个分区标题都可见、浏览器无错误 |
+| `ui-row-off` | 是（独立 home） | ui 行停用（`disable-ui.yml`，search 默认改为 keyless 的 OpenAlex）：两个插件的设置页仍能从插件页打开，没有输入框按钮时 `/setup-search`、`/setup-fetch` 的选择能持久化并恢复 |
+| `remote-fetch-api` | 否 | 回环假远程服务（`harness/remote-fetch-api.ts`）本身：记录方法、原始路径、请求头与请求体，不访问目标 URL；回复可替换 |
+| `fetch-remote` | 否（独立 home） | 真实 Host：已信任的自定义 Firecrawl 连接指向回环假服务，编码过的回环 URL 与私网 URL 原样转发（Bearer、`{ url, formats: ['markdown'] }`），结果为 text、200；同一 URL 交给 `local` 时 `WEB_BLOCKED_URL` 且假服务没有多收到请求 |
+| `fetch-remote-ui` | 是（独立 home） | 菜单里 keyless 远程服务可选、缺密钥的 Tinyfish 不可选；选 keyless Firecrawl 并持久化，只改变下一步的计划；Tinyfish 只写的密钥录入；经设置页保存已信任的自定义连接，冷启动后仍在。不对内置远程服务发起抓取 |
+| `upgrade` | 是（独立 home） | 真实前身 0.1.x bundle（共存模式、两侧已保存设置、关闭搜索的会话）→ 移除 → 安装 profile；组合与用户层文件不变；Host 拒绝旧配置且日志点名字段，Remote 返回 `<ns>/invalid-settings`，两个菜单分区说明设置无效并给出设置入口（没有重试）；概览修复取消不写、确认才写；两个设置页显示无效提示，Reset 后行配置为空；冷启动后旧会话的关闭保留、新会话用默认连接 |
+| `review-settings-visuals` | 是（独立 home） | 界面评审的补充截图：自定义连接列表与新建表单（含信任）、Firecrawl 个人密钥与三态 On、Tavily / Tinyfish 面板、中文设置页与菜单、search 实时性控件，1280 浅 / 深色加 3 个 390 浅色点位；回环假服务不得收到请求 |
+| `screenshots` | 是 | 1280 / 768 / 390 三种宽度 × 浅色 / 深色 × search 设置页 / fetch 设置页 / 菜单 / 概览 / fetch 远程服务设置 / fetch 远程连接菜单，另把 390 宽的菜单缩到 360 宽补拍并检查按钮的可访问名称不变；断言概览健康（含标题对比度 ≥ 4.5、运行中的能力不被报告为停用）、菜单里两个分区标题都可见、浏览器无错误 |
 
 ### 8.4 截图与证据
 
 都在 `.e2e/artifacts`（CI 无论成败都上传为 `e2e-artifacts`）：
 
 - `web.log`：`dsh web` 的输出；
-- `<view>-<width>-<scheme>.png`：`screenshots` 的矩阵（截图在断言之前保存，回归时也留证据）；
+- `<view>-<width>-<scheme>.png`：`screenshots` 的矩阵（截图在断言之前保存，回归时也留证据），`composer-menu-360-<scheme>.png` 是窄输入栏的补拍；`review-fetch-<view>-<width>-<scheme>.png`：`review-settings-visuals` 的截图；
 - `upgrade-*.png`、`upgrade-*.json`、`upgrade-*.log`、`upgrade-old-composed.yml`：升级场景各阶段的截图、安装的前身清单、旧组合、无效配置时的 Host 日志、控制台错误；
-- `<spec>-failure.json` / `.png`：GUI 规格失败时记录的 URL、控制台错误、可访问性快照与整页截图。
+- `<spec>-failure.json` / `.png` / `.aria.txt`：GUI 规格失败时记录的 URL、控制台错误、可访问性快照（另存为文本）与整页截图；
+- `fetch-remote-wire-<n>.json`：`fetch-remote` 记录的线上请求与结果。
+
+远程抓取的 e2e 从不向真实服务发请求：实际的远程调用只发往 `startRemoteFetchApi` 的随机回环端点；内置远程连接只检查可选性与就绪状态；测试凭据用 `describe` 检查（不读回），结束时删除。
 
 ### 8.5 常见失败与排查
 

@@ -8,11 +8,10 @@ import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { Pairing, Route } from 'dsh-tool-web-enhanced-core/shared'
 import type { SearchSettings } from '../src/settings/types.ts'
 import type { CredentialStatusMap, PairingsState } from '../src/client/injected.ts'
-import { zh } from '../src/client/locales.ts'
+import { en, zh } from '../src/client/locales.ts'
 import { SettingsPage, type SettingsPageProps } from '../src/client/settings/SettingsPage.tsx'
 import { CATALOG } from '../src/catalog.ts'
 import { OptionsForm } from '../src/client/settings/OptionsEditor.tsx'
-import type { FieldSpec } from '../src/client/settings/model.ts'
 import { CredentialEditor } from '../src/client/settings/CredentialEditor.tsx'
 
 declare global {
@@ -75,8 +74,8 @@ function blur(element: Element | null | undefined): void {
   act(() => { element.focus(); element.blur() })
 }
 
-const tZh = (key: string, params?: Record<string, unknown>): string => {
-  const template = zh[key as keyof typeof zh] ?? key
+const translator = (dictionary: Readonly<Record<string, string>>) => (key: string, params?: Record<string, unknown>): string => {
+  const template = dictionary[key] ?? key
   return template.replace(/\{(\w+)\}/g, (match, name: string) => {
     const val = params?.[name]
     if (val === undefined) return match
@@ -84,6 +83,15 @@ const tZh = (key: string, params?: Record<string, unknown>): string => {
     if (typeof val === 'number' || typeof val === 'boolean') return `${val}`
     return JSON.stringify(val)
   })
+}
+const tZh = translator(zh)
+const tEn = translator(en)
+
+function labelled(root: ParentNode, key: string): HTMLInputElement {
+  const label = [...root.querySelectorAll('label')].find(candidate => candidate.textContent === tZh(key))
+  const input = label === undefined ? null : document.getElementById(label.htmlFor)
+  if (!(input instanceof HTMLInputElement)) throw new Error('missing input: ' + key)
+  return input
 }
 
 interface MountOptions {
@@ -150,7 +158,7 @@ describe('settings page', () => {
     } as ConfigFormSnapshot<SearchSettings>) })
     await flush()
     const alert = h.container.querySelector<HTMLElement>('[role="alert"]')
-    expect(alert?.textContent).toBe(tZh('settings.invalid'))
+    expect(alert?.textContent).toBe(tZh('settings.unsupported'))
     expect(alert?.title).toContain('apiKey')
     expect(alert?.title).toContain('profile patch')
     click(byText(h.container, 'button', tZh('reset.button')))
@@ -165,7 +173,7 @@ describe('settings page', () => {
     act(() => { h.settings.set({ status: 'ready', value: { version: 2 }, base: {}, user, revision: 9, writable: true }) })
     await flush()
     const alert = h.container.querySelector<HTMLElement>('[role="alert"]')
-    expect(alert?.textContent).toBe(tZh('settings.invalid'))
+    expect(alert?.textContent).toBe(tZh('settings.unsupported'))
     expect(alert?.title).toContain(field)
     expect(h.container.querySelector('[role="switch"], input')).toBeNull()
     expect(h.mutate).not.toHaveBeenCalled()
@@ -190,7 +198,7 @@ describe('settings page', () => {
     const h = mountPage({ user })
     await flush()
     const alert = h.container.querySelector<HTMLElement>('[role="alert"]')!
-    expect(alert.textContent).toBe(tZh('settings.invalid'))
+    expect(alert.textContent).toBe(tZh('settings.unsupported'))
     expect(alert.title.length).toBeGreaterThan(0)
     expect(h.container.querySelector('[role="switch"], input')).toBeNull()
     expect(h.mutate).not.toHaveBeenCalled()
@@ -205,7 +213,7 @@ describe('settings page', () => {
   it('keeps invalid read-only documents visible without allowing reset or writeback', async () => {
     const h = mountPage({ user: { version: 1 }, writable: false })
     await flush()
-    expect(h.container.querySelector('[role="alert"]')?.textContent).toBe(tZh('settings.invalid'))
+    expect(h.container.querySelector('[role="alert"]')?.textContent).toBe(tZh('settings.unsupported'))
     expect((byText(h.container, 'button', tZh('reset.button')) as HTMLButtonElement).disabled).toBe(true)
     expect(h.mutate).not.toHaveBeenCalled()
   })
@@ -215,7 +223,7 @@ describe('settings page', () => {
     const { container, mutate } = mountPage({ user: { version: 2, defaults: { freshness: 'broken' } } })
     await flush()
     const error = container.querySelector<HTMLElement>('[role="alert"]')!
-    expect(error.textContent).toBe(tZh('settings.invalid'))
+    expect(error.textContent).toBe(tZh('settings.unsupported'))
     expect(error.title).toContain('freshness')
     expect(mutate).not.toHaveBeenCalled()
   })
@@ -237,7 +245,10 @@ describe('settings page', () => {
     expect(translate).toHaveBeenCalledWith('defaults.connectionUnset', { name: CATALOG['deepseek-messages'].label })
   })
 
-  it('derives freshness hints from live catalog support and labels', () => {
+  it.each([
+    ['zh', tZh, 'Firecrawl和Catalog Freshness（个人密钥）'],
+    ['en', tEn, 'Firecrawl and Catalog Freshness (personal key)'],
+  ])('derives freshness hints from live catalog support and labels, listed as %s joins them', (_language, base, services) => {
     const oldTavily = CATALOG.tavily
     const oldExa = CATALOG.exa
     Object.assign(CATALOG, {
@@ -245,11 +256,9 @@ describe('settings page', () => {
       exa: { ...oldExa, freshness: [] },
     })
     try {
-      const translate = vi.fn(tZh)
+      const translate = vi.fn(base)
       mountPage({ translate })
-      expect(translate).toHaveBeenCalledWith('defaults.freshnessHint', {
-        services: ['Firecrawl', tZh('defaults.freshnessKeyOnly', { name: 'Catalog Freshness' })].join(tZh('list.separator')),
-      })
+      expect(translate).toHaveBeenCalledWith('defaults.freshnessHint', { services })
     } finally {
       Object.assign(CATALOG, { tavily: oldTavily, exa: oldExa })
     }
@@ -268,7 +277,7 @@ describe('settings page', () => {
   })
 
   it('renders URL rules as inputs and rejects unsafe values before committing', async () => {
-    const field: FieldSpec = { name: 'baseURL', label: 'option.native.baseURL', kind: 'url', values: [], placeholder: () => undefined }
+    const field: ComponentProps<typeof OptionsForm>['fields'][number] = { name: 'baseURL', label: 'option.native.baseURL', kind: 'url', values: [], placeholder: () => undefined }
     const onCommit = vi.fn(async () => true)
     const { container } = render(<OptionsForm id="url" title="URL" hint="" fields={[field]} stored={{}} disabled={false} onCommit={onCommit} t={tZh} />)
     const input = container.querySelector<HTMLInputElement>('input')!
@@ -285,13 +294,39 @@ describe('settings page', () => {
     expect(onCommit).toHaveBeenCalledExactlyOnceWith('baseURL', 'https://api.example/v1')
   })
 
-  it('uses a CSS class instead of inline layout for boolean options', () => {
-    const { configure, row } = mountPage()
+  it('shows unset boolean options as the service default and returns a chosen one to it', async () => {
+    const { mutate, configure, row } = mountPage({ user: { version: 2, connections: { 'builtin:deepseek-search-api': { options: { sendOriginalQuestion: false } } } } })
     configure('Firecrawl')
-    const toggle = row('Firecrawl').querySelector('[role="switch"][aria-label="' + tZh('option.firecrawl.safe') + '"]')!
-    expect(toggle).not.toBeNull()
-    expect(toggle.parentElement?.hasAttribute('style')).toBe(false)
-    expect(toggle.parentElement?.className).toContain('optionBoolean')
+    const safe = row('Firecrawl').querySelector<HTMLElement>('button[aria-label="' + tZh('option.firecrawl.safe') + '"]')!
+    expect(safe.textContent).toContain(tZh('options.default'))
+    configure('DeepSeek Search API')
+    const original = row('DeepSeek Search API').querySelector<HTMLElement>('button[aria-label="' + tZh('option.native.sendOriginalQuestion') + '"]')!
+    expect(original.textContent).toContain(tZh('options.off'))
+    click(original)
+    click(byText(document.body, '[role="menuitem"]', tZh('options.default')))
+    await flush()
+    expect(mutate).toHaveBeenCalledExactlyOnceWith([{ op: 'unset', path: ['connections'] }], 8)
+  })
+
+  it('drops the Exa search type and a Tinyfish research domain when switching back to the keyless route', async () => {
+    const { mutate, configure, row } = mountPage({ user: { version: 2, connections: {
+      'builtin:exa': { access: 'api-key', options: { type: 'fast' } },
+      'builtin:tinyfish': { access: 'api-key', options: { domain_type: 'research_paper', language: 'en' } },
+    } } })
+    configure('Exa')
+    click(byText(row('Exa'), '[role="tab"]', tZh('services.accessKeyless')))
+    await flush()
+    expect(mutate).toHaveBeenLastCalledWith([
+      { op: 'unset', path: ['connections', 'builtin:exa', 'access'] },
+      { op: 'unset', path: ['connections', 'builtin:exa', 'options'] },
+    ], 8)
+    configure('Tinyfish')
+    click(byText(row('Tinyfish'), '[role="tab"]', tZh('services.accessKeyless')))
+    await flush()
+    expect(mutate).toHaveBeenLastCalledWith([
+      { op: 'unset', path: ['connections', 'builtin:tinyfish', 'access'] },
+      { op: 'set', path: ['connections', 'builtin:tinyfish', 'options'], value: { language: 'en' } },
+    ], 8)
   })
 
   it('restricts credential status to the injected credential union', () => {
@@ -411,6 +446,52 @@ describe('settings page', () => {
     ], 8)
   })
 
+  it('saves a non-official native base URL only after trust is switched on, in one write', async () => {
+    const { mutate, configure, row } = mountPage()
+    configure('DeepSeek Messages')
+    const url = labelled(row('DeepSeek Messages'), 'option.native.baseURL')
+    expect(url.placeholder).toBe(CATALOG['deepseek-messages'].endpoint)
+    type(url, 'https://deepseek-proxy.example.internal/anthropic/v1')
+    blur(url)
+    await flush()
+    expect(mutate).not.toHaveBeenCalled()
+    click(row('DeepSeek Messages').querySelector('[role="switch"][aria-label="' + tZh('editor.trustUnnamed') + '"]'))
+    await flush()
+    expect(mutate).toHaveBeenCalledExactlyOnceWith([
+      { op: 'set', path: ['connections', 'builtin:deepseek-messages', 'options', 'baseURL'], value: 'https://deepseek-proxy.example.internal/anthropic/v1' },
+      { op: 'set', path: ['connections', 'builtin:deepseek-messages', 'trustedEndpoint'], value: true },
+    ], 8)
+  })
+
+  it('revokes endpoint trust when the native base URL is cleared', async () => {
+    const { mutate, configure, row } = mountPage({ user: { version: 2, connections: {
+      'builtin:exa': { disabled: true },
+      'builtin:deepseek-search-api': { trustedEndpoint: true, options: { baseURL: 'https://proxy.example/v1/tools', count: 5 } },
+    } } })
+    configure('DeepSeek Search API')
+    const url = labelled(row('DeepSeek Search API'), 'option.native.baseURL')
+    type(url, '')
+    blur(url)
+    await flush()
+    expect(mutate).toHaveBeenCalledExactlyOnceWith([
+      { op: 'unset', path: ['connections', 'builtin:deepseek-search-api', 'options', 'baseURL'] },
+      { op: 'unset', path: ['connections', 'builtin:deepseek-search-api', 'trustedEndpoint'] },
+    ], 8)
+  })
+
+  it('edits the credential reference of a built-in service on the personal-key route', async () => {
+    const { mutate, configure, row } = mountPage()
+    configure('Semantic Scholar')
+    const ref = labelled(row('Semantic Scholar'), 'credential.reference')
+    expect(ref.value).toBe('SEMANTIC_SCHOLAR_API_KEY')
+    type(ref, 'TEAM_S2_KEY')
+    blur(ref)
+    await flush()
+    expect(mutate).toHaveBeenCalledExactlyOnceWith([{ op: 'set', path: ['connections', 'builtin:semanticscholar', 'credentialRef'], value: 'TEAM_S2_KEY' }], 8)
+    configure('Exa')
+    expect(row('Exa').textContent).not.toContain(tZh('credential.reference'))
+  })
+
   it('adds and removes a custom connection', async () => {
     const { container, mutate, row } = mountPage({
       user: {
@@ -433,6 +514,40 @@ describe('settings page', () => {
     expect(mutate).toHaveBeenCalledWith([
       { op: 'unset', path: ['connections', 'custom:my-search'] },
       { op: 'unset', path: ['defaultConnection'] },
+    ], 8)
+  })
+
+  it('keeps an operator-chosen built-in default when the only custom connection is removed', async () => {
+    const { mutate, row } = mountPage({ user: { version: 2, defaultConnection: 'builtin:tavily', connections: {
+      'custom:my-search': { kind: 'adapter', label: 'MySearch', adapter: 'exa', credentialRef: 'MY_KEY' },
+    } } })
+    expect(row('MySearch').textContent).toContain(tZh('services.remoteNotice', { name: 'Exa' }))
+    click(byText(row('MySearch'), 'button', tZh('custom.remove')))
+    click(byText(row('MySearch').querySelector('[role="group"]')!, 'button', tZh('custom.remove')))
+    await flush()
+    expect(mutate).toHaveBeenCalledExactlyOnceWith([{ op: 'unset', path: ['connections'] }], 8)
+  })
+
+  it('asks again before a trusted native base URL moves to another address, and revokes trust with the address', async () => {
+    const { mutate, configure, row } = mountPage({ user: { version: 2, connections: {
+      'builtin:deepseek-messages': { trustedEndpoint: true, options: { baseURL: 'https://a.example.internal/anthropic/v1' } },
+    } } })
+    configure('DeepSeek Messages')
+    const url = labelled(row('DeepSeek Messages'), 'option.native.baseURL')
+    const trust = () => row('DeepSeek Messages').querySelector('[role="switch"][aria-label="' + tZh('editor.trustUnnamed') + '"]')!
+    type(url, 'https://b.example.internal/anthropic/v1')
+    blur(url)
+    await flush()
+    expect(mutate).not.toHaveBeenCalled()
+    expect(trust().getAttribute('aria-checked')).toBe('false')
+    expect(row('DeepSeek Messages').textContent).toContain(tZh('services.trustUnsaved'))
+    type(url, 'https://a.example.internal/anthropic/v1')
+    expect(trust().getAttribute('aria-checked')).toBe('true')
+    click(trust())
+    await flush()
+    expect(mutate).toHaveBeenCalledExactlyOnceWith([
+      { op: 'unset', path: ['connections', 'builtin:deepseek-messages', 'options'] },
+      { op: 'unset', path: ['connections', 'builtin:deepseek-messages', 'trustedEndpoint'] },
     ], 8)
   })
 })

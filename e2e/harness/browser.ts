@@ -3,9 +3,9 @@
  */
 import { existsSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { type Browser, type Page, chromium } from 'playwright-core'
+import { type Browser, type BrowserContextOptions, type Page, chromium } from 'playwright-core'
 import { artifacts, isolatedEnvironment, run } from './environment.ts'
-import { en as uiText } from '../../packages/ui/src/client/locales.ts'
+import { en as uiText, zh as uiZh } from '../../packages/ui/src/client/locales.ts'
 
 /**
  * A Chromium or Chrome binary: `DSH_E2E_CHROMIUM`, else the usual system paths.
@@ -18,9 +18,11 @@ export const browserRequired = process.env.CI !== undefined
 
 /** Retain accessible DOM and console evidence when a browser assertion fails. */
 export async function recordBrowserFailure(app: App, name: string): Promise<void> {
+  const accessibility = await app.page.locator('body').ariaSnapshot()
   writeFileSync(join(artifacts, name + '.json'), JSON.stringify({
-    url: app.page.url(), errors: app.errors, accessibility: await app.page.locator('body').ariaSnapshot(),
+    url: app.page.url(), errors: app.errors, accessibility,
   }, null, 2))
+  writeFileSync(join(artifacts, name + '.aria.txt'), accessibility)
   await app.screenshot(name)
 }
 
@@ -38,7 +40,7 @@ export interface App {
  * Launch Chromium, open the launch URL, and dismiss the dialogs a fresh home shows.
  * @param url - the one-time launch URL from `startWeb`.
  */
-export async function openApp(url: string): Promise<App> {
+export async function openApp(url: string, contextOptions: BrowserContextOptions = {}): Promise<App> {
   if (chromiumPath === undefined) throw new Error('no Chromium found; set DSH_E2E_CHROMIUM')
   // Chromium's SingletonSocket must fit Linux's 108-byte Unix-socket path limit.
   // Upgrade homes are too deeply nested, so keep Chrome scratch short and still
@@ -49,7 +51,8 @@ export async function openApp(url: string): Promise<App> {
     env: { ...isolatedEnvironment(), TMPDIR: run },
   })
   try {
-    const page = await (await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: 'en-US' })).newPage()
+    const page = await (await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: 'en-US', ...contextOptions })).newPage()
+    const copy = contextOptions.locale === 'zh-CN' ? uiZh : uiText
     page.setDefaultTimeout(30_000)
     const errors: string[] = []
     page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()) })
@@ -58,11 +61,12 @@ export async function openApp(url: string): Promise<App> {
       await dialog.getByRole('button', { name: 'Continue' }).click()
     })
     await page.addLocatorHandler(page.getByRole('button', { name: 'Configure later' }), async (button) => { await button.click() })
-    await page.addLocatorHandler(page.getByRole('dialog', { name: 'Get started' }), async (dialog) => {
-      await dialog.getByRole('button', { name: 'Close' }).click()
+    const welcome = contextOptions.locale === 'zh-CN' ? { title: '开始使用', close: '关闭' } : { title: 'Get started', close: 'Close' }
+    await page.addLocatorHandler(page.getByRole('dialog', { name: welcome.title, exact: true }), async (dialog) => {
+      await dialog.getByRole('button', { name: welcome.close, exact: true }).click()
     })
-    await page.addLocatorHandler(page.getByRole('dialog', { name: uiText['activation.title'] }), async (dialog) => {
-      await dialog.getByRole('button', { name: uiText['activation.later'], exact: true }).click()
+    await page.addLocatorHandler(page.getByRole('dialog', { name: copy['activation.title'] }), async (dialog) => {
+      await dialog.getByRole('button', { name: copy['activation.later'], exact: true }).click()
     })
     await page.goto(url)
     return {

@@ -5,13 +5,14 @@ import type {} from '@deepseek-ai/dsh-settings'
 import { FETCH, SEARCH } from 'dsh-tool-web-enhanced-core/shared'
 import { describe, expect, inject, it } from 'vitest'
 import type {} from '../packages/search-enhanced/src/host/remote.ts'
+import type {} from '../packages/fetch-enhanced/src/host/remote.ts'
 import { en as uiText } from '../packages/ui/src/client/locales.ts'
 import { en as searchText } from '../packages/search-enhanced/src/client/locales.ts'
 import { en as fetchText } from '../packages/fetch-enhanced/src/client/locales.ts'
 import { type App, browserRequired, chromiumPath, openApp, recordBrowserFailure } from './harness/browser.ts'
 import { artifacts, composedRows, enterIsolatedEnvironment } from './harness/environment.ts'
 import { bootHost } from './harness/host.ts'
-import { openBundle, openFetchSettings, openSearchSettings } from './harness/navigation.ts'
+import { expandConnectionSection, newSession, openBundle, openConnections, openFetchSettings, openSearchSettings } from './harness/navigation.ts'
 import { createLegacyOffSession, installCoexistencePatch, installPredecessors, installUpgradeProfile, upgradeEnvironment } from './harness/upgrade.ts'
 import { type WebServer, startWeb } from './harness/web.ts'
 
@@ -47,11 +48,12 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('search and fetc
       expect(readFileSync(patchPath, 'utf8')).toBe(originalPatch)
 
       // Only the temporary runtime route changes: persisted leftovers still need explicit repair.
-      const upgraded = await bootHost(e2e, [join(import.meta.dirname, 'fixtures/upgrade-fetch-route.yml')])
+      const diagnostics: string[] = []
+      const upgraded = await bootHost(e2e, [join(import.meta.dirname, 'fixtures/upgrade-fetch-route.yml')], root => {
+        // Invalid row diagnostics are emitted during installation, before any provider call.
+        root.logger.exporter({ levels: { default: 3 }, export: message => { diagnostics.push(message.args.map(String).join(' ')) } })
+      })
       try {
-        const diagnostics: string[] = []
-        // Cordis' default buffer excludes WARN; explicitly subscribe at that level.
-        upgraded.ctx.logger.exporter({ levels: { default: 3 }, export: message => { diagnostics.push(message.args.map(String).join(' ')) } })
         await expect(upgraded.web.search({ query: 'old settings probe' }, AbortSignal.timeout(15_000)))
           .rejects.toMatchObject({ code: 'WEB_PROVIDER_CONFIGURED_UNAVAILABLE', message: SEARCH.packageName + ': search settings are invalid; ask the user to fix them on the settings page' })
         await expect(upgraded.web.fetch({ url: 'http://127.0.0.1:9/' }, AbortSignal.timeout(15_000)))
@@ -60,6 +62,8 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('search and fetc
         writeFileSync(join(artifacts, 'upgrade-invalid-host.log'), logs)
         expect(logs).toContain('providerId')
         expect(logs).toContain('allowCidrs')
+        await expect(upgraded.ctx.searchConnections.get({ sessionId })).rejects.toMatchObject({ code: 'searchConnections/invalid-settings' })
+        await expect(upgraded.ctx.fetchConnections.get({ sessionId })).rejects.toMatchObject({ code: 'fetchConnections/invalid-settings' })
         expect(composedRows(e2e).find(row => row.id === FETCH.rowId)?.config).toEqual(originalFetchConfig)
       } finally {
         await upgraded.dispose()
@@ -110,6 +114,16 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('search and fetc
         await overview.scrollIntoViewIfNeeded()
         await app.screenshot('upgrade-repaired')
 
+        await newSession(page)
+        const invalidMenu = await openConnections(page)
+        for (const capability of [searchText['section.title'], fetchText['section.title']]) {
+          const section = await expandConnectionSection(invalidMenu, capability)
+          await section.getByRole('alert').getByText(uiText['menu.invalidSettings'].replace('{capability}', capability), { exact: true }).waitFor()
+          await section.getByRole('menuitem', { name: uiText['menu.settings'], exact: true }).waitFor()
+          expect(await section.getByRole('button', { name: uiText['button.readFailed'], exact: true }).count()).toBe(0)
+          await app.screenshot('upgrade-menu-' + (capability === searchText['section.title'] ? 'search' : 'fetch') + '-invalid')
+        }
+        await page.keyboard.press('Escape')
         const searchSettings = await openSearchSettings(page)
         const searchInvalid = searchSettings.getByRole('alert')
         await searchInvalid.waitFor()

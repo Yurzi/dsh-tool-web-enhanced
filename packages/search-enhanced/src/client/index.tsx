@@ -11,6 +11,7 @@ import { withRetiredSecretDiagnostics } from 'dsh-tool-web-enhanced-core/client'
 import { RETIRED_FIELDS } from '../settings/retired.ts'
 import type { SearchSettings } from '../settings/types.ts'
 import { searchCommand } from './command.ts'
+import { listText } from './connections.ts'
 import { CredentialStatus } from './credentials.ts'
 import type { SettingsPageInjected } from './injected.ts'
 import { en, NS, zh } from './locales.ts'
@@ -33,7 +34,7 @@ export async function apply(ctx: Context): Promise<void> {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'search: dictionaries')
   const t = ctx.locale.bind(NS)
   const settings = withRetiredSecretDiagnostics(ctx.configForms.get<SearchSettings>(SEARCH.rowId), ctx.configForms.describe(), SEARCH.rowId, RETIRED_FIELDS,
-    fields => t('settings.retiredSecret', { fields: fields.join(t('list.separator')) }))
+    fields => t('settings.retiredSecret', { fields: listText(fields, t) }))
   const navigationState = createSnapshotStore<{ open: (() => void) | undefined }>({ open: undefined })
   const navigation: ObservableSnapshot<(() => void) | undefined> = {
     getSnapshot: () => navigationState.getSnapshot().open,
@@ -73,8 +74,9 @@ export async function apply(ctx: Context): Promise<void> {
     scope.effect(() => scope.configForms.whileServed([SEARCH.rowId], () => scope.slots.inject('plugins.row.config', () => scope.slots.register({
       name: 'plugins.row.config', key: rowConfigKey(SEARCH), locale: NS, inject: () => page,
     }, SettingsPage))), 'search: settings page')
-    const section = searchSection(selection, route, navigation, t)
+    const section = searchSection(selection, navigation, t)
     scope.inject(['webConnections'], ui => {
+      ui.effect(() => ui.webConnections.registerRoute('search', route), 'search: route facts')
       ui.effect(() => {
         let unregister: (() => void) | undefined
         const sync = () => {

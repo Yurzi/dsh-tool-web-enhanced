@@ -6,7 +6,7 @@ export {
 } from './connections.ts'
 export { WEB_ENV, WEB_FIELD, WEB_ROW, isRouted, routeOf, type Route } from './route.ts'
 export { MAX_SOURCE_URL_LENGTH, isEndpoint, sourceUrl } from './url.ts'
-export { CURRENT_SETTINGS_VERSION, SETTINGS_FIELDS, SETTINGS_RESET_HINT, documentVersion, migrateDocument, documentSchema, builtinOverrideSchema, customConnectionSchema, resolveDocument, type BuiltinOverride, type DocumentVersion, type ResolvedBase, type ResolvedDocument, type SettingsDescriptor } from './settings.ts'
+export { CURRENT_SETTINGS_VERSION, SETTINGS_FIELDS, SETTINGS_RESET_HINT, documentVersion, migrateDocument, documentSchema, builtinOverrideSchema, customConnectionSchema, resolveDocument, type BuiltinOverride, type CustomConnection, type DocumentVersion, type ResolvedBase, type ResolvedDocument, type SettingsDescriptor } from './settings.ts'
 export {
   CONNECTION_STATUS, SELECTION_SOURCES,
   connectionId, connectionViewBase, forgetPairingRequest, pairingView, pairingsRequest, pairingsView, providerRequest, providerView, selectionContract, selectionRequest, sessionId,
