@@ -8,7 +8,7 @@ import { zh as uiZh } from '../packages/ui/src/client/locales.ts'
 import { firecrawlResponse } from './fixtures/remote-fetch.ts'
 import { type App, browserRequired, chromiumPath, openApp, recordBrowserFailure } from './harness/browser.ts'
 import { addPlugins, composedRows, profilePatchPath } from './harness/environment.ts'
-import { expandConnectionSection, newSession, openBundle, openConnections, openFetchSettings } from './harness/navigation.ts'
+import { openConnectionTab, newSession, openBundle, openConnections, openFetchSettings } from './harness/navigation.ts'
 import { startRemoteFetchApi } from './harness/remote-fetch-api.ts'
 import { expectTheme, setTheme, type ThemePreference } from './harness/theme.ts'
 import { upgradeEnvironment } from './harness/upgrade.ts'
@@ -134,14 +134,14 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('UI review setti
 
     if (view === 'search-freshness') {
       const menu = await openConnections(app.page)
-      const search = await expandConnectionSection(menu, searchText['section.title'])
+      const search = await openConnectionTab(menu, searchText['section.title'])
       const firecrawl = search.getByRole('menuitemradio', { name: /^Firecrawl(?: |$)/ })
       const handoff = searchText['status.remoteReady'].replace('{access}', searchText['access.keyless']).replace('{name}', 'Firecrawl')
       await firecrawl.getByText(handoff, { exact: true }).waitFor()
       await firecrawl.click()
       await menu.waitFor({ state: 'hidden' })
       await openConnections(app.page)
-      await expandConnectionSection(menu, searchText['section.title'])
+      await openConnectionTab(menu, searchText['section.title'])
       const freshness = search.getByRole('tablist', { name: searchText['selector.freshness'], exact: true })
       const fresh = freshness.getByRole('tab', { name: searchText['freshness.fresh'], exact: true })
       await fresh.click()
@@ -162,7 +162,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('UI review setti
       await app.page.locator('[data-conversation-session="' + id + '"]').waitFor()
       await app.page.setViewportSize({ width, height: viewport.height })
       const menu = await openConnections(app.page, uiZh)
-      const fetch = await expandConnectionSection(menu, fetchZh['section.title'])
+      const fetch = await openConnectionTab(menu, fetchZh['section.title'])
       await fetch.getByRole('menuitemradio', { name: /^Firecrawl(?: |$)/ }).scrollIntoViewIfNeeded()
       await fetch.getByText(fetchZh['status.remoteReady'].replace('{access}', fetchZh['access.keyless']).replace('{name}', 'Firecrawl'), { exact: true }).waitFor()
       await expectTheme(app.page, scheme)

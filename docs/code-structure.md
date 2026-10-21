@@ -197,7 +197,7 @@ src/
 | --- | --- |
 | [index.ts](<../packages/ui/src/index.ts>) | 不依赖搜索或抓取服务的 Host 插件入口。 |
 | [client/index.tsx](<../packages/ui/src/client/index.tsx>) · [service.ts](<../packages/ui/src/client/service.ts>) | 安装 webConnections 服务，注册菜单、激活提示与组合包详情；管理独立注册的 section、路由事实与 observable。 |
-| [ComposerConnectionMenu](<../packages/ui/src/client/ComposerConnectionMenu.tsx>) | 连接按钮、分组菜单与选择交互。 |
+| [ComposerConnectionMenu](<../packages/ui/src/client/ComposerConnectionMenu.tsx>) | 连接按钮（随输入栏的紧凑信号收起）、上层面板与底部能力切换的两层菜单，以及选择交互。 |
 | [ActivationPrompt](<../packages/ui/src/client/ActivationPrompt.tsx>) · [ProfileDetailSection](<../packages/ui/src/client/ProfileDetailSection.tsx>) | 激活后的只读检查与导航提示；组合包路由状态与升级预检操作。 |
 | [disabled.ts](<../packages/ui/src/client/disabled.ts>) · [preflight.ts](<../packages/ui/src/client/preflight.ts>) | 能力路由与插件行停用判断；升级预检结果与确认后的清理操作。 |
 | [locales.ts](<../packages/ui/src/client/locales.ts>) | 共享界面的中英文词典。 |
@@ -228,7 +228,7 @@ src/
 | [host.ts](<../e2e/harness/host.ts>) | 按 CLI 的步骤在进程内启动 Host（`dsh-app-boot` 的公开导出），叠加 `fixtures/host-plane.yml` 去掉 GUI 行，不绑定端口；`prepare` 回调在插件初始化前接入观察者（如日志）。 |
 | [web.ts](<../e2e/harness/web.ts>) | 启动 `dsh web`，监听 127.0.0.1 上 OS 分配的空闲端口（从不用 3080），输出写 `web.log`。 |
 | [browser.ts](<../e2e/harness/browser.ts>) | 无头 Chromium（Playwright），关闭首次启动的对话框，失败时记录可访问性快照与截图。 |
-| [navigation.ts](<../e2e/harness/navigation.ts>)、[theme.ts](<../e2e/harness/theme.ts>)、[model-visuals.ts](<../e2e/harness/model-visuals.ts>) | 经公开界面打开插件页、设置页、新会话、连接菜单与主题设置。 |
+| [navigation.ts](<../e2e/harness/navigation.ts>)、[theme.ts](<../e2e/harness/theme.ts>)、[model-visuals.ts](<../e2e/harness/model-visuals.ts>) | 经公开界面打开插件页、设置页、新会话、连接菜单及其能力标签与主题设置。 |
 | [upgrade.ts](<../e2e/harness/upgrade.ts>) | `upgradeEnvironment()` 独立 home；安装 0.1.x 前身、创建旧会话、执行升级步骤。 |
 | [remote-fetch-api.ts](<../e2e/harness/remote-fetch-api.ts>)、[model-api.ts](<../e2e/harness/model-api.ts>)、[http.ts](<../e2e/harness/http.ts>) | 回环假远程服务 / 假模型 API（记录方法、路径、请求头与请求体，回复可替换）与本地抓取目标。 |
 
@@ -260,20 +260,20 @@ src/
 | [fetch-remote-ui.e2e.ts](<../e2e/fetch-remote-ui.e2e.ts>) | 远程连接就绪、凭据与自定义端点设置 | 是 | 独立 |
 | [search-model-ui.e2e.ts](<../e2e/search-model-ui.e2e.ts>) | model 连接设置、选择持久化与响应式页面 | 是 | 功能组 / 视口独立 |
 | [search-model-visuals.e2e.ts](<../e2e/search-model-visuals.e2e.ts>) | 列表参数、互斥冲突恢复持久化、信任及 model 菜单状态 | 是 | 每例独立 |
-| [screenshots.e2e.ts](<../e2e/screenshots.e2e.ts>) | 主题、视口、菜单和设置截图矩阵 | 是 | 套件 |
+| [screenshots.e2e.ts](<../e2e/screenshots.e2e.ts>) | 主题、视口、菜单和设置截图矩阵；输入栏宽度扫描下按钮随模型选择器收起、不折行 | 是 | 套件 |
 | [review-settings-visuals.e2e.ts](<../e2e/review-settings-visuals.e2e.ts>) | 设置交互与中英文响应式截图 | 是 | 每例独立 |
 | [upgrade.e2e.ts](<../e2e/upgrade.e2e.ts>) | 前代安装升级、显式 Reset、旧 Off 与路由修复 | 是 | 独立 |
 
 ## 测试清单
 
-当前测试基线为 **84 个文件、1874 个测试**（最终 `pnpm run check`，不含 e2e）；逐包数量如下，参数化用例按实际展开计数。每行对应一个测试文件；tests/fixtures/ 下的辅助模块不计入。
+当前测试基线为 **84 个文件、1878 个测试**（最终 `pnpm run check`，不含 e2e）；逐包数量如下，参数化用例按实际展开计数。每行对应一个测试文件；tests/fixtures/ 下的辅助模块不计入。
 
 | 包 | 测试文件 | 通过测试 |
 | --- | ---: | ---: |
 | core | 25 | 411 |
 | search-enhanced | 25 | 745 |
 | fetch-enhanced | 26 | 636 |
-| ui | 7 | 74 |
+| ui | 7 | 78 |
 | profile | 1 | 8 |
 
 ### core 测试
@@ -372,11 +372,11 @@ src/
 | 文件 | 覆盖要点 |
 | --- | --- |
 | [ui/client-allowlist-disclosure.spec.tsx](<../packages/ui/tests/client-allowlist-disclosure.spec.tsx>) | 本地 allowlist 在共享界面中的披露。 |
-| [ui/client-components.spec.tsx](<../packages/ui/tests/client-components.spec.tsx>) | 菜单、选择、视口与组合包详情交互。 |
+| [ui/client-components.spec.tsx](<../packages/ui/tests/client-components.spec.tsx>) | 按钮与紧凑标记、能力标签与面板、键盘、选择、视口与组合包详情交互。 |
 | [ui/client-locales.spec.ts](<../packages/ui/tests/client-locales.spec.ts>) | 中英文键与插值一致性。 |
 | [ui/client-pure.spec.ts](<../packages/ui/tests/client-pure.spec.ts>) | 路由、停用状态与升级预检纯函数。 |
 | [ui/client-service.spec.ts](<../packages/ui/tests/client-service.spec.ts>) | section / 路由注册、排序与观察生命周期。 |
-| [ui/client-settings-appearance.spec.tsx](<../packages/ui/tests/client-settings-appearance.spec.tsx>) | 设置样式、状态提示与对比度回归。 |
+| [ui/client-settings-appearance.spec.tsx](<../packages/ui/tests/client-settings-appearance.spec.tsx>) | 设置与菜单样式（紧凑信号、面板叠放）、状态提示与对比度回归。 |
 | [ui/plugin.spec.ts](<../packages/ui/tests/plugin.spec.ts>) | 没有能力插件服务时仍可激活。 |
 | [profile/profile.spec.ts](<../packages/profile/tests/profile.spec.ts>) | 依赖、身份、真实 include patch 合成与双能力路由。 |
 

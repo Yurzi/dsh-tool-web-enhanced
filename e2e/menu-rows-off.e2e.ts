@@ -4,7 +4,7 @@ import { en as fetchText } from '../packages/fetch-enhanced/src/client/locales.t
 import { en as uiText } from '../packages/ui/src/client/locales.ts'
 import { afterAll, afterEach, beforeAll, describe, expect, inject, it } from 'vitest'
 import { type App, browserRequired, chromiumPath, openApp, recordBrowserFailure } from './harness/browser.ts'
-import { connectionButton, expandConnectionSection, newSession, openBundle, openConnections } from './harness/navigation.ts'
+import { connectionButton, connectionTabs, openConnectionTab, newSession, openBundle, openConnections } from './harness/navigation.ts'
 import { type WebServer, startWeb } from './harness/web.ts'
 
 const e2e = inject('e2e')
@@ -47,13 +47,14 @@ describe.skipIf(chromiumPath === undefined && !browserRequired).each(cases)('$na
     await newSession(app.page)
     if (remaining === null) {
       expect(await connectionButton(app.page).count()).toBe(0)
-      expect(await app.page.getByRole('menu', { name: uiText['menu.aria'], exact: true }).count()).toBe(0)
+      expect(await app.page.getByRole('dialog', { name: uiText['menu.aria'], exact: true }).count()).toBe(0)
     } else {
       const menu = await openConnections(app.page)
-      const section = await expandConnectionSection(menu, remaining)
+      const section = await openConnectionTab(menu, remaining)
       await section.getByRole('menuitemradio', { name: uiText['menu.offRow'], exact: true }).waitFor()
-      expect(await menu.getByRole('group').count()).toBe(1)
-      expect(await menu.getByRole('group', { name: new RegExp('^' + (remaining === searchText['section.title'] ? fetchText['section.title'] : searchText['section.title']) + '(?: ·|$)') }).count()).toBe(0)
+      expect(await connectionTabs(menu).getByRole('tab').count()).toBe(1)
+      const other = remaining === searchText['section.title'] ? fetchText['section.title'] : searchText['section.title']
+      expect(await connectionTabs(menu).getByRole('tab', { name: other, exact: true }).count()).toBe(0)
     }
     await app.screenshot('menu-' + name + '-disabled-composer')
     expect(app.errors).toEqual([])

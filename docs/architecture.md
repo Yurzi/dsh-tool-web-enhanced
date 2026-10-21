@@ -299,7 +299,7 @@ core 是只有源码的私有包，`package.json` 的 `exports` 指向 `src`，�
 | `commandUi`：`/setup-search`、`/setup-fetch` | 各插件 | 由 core `selectionCommand` 生成；不依赖 ui，ui 停用时仍可用 |
 | `plugins.row.config`（键 `dsh-tool-web-enhanced-profile#<行 id>`） | 各插件 | 行设置页，由 core 骨架按目录组成；只在本行运行时注册（`configForms.whileServed`）；写入前用本插件的 `resolveSettings` 校验写入后的完整文档 |
 | 浏览器服务 `webConnections` | ui | 分区与路由事实的注册表 |
-| `conversation.input.right` | ui | 两个能力共用的一个连接按钮与菜单 |
+| `conversation.input.right` | ui | 两个能力共用的一个连接按钮与菜单；按钮读取输入栏为模型选择器设置的 `--dsh-composer-model-text-display` / `--dsh-composer-model-icon-display`，与它一起收起，不自设断点 |
 | `plugins.bundle.activation`（键为 profile 包名） | ui | 首次启用提示，跑与概览相同的升级预检 |
 | `plugins.detail.section` | ui | profile 详情页的概览：两侧路由、插件行是否停用、升级预检与修复 |
 
@@ -332,7 +332,7 @@ flowchart LR
 - **契约版本**：三个包同一节奏发布、profile 精确锁定版本，分区契约不需要跨版本兼容，变化时三个包一起改。
 - “打开设置”经 `pluginNavigation.openBundle` 打开 profile 的插件页，行设置页在那里展开。
 
-共同约束：界面文字全部走各包 `src/client/locales.ts` 的字典（zh 与 en 同键，命名空间等于行 id），`locale/*.json` 只放插件页读取的 `meta`；Host 只返回错误码与英文消息；样式只用 DSH 的 `--dsw-*` 变量；浏览器从不读取密钥，凭据状态只读“是否已配置”。
+共同约束：界面文字全部走各包 `src/client/locales.ts` 的字典（zh 与 en 同键，命名空间等于行 id），`locale/*.json` 只放插件页读取的 `meta`；Host 只返回错误码与英文消息；样式只用 DSH 的 `--dsw-*` 变量与输入栏公开的上述紧凑信号；浏览器从不读取密钥，凭据状态只读“是否已配置”。
 
 ## 构建与发布
 

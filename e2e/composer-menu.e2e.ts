@@ -11,7 +11,7 @@ import { type App, browserRequired, chromiumPath, openApp, recordBrowserFailure 
 import { addPlugins, enterIsolatedEnvironment } from './harness/environment.ts'
 import { upgradeEnvironment } from './harness/upgrade.ts'
 import { bootHost, type Host } from './harness/host.ts'
-import { connectionButton, expandConnectionSection, newSession, openConnections } from './harness/navigation.ts'
+import { connectionButton, connectionTabs, openConnectionTab, newSession, openConnections } from './harness/navigation.ts'
 import { type WebServer, startWeb } from './harness/web.ts'
 
 // Do not race other specs' persisted draft restoration when opening the workspace picker.
@@ -42,9 +42,9 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Composer search
     const { page } = browser
     const sessionId = await newSession(page)
     const connections = await openConnections(page)
-    await connections.getByRole('group', { name: /^Fetch(?: ·|$)/ }).waitFor()
-    const menu = await expandConnectionSection(connections, searchText['section.title'])
-    await expect.poll(() => menu.getByRole('button', { name: new RegExp('^' + searchText['section.title'] + ' ·') }).getAttribute('aria-label')).toContain(searchText['source.default'])
+    await connectionTabs(connections).getByRole('tab', { name: fetchText['section.title'], exact: true }).waitFor()
+    const menu = await openConnectionTab(connections, searchText['section.title'])
+    await menu.getByText(searchText['source.default'], { exact: true }).waitFor()
     const button = connectionButton(page)
     const sideName = (capability: string, state: string) => uiText['button.side'].replace('{capability}', capability).replace('{state}', state)
     const searchAttention = uiText['button.sideAttention'].replace('{capability}', searchText['section.title']).replace('{state}', 'DeepSeek Messages')
@@ -57,8 +57,8 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Composer search
     expect(await button.locator('span[data-capability="search"]').textContent()).toBe(sideName(searchText['section.title'], uiText['button.off']))
     expect(await button.locator('span[data-capability="fetch"]').textContent()).toBe(fetchText['connection.local'])
     await openConnections(page)
-    await expandConnectionSection(connections, searchText['section.title'])
-    await expect.poll(() => menu.getByRole('button', { name: new RegExp('^' + searchText['section.title'] + ' ·') }).getAttribute('aria-label')).toContain(searchText['source.session'])
+    await openConnectionTab(connections, searchText['section.title'])
+    await menu.getByText(searchText['source.session'], { exact: true }).waitFor()
     expect(await menu.getByRole('menuitemradio', { name: uiText['menu.offRow'], exact: true }).getAttribute('aria-checked')).toBe('true')
     await browser.screenshot('composer-search-off')
     expect(browser.errors).toEqual([])

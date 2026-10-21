@@ -14,8 +14,10 @@ Shared composer connection menu of [dsh-tool-web-enhanced-profile](../profile/RE
 Provides the shared connection menu, activation prompt and profile overview
 without depending on either provider row:
 
-- **Composer button and menu**: one section per running search or fetch
-  plugin, to pick a connection or Off for the conversation.
+- **Composer button and menu**: one tab per running search or fetch plugin,
+  to pick a connection or Off for the conversation. The button collapses to
+  its globe together with DSH's model selector when the composer row is
+  short of room.
 - **Activation prompt**: shown once when the profile is enabled.
 - **Bundle overview** on the profile's Plugins page: whether the `web` row
   routes each capability to this profile, whether a plugin row is disabled,

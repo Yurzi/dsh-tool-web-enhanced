@@ -12,7 +12,7 @@ import { type App, browserRequired, chromiumPath, openApp, recordBrowserFailure 
 import { addPlugins, enterIsolatedEnvironment } from './harness/environment.ts'
 import { upgradeEnvironment } from './harness/upgrade.ts'
 import { bootHost, type Host } from './harness/host.ts'
-import { connectionButton, expandConnectionSection, newSession, openConnections } from './harness/navigation.ts'
+import { connectionButton, connectionTabs, openConnectionTab, newSession, openConnections } from './harness/navigation.ts'
 import { type WebServer, startWeb } from './harness/web.ts'
 
 // A dedicated home keeps this multi-restart GUI flow independent of other specs' draft layouts.
@@ -79,15 +79,15 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Composer fetch 
     const sessionId = await newSession(page)
     selectedSession = sessionId
     const menu = await openConnections(page)
-    await menu.getByRole('group', { name: searchText['section.title'], exact: true }).waitFor()
-    const fetch = await expandConnectionSection(menu, fetchText['section.title'])
-    await expect.poll(() => fetch.getByRole('button', { name: /^Fetch ·/ }).getAttribute('aria-label')).toContain(fetchText['source.default'])
-    expect(await menu.getByRole('group').count()).toBe(2)
+    await connectionTabs(menu).getByRole('tab', { name: searchText['section.title'], exact: true }).waitFor()
+    const fetch = await openConnectionTab(menu, fetchText['section.title'])
+    await fetch.getByText(fetchText['source.default'], { exact: true }).waitFor()
+    expect(await connectionTabs(menu).getByRole('tab').count()).toBe(2)
     await fetch.getByRole('menuitemradio', { name: /^DeepSeek Fetch API/ }).click()
     await menu.waitFor({ state: 'hidden' })
     await openConnections(page)
-    await expandConnectionSection(menu, fetchText['section.title'])
-    await expect.poll(() => fetch.getByRole('button', { name: /^Fetch ·/ }).getAttribute('aria-label')).toContain(fetchText['source.session'])
+    await openConnectionTab(menu, fetchText['section.title'])
+    await fetch.getByText(fetchText['source.session'], { exact: true }).waitFor()
     await expect.poll(() => fetch.getByRole('menuitemradio', { name: /^DeepSeek Fetch API/ }).getAttribute('aria-checked')).toBe('true')
     await fetch.getByRole('menuitemradio', { name: /^DeepSeek Fetch API/ }).scrollIntoViewIfNeeded()
     await app.screenshot('composer-fetch-deepseek')
@@ -108,7 +108,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Composer fetch 
     const sessionId = selectedSession
     await app.page.locator('[data-conversation-session="' + sessionId + '"]').waitFor()
     const menu = await openConnections(app.page)
-    const fetch = await expandConnectionSection(menu, fetchText['section.title'])
+    const fetch = await openConnectionTab(menu, fetchText['section.title'])
     await fetch.getByRole('menuitemradio', { name: uiText['menu.offRow'], exact: true }).click()
     await menu.waitFor({ state: 'hidden' })
     const offName = uiText['button.side'].replace('{capability}', fetchText['section.title']).replace('{state}', uiText['button.off'])
@@ -117,8 +117,8 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Composer fetch 
     expect(await trigger.locator('span[data-capability]').count()).toBe(2)
     expect(await trigger.getAttribute('title')).toBe(await trigger.getAttribute('aria-label'))
     await openConnections(app.page)
-    await expandConnectionSection(menu, fetchText['section.title'])
-    await expect.poll(() => fetch.getByRole('button', { name: /^Fetch ·/ }).getAttribute('aria-label')).toContain(fetchText['source.session'])
+    await openConnectionTab(menu, fetchText['section.title'])
+    await fetch.getByText(fetchText['source.session'], { exact: true }).waitFor()
     await expect.poll(() => fetch.getByRole('menuitemradio', { name: uiText['menu.offRow'], exact: true }).getAttribute('aria-checked')).toBe('true')
     await fetch.getByRole('menuitemradio', { name: uiText['menu.offRow'], exact: true }).scrollIntoViewIfNeeded()
     await app.screenshot('composer-fetch-off')
@@ -146,11 +146,11 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Composer fetch 
     app = await openApp(server.url)
     await app.page.locator('[data-conversation-session="' + sessionId + '"]').waitFor()
     const restoredMenu = await openConnections(app.page)
-    const restoredFetch = await expandConnectionSection(restoredMenu, fetchText['section.title'])
+    const restoredFetch = await openConnectionTab(restoredMenu, fetchText['section.title'])
     await restoredFetch.getByRole('menuitemradio', { name: /^Local HTTP/ }).click()
     await restoredMenu.waitFor({ state: 'hidden' })
     await openConnections(app.page)
-    await expandConnectionSection(restoredMenu, fetchText['section.title'])
+    await openConnectionTab(restoredMenu, fetchText['section.title'])
     await expect.poll(() => restoredFetch.getByRole('menuitemradio', { name: /^Local HTTP/ }).getAttribute('aria-checked')).toBe('true')
     await restoredFetch.getByRole('menuitemradio', { name: /^Local HTTP/ }).scrollIntoViewIfNeeded()
     await app.screenshot('composer-fetch-local-restored')

@@ -15,9 +15,11 @@ import {
   IconSettingsOutlineRegular,
   IconWarningOutlineRegular,
   MenuSurface,
+  SegmentedTabs,
   StateDot,
   Toast,
   useDismissOnOutsidePointer,
+  type SegmentedTab,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
@@ -246,8 +248,8 @@ function ComposerConnectionMenuInner({
   readonly t: Translate
 }) {
   const [open, setOpen] = useState(false)
-  // Accordion: at most one section is open, so the open list gets the whole menu height.
-  const [expanded, setExpanded] = useState<CapabilityName | null>(null)
+  // The capability whose panel the menu shows; the menu opens on the first.
+  const [selected, setSelected] = useState<CapabilityName | null>(null)
   const [notice, setNotice] = useState<{ seq: number; text: string } | null>(null)
   const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null)
   const seqRef = useRef(0)
@@ -264,6 +266,13 @@ function ComposerConnectionMenuInner({
     rootRef,
   })
   useDismissOnOutsidePointer(rootRef, open, setOpen, menuRef)
+
+  // A dialog takes focus: the selected tab, once the placed menu is visible and focusable.
+  const placed = position !== null
+  useEffect(() => {
+    if (!placed) return
+    menuRef.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus({ preventScroll: true })
+  }, [placed])
 
   const sortedSections = useMemo(() => sections.toSorted((a, b) => a.order - b.order), [sections])
   const states = useObservable(useMemo(
@@ -287,7 +296,7 @@ function ComposerConnectionMenuInner({
       close()
     } else {
       setOpen(true)
-      setExpanded(sortedSections[0]!.capability)
+      setSelected(sortedSections[0]!.capability)
       for (const section of sections) {
         void section.selection.load(sessionId, modelKey)
       }
@@ -324,6 +333,7 @@ function ComposerConnectionMenuInner({
     const capability = section.title()
     const attention = needsAttention(side, routeFor(section.capability, routes, webConfig))
     return {
+      section,
       capability: section.capability,
       label: side.kind === 'connection' ? state : t('button.side', { capability, state }),
       name: t(attention ? 'button.sideAttention' : 'button.side', { capability, state }),
@@ -333,12 +343,32 @@ function ComposerConnectionMenuInner({
   const triggerName = sides.map(side => side.name).join(' · ')
   const saving = states.some(state => state.saving)
 
+  // A section that went away while the menu was open hands the panel to the first.
+  const active = sortedSections.find(section => section.capability === selected) ?? sortedSections[0]!
+  const tabId = (capability: CapabilityName): string => `${id}-tab-${capability}`
+  const panelId = (capability: CapabilityName): string => `${id}-panel-${capability}`
+  const [firstTab, ...otherTabs] = sides.map((side): SegmentedTab<CapabilityName> => ({
+    value: side.capability,
+    id: tabId(side.capability),
+    panelId: panelId(side.capability),
+    label: (
+      <span className={css.tabLabel} title={side.name}>
+        <span className={css.tabTitle}>{side.section.title()}</span>
+        {side.attention && <StateDot state="warning" className={css.tabMark} />}
+      </span>
+    ),
+  }))
+
   const disabled = checkDisabledCapabilities({
     searchServed,
     fetchServed,
     webConfig,
     routes,
   })
+  const unavailable = [
+    ...(disabled.searchDisabled ? [t('disabled.search')] : []),
+    ...(disabled.fetchDisabled ? [t('disabled.fetch')] : []),
+  ]
 
   return (
     <div
@@ -354,23 +384,35 @@ function ComposerConnectionMenuInner({
         type="button"
         className={css.trigger}
         aria-label={triggerName}
-        aria-haspopup="menu"
+        aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? `${id}-menu` : undefined}
         title={triggerName}
         onClick={onTriggerClick}
       >
-        <IconGlobeOutlineRegular className={css.icon} size={16} />
-        <span className={css.sides}>
-          {sides.map((side, index) => (
-            <Fragment key={side.capability}>
-              {index > 0 && <span className={css.sideSeparator} aria-hidden="true">·</span>}
-              <span className={css.side} data-capability={side.capability}>
-                <span className={css.sideLabel}>{side.label}</span>
-                {side.attention && <StateDot state="warning" className={css.sideMark} />}
+        <span className={css.icon}>
+          <IconGlobeOutlineRegular size={16} />
+          {/* The compact display: the labels are hidden, so each side's mark sits on the globe. */}
+          <span className={css.iconMarks}>
+            {sides.map(side => side.attention && (
+              <span key={side.capability} className={css.iconMark} data-mark={side.capability}>
+                <StateDot state="warning" />
               </span>
-            </Fragment>
-          ))}
+            ))}
+          </span>
+        </span>
+        <span className={css.labels}>
+          <span className={css.sides}>
+            {sides.map((side, index) => (
+              <Fragment key={side.capability}>
+                {index > 0 && <span className={css.sideSeparator} aria-hidden="true">·</span>}
+                <span className={css.side} data-capability={side.capability}>
+                  <span className={css.sideLabel}>{side.label}</span>
+                  {side.attention && <StateDot state="warning" className={css.sideMark} />}
+                </span>
+              </Fragment>
+            ))}
+          </span>
         </span>
         {saving ? (
           <StateDot state="ongoing" className={css.busy} />
@@ -389,72 +431,61 @@ function ComposerConnectionMenuInner({
             id={`${id}-menu`}
             className={css.menu}
             style={position ?? { visibility: 'hidden', left: 0, top: 0 }}
-            role="menu"
+            role="dialog"
             aria-label={t('menu.aria')}
           >
-            {sortedSections.map(section => (
-              <SectionItem
-                key={section.capability}
-                section={section}
-                route={routeFor(section.capability, routes, webConfig)}
-                sessionId={sessionId}
-                expanded={expanded === section.capability}
-                onExpandedChange={next => {
-                  setExpanded(current => next ? section.capability : current === section.capability ? null : current)
-                }}
-                onChoose={connId => void choose(section, connId)}
-                onCloseMenu={close}
-                t={t}
+            {/* Every panel shares one grid cell: the menu keeps the tallest one's height while switching. */}
+            <div className={css.panels}>
+              {sortedSections.map(section => (
+                <SectionPanel
+                  key={section.capability}
+                  section={section}
+                  route={routeFor(section.capability, routes, webConfig)}
+                  sessionId={sessionId}
+                  active={section === active}
+                  tabId={tabId(section.capability)}
+                  panelId={panelId(section.capability)}
+                  onChoose={connId => void choose(section, connId)}
+                  onCloseMenu={close}
+                  t={t}
+                />
+              ))}
+            </div>
+
+            {unavailable.length > 0 && (
+              <div className={css.notices}>
+                {unavailable.map(text => (
+                  <div key={text} className={css.disabledNotice} role="status">
+                    <IconWarningOutlineRegular size={14} className={css.noticeIcon} />
+                    <div>
+                      <div>{text}</div>
+                      {onOpenPlugins !== undefined && (
+                        <button
+                          type="button"
+                          className={css.linkAction}
+                          onClick={() => {
+                            close()
+                            onOpenPlugins()
+                          }}
+                        >
+                          {t('disabled.openPlugins')}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* The bottom layer, nearest the button: which capability the panel above shows. */}
+            <div className={css.switcher}>
+              <SegmentedTabs
+                items={[firstTab!, ...otherTabs]}
+                value={active.capability}
+                onChange={setSelected}
+                label={t('menu.tabs')}
               />
-            ))}
-
-            {disabled.searchDisabled && (
-              <>
-                <div className={css.separator} role="separator" />
-                <div className={css.disabledNotice} role="status">
-                  <IconWarningOutlineRegular size={14} className={css.noticeIcon} />
-                  <div>
-                    <div>{t('disabled.search')}</div>
-                    {onOpenPlugins !== undefined && (
-                      <button
-                        type="button"
-                        className={css.linkAction}
-                        onClick={() => {
-                          close()
-                          onOpenPlugins()
-                        }}
-                      >
-                        {t('disabled.openPlugins')}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </>
-            )}
-
-            {disabled.fetchDisabled && (
-              <>
-                <div className={css.separator} role="separator" />
-                <div className={css.disabledNotice} role="status">
-                  <IconWarningOutlineRegular size={14} className={css.noticeIcon} />
-                  <div>
-                    <div>{t('disabled.fetch')}</div>
-                    {onOpenPlugins !== undefined && (
-                      <button
-                        type="button"
-                        className={css.linkAction}
-                        onClick={() => {
-                          close()
-                          onOpenPlugins()
-                        }}
-                      >
-                        {t('disabled.openPlugins')}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </>
-            )}
+            </div>
           </MenuSurface>,
           document.body,
         )}
@@ -473,12 +504,13 @@ function ComposerConnectionMenuInner({
   )
 }
 
-function SectionItem({
+function SectionPanel({
   section,
   route,
   sessionId,
-  expanded,
-  onExpandedChange,
+  active,
+  tabId,
+  panelId,
   onChoose,
   onCloseMenu,
   t,
@@ -486,13 +518,13 @@ function SectionItem({
   readonly section: ConnectionSection
   readonly route: Route
   readonly sessionId: string
-  readonly expanded: boolean
-  readonly onExpandedChange: (expanded: boolean) => void
+  readonly active: boolean
+  readonly tabId: string
+  readonly panelId: string
   readonly onChoose: (connectionId: string | null) => void
   readonly onCloseMenu: () => void
   readonly t: Translate
 }) {
-  const id = useId()
   const state = useObservable(section.selection.source(sessionId))
   const settingsFn = useObservable(section.settings)
   const bodyRef = useRef<HTMLDivElement | null>(null)
@@ -500,76 +532,87 @@ function SectionItem({
   const view = state.view
   const loaded = view !== undefined
 
-  // Opening a section, or its list arriving while open, brings the chosen row into view.
+  // Showing a panel, or its list arriving while shown, brings the chosen row into view.
   useEffect(() => {
-    if (!expanded || !loaded) return
+    if (!active || !loaded) return
     bodyRef.current?.querySelector('[aria-checked="true"]')?.scrollIntoView({ block: 'nearest' })
-  }, [expanded, loaded])
-  const source = view ? section.sourceText(view) : ''
+  }, [active, loaded])
+
   const current = sideText(sideState(section, state), t)
-  const groupLabel = [section.title(), current, source].filter(Boolean).join(' · ')
+  // A failed read leaves no current source to name.
+  const source = view !== undefined && state.readFailure === undefined ? section.sourceText(view) : ''
+  const summaryId = panelId + '-summary'
 
   return (
-    <div className={clsx(css.sectionBlock, expanded && css.sectionExpanded)} role="group" aria-label={section.title()}>
-      <button
-        type="button"
-        id={id + '-heading'}
-        className={css.sectionHeading}
-        aria-expanded={expanded}
-        aria-controls={id + '-content'}
-        title={groupLabel}
-        aria-label={groupLabel}
-        onClick={() => onExpandedChange(!expanded)}
-        onKeyDown={event => {
-          if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
-            event.preventDefault()
-            onExpandedChange(event.key === 'ArrowRight')
-          }
-        }}
-      >
-        <span className={css.sectionSummary}>
-          <span className={css.sectionTitle}>{section.title()}</span>
-          <span aria-hidden="true">·</span>
-          <span className={css.sectionCurrent}>{current}</span>
-          {source && <><span aria-hidden="true">·</span><span className={css.sectionSource}>{source}</span></>}
-        </span>
-        <IconChevronDownOutlineRegular size={12} className={clsx(css.chevron, expanded && css.chevronOpen)} />
-      </button>
-      <div id={id + '-content'} className={css.sectionContents} hidden={!expanded}>
-        <div ref={bodyRef} className={css.sectionBody}>
-          {route.kind === 'other' && (
-            <div className={css.routeNotice} role="alert">
-              <IconWarningOutlineRegular size={14} className={css.noticeIcon} />
-              <span>{t('menu.routeWarning', { provider: route.provider })}</span>
-            </div>
-          )}
-
-          {state.readFailure === 'invalid-settings' ? (
-            // Retrying cannot help: the settings must be fixed, through the settings entry below.
-            <div className={css.routeNotice} role="alert">
-              <IconWarningOutlineRegular size={14} className={css.noticeIcon} />
-              <span>{t('menu.invalidSettings', { capability: section.title() })}</span>
-            </div>
-          ) : view === undefined ? (
-            state.readFailure === 'failed' ? (
-              <button
-                type="button"
-                className={css.row}
-                onClick={() => {
-                  void section.selection.load(sessionId)
-                }}
-              >
-                <span className={clsx(css.rowLabel, css.rowCaptionWarn)}>
-                  {t('button.readFailed')}
-                </span>
-              </button>
-            ) : (
-              <div className={css.empty}>{t('button.loading')}</div>
-            )
-          ) : (
+    <div
+      role="tabpanel"
+      id={panelId}
+      aria-labelledby={tabId}
+      aria-describedby={summaryId}
+      // Hidden panels keep their size so the menu does not jump; they leave the tab order and the accessibility tree.
+      aria-hidden={active ? undefined : true}
+      className={clsx(css.panel, !active && css.panelInactive)}
+    >
+      <div className={css.panelHeader}>
+        <p id={summaryId} className={css.summary} title={[current, source].filter(Boolean).join(' · ')}>
+          <span className={css.summaryCurrent}>{current}</span>
+          {source && (
             <>
+              <span className={css.summarySeparator} aria-hidden="true">·</span>
+              <span className={css.summarySource}>{source}</span>
+            </>
+          )}
+        </p>
+        {/* An icon, so the summary keeps the header's width. */}
+        {settingsFn !== undefined && (
+          <button
+            type="button"
+            className={css.settingsButton}
+            aria-label={t('menu.settings')}
+            title={t('menu.settings')}
+            onClick={() => {
+              onCloseMenu()
+              settingsFn()
+            }}
+          >
+            <IconSettingsOutlineRegular size={14} />
+          </button>
+        )}
+      </div>
 
-              {/* "Off" row */}
+      <div ref={bodyRef} className={css.panelBody}>
+        {route.kind === 'other' && (
+          <div className={css.routeNotice} role="alert">
+            <IconWarningOutlineRegular size={14} className={css.noticeIcon} />
+            <span>{t('menu.routeWarning', { provider: route.provider })}</span>
+          </div>
+        )}
+
+        {state.readFailure === 'invalid-settings' ? (
+          // Retrying cannot help: the settings must be fixed, through the settings entry above.
+          <div className={css.routeNotice} role="alert">
+            <IconWarningOutlineRegular size={14} className={css.noticeIcon} />
+            <span>{t('menu.invalidSettings', { capability: section.title() })}</span>
+          </div>
+        ) : view === undefined ? (
+          state.readFailure === 'failed' ? (
+            <button
+              type="button"
+              className={css.row}
+              onClick={() => {
+                void section.selection.load(sessionId)
+              }}
+            >
+              <span className={clsx(css.rowLabel, css.rowCaptionWarn)}>
+                {t('button.readFailed')}
+              </span>
+            </button>
+          ) : (
+            <div className={css.empty}>{t('button.loading')}</div>
+          )
+        ) : (
+          <>
+            <div role="menu" aria-label={section.title()}>
               <button
                 type="button"
                 role="menuitemradio"
@@ -584,83 +627,60 @@ function SectionItem({
                 </span>
               </button>
 
-              {/* Connections list */}
-              {view.connections.length > 0 ? (
-                view.connections.map(conn => {
-                  const text = section.describe(conn)
-                  const isSelected = conn.id === view.selection.connectionId
-                  const isReady = conn.status === 'ready'
-                  const canOpenSettings = !isReady && settingsFn !== undefined
+              {view.connections.map(conn => {
+                const text = section.describe(conn)
+                const isSelected = conn.id === view.selection.connectionId
+                const isReady = conn.status === 'ready'
+                const canOpenSettings = !isReady && settingsFn !== undefined
 
-                  const onClick = () => {
-                    if (canOpenSettings) {
-                      onCloseMenu()
-                      settingsFn()
-                    } else if (isReady) {
-                      onChoose(conn.id)
-                    }
+                const onClick = () => {
+                  if (canOpenSettings) {
+                    onCloseMenu()
+                    settingsFn()
+                  } else if (isReady) {
+                    onChoose(conn.id)
                   }
+                }
 
-                  return (
-                    <button
-                      key={conn.id}
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={isSelected}
-                      className={css.row}
-                      disabled={isReady ? state.saving : !canOpenSettings}
-                      title={text.reason ?? text.label}
-                      onClick={onClick}
-                    >
-                      <div className={css.rowContent}>
-                        <span className={css.rowLabel}>{text.label}</span>
-                        {text.caption && !text.reason && (
-                          <span className={css.rowCaption}>{text.caption}</span>
-                        )}
-                        {text.reason && (
-                          <span className={clsx(css.rowCaption, css.rowCaptionWarn)}>
-                            <span className={css.warnDot} aria-hidden="true" />
-                            <span>{text.reason}</span>
-                          </span>
-                        )}
-                      </div>
-                      <span className={css.check}>
-                        {isSelected && <IconCheckOutlineRegular size={14} />}
-                      </span>
-                    </button>
-                  )
-                })
-              ) : (
-                <div className={css.empty}>{t('menu.empty')}</div>
-              )}
+                return (
+                  <button
+                    key={conn.id}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={isSelected}
+                    className={css.row}
+                    disabled={isReady ? state.saving : !canOpenSettings}
+                    title={text.reason ?? text.label}
+                    onClick={onClick}
+                  >
+                    <div className={css.rowContent}>
+                      <span className={css.rowLabel}>{text.label}</span>
+                      {text.caption && !text.reason && (
+                        <span className={css.rowCaption}>{text.caption}</span>
+                      )}
+                      {text.reason && (
+                        <span className={clsx(css.rowCaption, css.rowCaptionWarn)}>
+                          <span className={css.warnDot} aria-hidden="true" />
+                          <span>{text.reason}</span>
+                        </span>
+                      )}
+                    </div>
+                    <span className={css.check}>
+                      {isSelected && <IconCheckOutlineRegular size={14} />}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
 
-              {/* Options component */}
-              {section.Options && (
-                <div className={css.optionsWrapper}>
-                  <section.Options sessionId={sessionId} />
-                </div>
-              )}
-            </>
-          )}
+            {view.connections.length === 0 && <div className={css.empty}>{t('menu.empty')}</div>}
 
-        </div>
-
-        {/* Settings entry */}
-        {settingsFn !== undefined && (
-          <div className={css.sectionFooter}>
-            <button
-              type="button"
-              role="menuitem"
-              className={css.settingsButton}
-              onClick={() => {
-                onCloseMenu()
-                settingsFn()
-              }}
-            >
-              <IconSettingsOutlineRegular size={14} />
-              <span>{t('menu.settings')}</span>
-            </button>
-          </div>
+            {section.Options && (
+              <div className={css.optionsWrapper}>
+                <section.Options sessionId={sessionId} />
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

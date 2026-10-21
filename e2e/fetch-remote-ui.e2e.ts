@@ -10,7 +10,7 @@ import { firecrawlResponse, remoteFetchFixture } from './fixtures/remote-fetch.t
 import { type App, browserRequired, chromiumPath, openApp, recordBrowserFailure } from './harness/browser.ts'
 import { addPlugins, composedRows, enterIsolatedEnvironment } from './harness/environment.ts'
 import { bootHost } from './harness/host.ts'
-import { expandConnectionSection, newSession, openConnections, openFetchSettings } from './harness/navigation.ts'
+import { openConnectionTab, newSession, openConnections, openFetchSettings } from './harness/navigation.ts'
 import { startRemoteFetchApi } from './harness/remote-fetch-api.ts'
 import { upgradeEnvironment } from './harness/upgrade.ts'
 import { type WebServer, startWeb } from './harness/web.ts'
@@ -80,7 +80,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Remote fetch co
     const { page } = app
     const sessionId = await newSession(page)
     const menu = await openConnections(page)
-    const fetch = await expandConnectionSection(menu, fetchText['section.title'])
+    const fetch = await openConnectionTab(menu, fetchText['section.title'])
     for (const name of ['Exa', 'Firecrawl', 'Tavily']) {
       const row = fetch.getByRole('menuitemradio', { name: new RegExp('^' + name + '(?: |$)') })
       await row.waitFor()
@@ -95,9 +95,9 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Remote fetch co
     await fetch.getByRole('menuitemradio', { name: /^Firecrawl(?: |$)/ }).click()
     await menu.waitFor({ state: 'hidden' })
     await openConnections(page)
-    await expandConnectionSection(menu, fetchText['section.title'])
+    await openConnectionTab(menu, fetchText['section.title'])
     await expect.poll(() => fetch.getByRole('menuitemradio', { name: /^Firecrawl(?: |$)/ }).getAttribute('aria-checked')).toBe('true')
-    await expect.poll(() => fetch.getByRole('button', { name: /^Fetch ·/ }).getAttribute('aria-label')).toContain(fetchText['source.session'])
+    await fetch.getByText(fetchText['source.session'], { exact: true }).waitFor()
     await app.screenshot('fetch-remote-menu-firecrawl-selected')
     // A missing-key row opens settings rather than changing the conversation selection.
     await tinyfish.click()
@@ -105,7 +105,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Remote fetch co
     await page.getByRole('treeitem', { name: 'New Session', exact: true }).click()
     await page.locator('[data-conversation-session="' + sessionId + '"]').waitFor()
     await openConnections(page)
-    await expandConnectionSection(menu, fetchText['section.title'])
+    await openConnectionTab(menu, fetchText['section.title'])
     expect(await fetch.getByRole('menuitemradio', { name: /^Firecrawl(?: |$)/ }).getAttribute('aria-checked')).toBe('true')
     expect(await tinyfish.getAttribute('aria-checked')).toBe('false')
     expect(app.errors).toEqual([])

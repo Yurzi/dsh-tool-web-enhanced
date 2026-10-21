@@ -75,27 +75,33 @@ export async function newSession(page: Page): Promise<string> {
   return id
 }
 
-/** Expand a capability's public accordion before interacting with its rows. */
-export async function expandConnectionSection(menu: Locator, title: string): Promise<Locator> {
-  const section = menu.getByRole('group', { name: title, exact: true })
-  const heading = section.getByRole('button', { name: new RegExp('^' + title + ' ·') })
-  if (await heading.getAttribute('aria-expanded') !== 'true') await heading.click()
-  await expect.poll(() => heading.getAttribute('aria-expanded')).toBe('true')
-  // Connection sections are an accordion; expanding one must collapse the other.
-  await expect.poll(() => menu.getByRole('button', { expanded: true }).count()).toBe(1)
-  return section
+/** Show a capability's panel through its public tab before interacting with its rows. */
+export async function openConnectionTab(menu: Locator, title: string): Promise<Locator> {
+  const tab = menu.getByRole('tab', { name: title, exact: true })
+  if (await tab.getAttribute('aria-selected') !== 'true') await tab.click()
+  await expect.poll(() => tab.getAttribute('aria-selected')).toBe('true')
+  const panel = menu.getByRole('tabpanel', { name: title, exact: true })
+  // One panel at a time: the other capability's panel keeps its size but leaves the accessibility tree.
+  await panel.waitFor()
+  await expect.poll(() => menu.getByRole('tabpanel').count()).toBe(1)
+  return panel
+}
+
+/** The capability switch at the bottom of the connections menu. */
+export function connectionTabs(menu: Locator, text: Readonly<Record<'menu.tabs', string>> = uiText): Locator {
+  return menu.getByRole('tablist', { name: text['menu.tabs'], exact: true })
 }
 
 /** The composer trigger has one public capability span per side, independent of its dynamic name. */
 export function connectionButton(page: Page): Locator {
-  return page.getByRole('button').and(page.locator('[aria-haspopup="menu"]'))
+  return page.getByRole('button').and(page.locator('[aria-haspopup="dialog"]'))
     .filter({ has: page.locator('span[data-capability]') })
 }
 
 export async function openConnections(page: Page, text: Readonly<Record<'menu.aria', string>> = uiText): Promise<Locator> {
   const button = connectionButton(page)
   if (await button.getAttribute('aria-expanded') !== 'true') await button.click()
-  const menu = page.getByRole('menu', { name: text['menu.aria'], exact: true })
+  const menu = page.getByRole('dialog', { name: text['menu.aria'], exact: true })
   await menu.waitFor()
   return menu
 }

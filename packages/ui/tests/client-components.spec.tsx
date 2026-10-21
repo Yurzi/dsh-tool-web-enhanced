@@ -12,8 +12,11 @@ import overviewCss from '../src/client/ProfileDetailSection.module.css'
 import type { Translate } from '../src/client/ComposerConnectionMenu.tsx'
 import menuCss from '../src/client/ComposerConnectionMenu.module.css'
 
-vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => {
+vi.mock('@deepseek-ai/dsh-client-ui-primitives', async importOriginal => {
+  // The capability tabs are DSH's own: their roles and keyboard walk are part of the menu's behaviour.
+  const { SegmentedTabs } = await importOriginal<typeof import('@deepseek-ai/dsh-client-ui-primitives')>()
   return {
+    SegmentedTabs,
     Button: ({ children, onClick, disabled, size, ...props }: any) => (
       <button type="button" onClick={onClick} disabled={disabled} data-size={size} {...props}>
         {children}
@@ -309,9 +312,14 @@ describe('ComposerConnectionMenu', () => {
     expect(button.querySelector('[data-state="warning"]')).toBeNull()
   })
 
-  /** Which sides of the button carry a needs-attention mark. */
-  const markedSides = (button: HTMLElement) =>
-    [...button.querySelectorAll('[data-state="warning"]')].map(mark => mark.closest('[data-capability]')?.getAttribute('data-capability'))
+  /** Which sides of the button carry a needs-attention mark, beside their labels and on the globe. */
+  const markedSides = (button: HTMLElement) => {
+    const labelled = [...button.querySelectorAll('[data-capability] [data-state="warning"]')]
+      .map(mark => mark.closest('[data-capability]')!.getAttribute('data-capability'))
+    const globe = [...button.querySelectorAll('[data-mark]')].map(mark => mark.getAttribute('data-mark'))
+    expect(globe).toEqual(labelled)
+    return labelled
+  }
 
   it('marks only the side that needs attention and names a non-connection state with its side', () => {
     const webConnections = createWebConnectionsService()
@@ -351,32 +359,32 @@ describe('ComposerConnectionMenu', () => {
     expect(markedSides(button)).toEqual(['search', 'fetch'])
   })
 
-  it('keeps each side mark outside its label so a narrow composer can hide the labels and keep the marks', () => {
+  it('renders each side mark beside its label and again on the globe for the compact display', () => {
     const webConnections = createWebConnectionsService()
     webConnections.register(createMockSection({ capability: 'search', order: 10, readFailure: 'failed' }).section)
     webConnections.register(createMockSection({ capability: 'fetch', order: 20, readFailure: 'failed' }).section)
     render(<ComposerConnectionMenu sessionId="sess-1" webConnections={webConnections} searchServed fetchServed t={t} />)
 
-    for (const side of trigger().querySelectorAll('[data-capability]')) {
+    const button = trigger()
+    const labels = button.querySelector('.' + menuCss.labels)!
+    const globe = button.querySelector('.' + menuCss.icon)!
+    for (const side of button.querySelectorAll('[data-capability]')) {
       const label = side.querySelector('.' + menuCss.sideLabel)!
       const mark = side.querySelector('.' + menuCss.sideMark)!
-      expect(label).not.toBeNull()
-      expect(mark).not.toBeNull()
+      expect(labels.contains(side)).toBe(true)
       expect(label.contains(mark)).toBe(false)
+      const capability = side.getAttribute('data-capability')
+      expect(globe.querySelector('.' + menuCss.iconMarks + ' [data-mark="' + capability + '"] [data-state="warning"]')).not.toBeNull()
     }
-    const rules = [...document.styleSheets].flatMap(sheet => [...sheet.cssRules])
-    // jsdom parses @container rules but does not expose CSSContainerRule as a global.
-    const container = (width: string) => rules.find(rule => rule.cssText.startsWith('@container') && rule.cssText.includes(width)) as CSSGroupingRule
-    const hidden = (rule: CSSGroupingRule) => [...rule.cssRules]
-      .filter(inner => inner instanceof CSSStyleRule && inner.style.getPropertyValue('display') === 'none')
-      .flatMap(inner => (inner as CSSStyleRule).selectorText.split(',').map(selector => selector.trim()))
-    for (const width of ['460px', '380px']) {
-      expect(hidden(container(width))).not.toContain('.' + menuCss.sideMark)
-    }
-    expect(hidden(container('460px'))).toEqual(expect.arrayContaining(['.' + menuCss.sideLabel, '.' + menuCss.sideSeparator]))
+    expect(labels.contains(globe)).toBe(false)
+    expect(markedSides(button)).toEqual(['search', 'fetch'])
   })
 
-  it('opens menu on click and displays both sections in order, triggering selection load', () => {
+  const dialog = () => screen.getByRole('dialog', { name: t('menu.aria') })
+  const tab = (name: string) => screen.getByRole('tab', { name })
+  const panel = (name: string) => screen.getByRole('tabpanel', { name })
+
+  it('opens a dialog on the first capability tab, tabs in section order, triggering selection load', () => {
     const webConnections = createWebConnectionsService()
     const { section: searchSection, loadMock } = createMockSection({
       capability: 'search',
@@ -403,16 +411,23 @@ describe('ComposerConnectionMenu', () => {
     )
 
     const button = trigger()
+    expect(button.getAttribute('aria-haspopup')).toBe('dialog')
     fireEvent.click(button)
 
-    expect(screen.getByRole('menu')).toBeDefined()
-    expect(screen.getByText(/^Web Search\b/)).toBeDefined()
-    expect(screen.getByText(/^Web Fetch\b/)).toBeDefined()
+    expect(button.getAttribute('aria-controls')).toBe(dialog().id)
+    const tablist = within(dialog()).getByRole('tablist', { name: t('menu.tabs') })
+    expect(within(tablist).getAllByRole('tab').map(item => [item.textContent, item.getAttribute('aria-selected')])).toEqual([
+      ['Web Search', 'true'],
+      ['Web Fetch', 'false'],
+    ])
+    // The switch is the bottom layer, after the panels.
+    expect(dialog().lastElementChild?.contains(tablist)).toBe(true)
+    expect(panel('Web Search')).toBeDefined()
 
     expect(loadMock).toHaveBeenCalledWith('sess-1', 'deepseek-official/deepseek-chat')
   })
 
-  it('keeps both section headers available and expands only the first list by default', () => {
+  it('shows one capability panel at a time and switches it from the tabs', () => {
     const webConnections = createWebConnectionsService()
     for (const [capability, order, label] of [
       ['search', 10, 'Search connection'],
@@ -427,20 +442,43 @@ describe('ComposerConnectionMenu', () => {
     render(<ComposerConnectionMenu sessionId="sess-1" webConnections={webConnections} searchServed fetchServed t={t} />)
     fireEvent.click(trigger())
 
-    const search = screen.getByRole('button', { name: 'Web Search · Search connection · Chosen for this conversation' })
-    const fetch = screen.getByRole('button', { name: 'Web Fetch · Fetch connection · Chosen for this conversation' })
-    expect(search.getAttribute('aria-expanded')).toBe('true')
-    expect(fetch.getAttribute('aria-expanded')).toBe('false')
-    expect(screen.getByRole('menuitemradio', { name: /Search connection/ })).toBeDefined()
+    const search = panel('Web Search')
+    expect(tab('Web Search').getAttribute('aria-controls')).toBe(search.id)
+    expect(document.getElementById(search.getAttribute('aria-describedby')!)?.textContent).toBe('Search connection·Chosen for this conversation')
+    expect(within(search).getByRole('menuitemradio', { name: /Search connection/ })).toBeDefined()
     expect(screen.queryByRole('menuitemradio', { name: /Fetch connection/ })).toBeNull()
-    expect(document.getElementById(fetch.getAttribute('aria-controls')!)?.hidden).toBe(true)
+    expect(screen.queryByRole('tabpanel', { name: 'Web Fetch' })).toBeNull()
 
-    fireEvent.click(fetch)
-    expect(fetch.getAttribute('aria-expanded')).toBe('true')
-    expect(screen.getByRole('menuitemradio', { name: /Fetch connection/ })).toBeDefined()
+    fireEvent.click(tab('Web Fetch'))
+    expect(tab('Web Fetch').getAttribute('aria-selected')).toBe('true')
+    expect(tab('Web Search').getAttribute('aria-selected')).toBe('false')
+    expect(within(panel('Web Fetch')).getByRole('menuitemradio', { name: /Fetch connection/ })).toBeDefined()
+    expect(screen.queryByRole('menuitemradio', { name: /Search connection/ })).toBeNull()
   })
 
-  it('keeps at most one section open, collapses the open one on its own heading, and reopens on the first', () => {
+  it('keeps the hidden panel laid out in the same cell, out of reach, so switching keeps the menu size', () => {
+    const webConnections = createWebConnectionsService()
+    for (const [capability, order] of [['search', 10], ['fetch', 20]] as const) {
+      webConnections.register(createMockSection({ capability, order }).section)
+    }
+    render(<ComposerConnectionMenu sessionId="sess-1" webConnections={webConnections} searchServed fetchServed t={t} />)
+    fireEvent.click(trigger())
+
+    const panels = screen.getAllByRole('tabpanel', { hidden: true })
+    expect(panels).toHaveLength(2)
+    expect(new Set(panels.map(element => element.parentElement))).toEqual(new Set([dialog().querySelector('.' + menuCss.panels)]))
+    const fetch = panels.find(element => element.getAttribute('aria-labelledby') === tab('Web Fetch').id)!
+    expect(fetch.getAttribute('aria-hidden')).toBe('true')
+    expect(fetch.classList.contains(menuCss.panelInactive!)).toBe(true)
+    expect(getComputedStyle(fetch).visibility).toBe('hidden')
+
+    fireEvent.click(tab('Web Fetch'))
+    expect(fetch.getAttribute('aria-hidden')).toBeNull()
+    expect(getComputedStyle(fetch).visibility).not.toBe('hidden')
+    expect(screen.getAllByRole('tabpanel', { hidden: true })).toEqual(panels)
+  })
+
+  it('reopens on the first tab', () => {
     const webConnections = createWebConnectionsService()
     for (const [capability, order] of [['search', 10], ['fetch', 20]] as const) {
       webConnections.register(createMockSection({ capability, order }).section)
@@ -448,29 +486,17 @@ describe('ComposerConnectionMenu', () => {
     render(<ComposerConnectionMenu sessionId="sess-1" webConnections={webConnections} searchServed fetchServed t={t} />)
     const button = trigger()
     fireEvent.click(button)
-    const search = screen.getByRole('button', { name: /^Web Search ·/ })
-    const fetch = screen.getByRole('button', { name: /^Web Fetch ·/ })
-
-    fireEvent.click(fetch)
-    expect(fetch.getAttribute('aria-expanded')).toBe('true')
-    expect(search.getAttribute('aria-expanded')).toBe('false')
-    expect(document.getElementById(search.getAttribute('aria-controls')!)?.hidden).toBe(true)
-
-    fireEvent.click(fetch)
-    expect(fetch.getAttribute('aria-expanded')).toBe('false')
-    expect(search.getAttribute('aria-expanded')).toBe('false')
-
-    fireEvent.click(search)
-    fireEvent.click(fetch)
-    expect(search.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(tab('Web Fetch'))
+    expect(tab('Web Fetch').getAttribute('aria-selected')).toBe('true')
 
     fireEvent.click(button)
+    expect(screen.queryByRole('dialog')).toBeNull()
     fireEvent.click(button)
-    expect(screen.getByRole('button', { name: /^Web Search ·/ }).getAttribute('aria-expanded')).toBe('true')
-    expect(screen.getByRole('button', { name: /^Web Fetch ·/ }).getAttribute('aria-expanded')).toBe('false')
+    expect(tab('Web Search').getAttribute('aria-selected')).toBe('true')
+    expect(tab('Web Fetch').getAttribute('aria-selected')).toBe('false')
   })
 
-  it('scrolls the selected row of a section into view when it opens', () => {
+  it('scrolls the selected row of a panel into view when it is shown', () => {
     const webConnections = createWebConnectionsService()
     const connections = ['A', 'B', 'C', 'D'].map(name => mockConnection('conn-' + name, 'Connection ' + name))
     webConnections.register(createMockSection({ capability: 'search', order: 10, selectedId: 'conn-B', connections }).section)
@@ -478,39 +504,56 @@ describe('ComposerConnectionMenu', () => {
     render(<ComposerConnectionMenu sessionId="sess-1" webConnections={webConnections} searchServed fetchServed t={t} />)
     fireEvent.click(trigger())
 
-    const searchGroup = screen.getByRole('group', { name: 'Web Search' })
-    expect(scrolled).toEqual([{ element: within(searchGroup).getByRole('menuitemradio', { name: /Connection B/ }), options: { block: 'nearest' } }])
+    expect(scrolled).toEqual([{ element: within(panel('Web Search')).getByRole('menuitemradio', { name: /Connection B/ }), options: { block: 'nearest' } }])
 
     scrolled = []
-    fireEvent.click(screen.getByRole('button', { name: /^Web Fetch ·/ }))
-    const fetchGroup = screen.getByRole('group', { name: 'Web Fetch' })
-    const selected = within(fetchGroup).getByRole('menuitemradio', { name: /Connection D/ })
+    fireEvent.click(tab('Web Fetch'))
+    const selected = within(panel('Web Fetch')).getByRole('menuitemradio', { name: /Connection D/ })
     expect(selected.getAttribute('aria-checked')).toBe('true')
     expect(scrolled).toEqual([{ element: selected, options: { block: 'nearest' } }])
   })
 
-  it('exposes keyboard-focusable disclosure buttons and opens them with arrow keys', () => {
+  it('walks the tabs with the arrow, Home and End keys, keeping one tab stop, and closes on Escape', () => {
     const webConnections = createWebConnectionsService()
     for (const [capability, order] of [['search', 10], ['fetch', 20]] as const) {
       webConnections.register(createMockSection({ capability, order }).section)
     }
     render(<ComposerConnectionMenu sessionId="sess-1" webConnections={webConnections} searchServed fetchServed t={t} />)
     fireEvent.click(trigger())
-    const fetch = screen.getByRole('button', { name: /^Web Fetch ·/ })
-    expect(fetch.tagName).toBe('BUTTON') // Native Enter/Space activation, no simulated button roles.
-    fetch.focus()
+    const search = tab('Web Search')
+    const fetch = tab('Web Fetch')
+    expect(search.tagName).toBe('BUTTON') // Native Enter/Space activation, no simulated button roles.
+    expect([search.tabIndex, fetch.tabIndex]).toEqual([0, -1])
+    // Opening the dialog moves focus into it, onto the selected tab.
+    expect(document.activeElement).toBe(search)
+
+    fireEvent.keyDown(search, { key: 'ArrowRight' })
+    expect(fetch.getAttribute('aria-selected')).toBe('true')
     expect(document.activeElement).toBe(fetch)
-    const search = screen.getByRole('button', { name: /^Web Search ·/ })
+    expect([search.tabIndex, fetch.tabIndex]).toEqual([-1, 0])
     fireEvent.keyDown(fetch, { key: 'ArrowRight' })
-    expect(fetch.getAttribute('aria-expanded')).toBe('true')
-    expect(search.getAttribute('aria-expanded')).toBe('false')
-    fireEvent.keyDown(search, { key: 'ArrowLeft' })
-    expect(fetch.getAttribute('aria-expanded')).toBe('true')
-    fireEvent.keyDown(fetch, { key: 'ArrowLeft' })
-    expect(fetch.getAttribute('aria-expanded')).toBe('false')
-    fireEvent.keyDown(fetch, { key: 'Escape' })
-    expect(screen.queryByRole('menu')).toBeNull()
+    expect(search.getAttribute('aria-selected')).toBe('true')
+    fireEvent.keyDown(search, { key: 'End' })
+    expect(fetch.getAttribute('aria-selected')).toBe('true')
+    fireEvent.keyDown(fetch, { key: 'Home' })
+    expect(search.getAttribute('aria-selected')).toBe('true')
+    expect(document.activeElement).toBe(search)
+
+    fireEvent.keyDown(search, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).toBeNull()
     expect(document.activeElement).toBe(trigger())
+  })
+
+  it('marks a tab whose side needs attention and keeps the tab named by its title', () => {
+    const webConnections = createWebConnectionsService()
+    webConnections.register(createMockSection({ capability: 'search', order: 10, selectedId: 'conn-1' }).section)
+    webConnections.register(createMockSection({ capability: 'fetch', order: 20, readFailure: 'failed' }).section)
+    render(<ComposerConnectionMenu sessionId="sess-1" webConnections={webConnections} searchServed fetchServed t={t} />)
+    fireEvent.click(trigger())
+
+    expect(tab('Web Search').querySelector('[data-state="warning"]')).toBeNull()
+    expect(tab('Web Fetch').querySelector('[data-state="warning"]')).not.toBeNull()
+    expect(tab('Web Fetch').querySelector('[title]')?.getAttribute('title')).toBe('Web Fetch：读取失败（需要处理）')
   })
 
   it('anchors the menu to the button and caps it to the content area on a 390px viewport', () => {
@@ -527,7 +570,7 @@ describe('ComposerConnectionMenu', () => {
     const button = trigger()
     vi.spyOn(button, 'getBoundingClientRect').mockReturnValue(new DOMRect(100, 700, 28, 28))
     fireEvent.click(button)
-    const menu = screen.getByRole('menu')
+    const menu = dialog()
     expect(menu.style.maxWidth).toBe('314px')
     expect(Number.parseFloat(menu.style.left)).toBeGreaterThanOrEqual(64)
     expect(Number.parseFloat(menu.style.left) + Number.parseFloat(menu.style.maxWidth)).toBeLessThanOrEqual(378)
@@ -618,7 +661,8 @@ describe('ComposerConnectionMenu', () => {
     fireEvent.click(trigger())
 
     expect(screen.queryByRole('menuitemradio', { name: t('menu.offRow') })).toBeNull()
-    expect(within(screen.getByRole('menu')).getAllByText(t('button.loading'))).toHaveLength(2)
+    // The panel summary and its body both say so.
+    expect(within(dialog()).getAllByText(t('button.loading'))).toHaveLength(2)
   })
 
   it('does not render Off row or connections list when read fails, shows readFailed row and clicking it calls load', () => {
@@ -688,14 +732,15 @@ describe('ComposerConnectionMenu', () => {
     expect(markedSides(button)).toEqual(['fetch'])
 
     fireEvent.click(button)
-    fireEvent.click(screen.getByRole('button', { name: /^Web Fetch ·/ }))
-    const group = screen.getByRole('group', { name: 'Web Fetch' })
-    expect(within(group).getByRole('button', { name: 'Web Fetch · 设置无效' })).toBeDefined()
+    fireEvent.click(tab('Web Fetch'))
+    const group = panel('Web Fetch')
+    // No source is named for settings that cannot be read.
+    expect(document.getElementById(group.getAttribute('aria-describedby')!)?.textContent).toBe(t('button.invalidSettings'))
     expect(within(group).getByText(t('menu.invalidSettings', { capability: 'Web Fetch' }))).toBeDefined()
     expect(within(group).queryByRole('button', { name: t('button.readFailed') })).toBeNull()
     expect(within(group).queryByRole('menuitemradio')).toBeNull()
     loadMock.mockClear()
-    fireEvent.click(within(group).getByRole('menuitem', { name: t('menu.settings') }))
+    fireEvent.click(within(group).getByRole('button', { name: t('menu.settings') }))
     expect(openSettings).toHaveBeenCalledOnce()
     expect(loadMock).not.toHaveBeenCalled()
   })
@@ -870,7 +915,7 @@ describe('ComposerConnectionMenu', () => {
         if (surface === 'profile badge') {
           expect(screen.getAllByText(t('overview.status.routed')).length).toBeGreaterThan(0)
         } else {
-          expect(screen.getByRole('group', { name: /^Web Search\b/ })).toBeDefined()
+          expect(screen.getByRole('tabpanel', { name: 'Web Search' })).toBeDefined()
         }
         expect(subscribe).toHaveBeenCalledTimes(1)
         await act(async () => { publish() })

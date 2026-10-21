@@ -307,7 +307,7 @@ describe('real UI and search browser apply composition', () => {
     try {
       expect(composerButton().textContent).toContain(uiEn['button.loading'])
       await h.toggleMenu()
-      const menu = screen.getByRole('menu', { hidden: true })
+      const menu = screen.getByRole('dialog', { hidden: true })
       expect(menu.querySelector('[aria-checked="true"]') === null).toBe(true)
       expect(screen.queryByRole('menuitemradio', { name: uiEn['menu.offRow'], hidden: true })).toBeNull()
       expect(h.searchConnections.set).not.toHaveBeenCalled()
@@ -334,7 +334,7 @@ describe('real UI and search browser apply composition', () => {
     await h.chooseCommand('off')
     expect(h.searchConnections.provider).toHaveBeenCalledTimes(1)
     await h.toggleMenu()
-    expect(screen.queryByRole('menu', { hidden: true })).toBeNull()
+    expect(screen.queryByRole('dialog', { hidden: true })).toBeNull()
     await h.toggleMenu()
     expect(h.searchConnections.provider).toHaveBeenCalledTimes(1)
     await h.render()
@@ -348,7 +348,7 @@ describe('real UI and search browser apply composition', () => {
     expect((await h.commandConnections()).filter(option => option.active).map(option => option.id)).toEqual(['connection:builtin:exa'])
 
     await React.act(async () => { fireEvent.click(screen.getByRole('menuitemradio', { name: uiEn['menu.offRow'], hidden: true })) })
-    expect(screen.queryByRole('menu', { hidden: true })).toBeNull()
+    expect(screen.queryByRole('dialog', { hidden: true })).toBeNull()
     expect(composerButton().textContent).toContain(uiEn['button.off'])
     expect((await h.commandConnections()).filter(option => option.active).map(option => option.id)).toEqual(['off'])
 

@@ -35,7 +35,40 @@
 }
 
 .icon {
-  flex: 0 0 auto;
+  position: relative;
+  display: flex;
+  flex: none;
+}
+
+/*
+ * DSH's composer row sets --dsh-composer-model-text-display to none and
+ * --dsh-composer-model-icon-display to block when its expanded controls cannot
+ * share a line. The button collapses together with the model selector: the
+ * labels give way to the globe, which then carries each side's mark.
+ */
+.labels {
+  display: var(--dsh-composer-model-text-display, block);
+  min-width: 0;
+}
+
+.iconMarks {
+  display: var(--dsh-composer-model-icon-display, none);
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Search at the globe's top-right corner, fetch at its bottom-right. */
+.iconMark {
+  position: absolute;
+  top: -3px;
+  right: -5px;
+  display: flex;
+}
+
+.iconMark[data-mark='fetch'] {
+  top: auto;
+  bottom: -3px;
 }
 
 /* One side per registered section, in menu order: "<search> · <fetch>". */
@@ -84,53 +117,13 @@
   transform: rotate(180deg);
 }
 
-/* Without labels the marks sit on the globe: search at its top-right corner, fetch at its bottom-right. */
-@container (max-width: 460px) {
-  .sideLabel,
-  .sideSeparator {
-    display: none;
-  }
-
-  .sides {
-    position: absolute;
-    inset: 0;
-  }
-
-  .sideMark {
-    position: absolute;
-    top: 3px;
-    left: 19px;
-  }
-
-  .side[data-capability='fetch'] .sideMark {
-    top: auto;
-    bottom: 3px;
-  }
-}
-
-@container (max-width: 380px) {
-  .trigger {
-    justify-content: center;
-    width: 28px;
-    padding: 0;
-  }
-
-  .chevron,
-  .busy {
-    display: none;
-  }
-
-  .sideMark {
-    left: 17px;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .chevron {
     transition: none;
   }
 }
 
+/* Two layers: the shown capability's panel above, the capability switch below. */
 .menu {
   position: fixed;
   z-index: 1100;
@@ -141,93 +134,97 @@
   max-width: calc(100vw - 48px);
   max-height: min(480px, calc(100vh - 32px));
   overflow: hidden;
-  padding: 6px 0;
 }
 
-/* Only lists scroll: both headers stay in the 480px panel, even with two open lists. */
-.sectionBlock {
+/* Every panel sits in the same cell, so the grid takes the tallest panel's height. */
+.panels {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+}
+
+.panel {
   display: flex;
-  flex: 0 0 auto;
   flex-direction: column;
-  min-height: 36px;
+  grid-area: 1 / 1;
   min-width: 0;
+  min-height: 0;
 }
 
-.sectionBlock + .sectionBlock {
-  border-top: 0.5px solid var(--dsw-alias-border-l2);
+.panelInactive {
+  visibility: hidden;
 }
 
-.sectionExpanded {
-  flex: 0 1 auto;
-  min-height: 112px;
-}
-
-.sectionHeading {
-  position: sticky;
-  top: 0;
-  z-index: 2;
+.panelHeader {
   display: flex;
   flex: none;
   align-items: center;
   gap: 8px;
-  width: 100%;
   min-height: 36px;
-  padding: 8px 12px;
-  border: none;
-  background: var(--dsw-menu-surface-fill, var(--dsw-alias-bg-module-platform));
-  color: var(--dsw-alias-label-secondary);
-  font: inherit;
-  font-size: 12px;
-  line-height: 20px;
-  text-align: left;
-  cursor: pointer;
+  box-sizing: border-box;
+  padding: 4px 4px 4px 12px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
 }
 
-.sectionSummary {
+.summary {
   display: flex;
-  flex: 1;
+  flex: 1 1 auto;
   align-items: center;
   gap: 4px;
   min-width: 0;
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 20px;
   white-space: nowrap;
 }
 
-.sectionTitle {
-  flex: none;
-  color: var(--dsw-alias-label-primary);
-}
-
-.sectionCurrent,
-.sectionSource {
+.summaryCurrent,
+.summarySource {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.sectionCurrent {
+.summaryCurrent {
   flex: 0 1 auto;
+  color: var(--dsw-alias-label-primary);
 }
 
-.sectionSource {
+.summarySeparator {
+  flex: none;
+  color: var(--dsw-alias-label-caption);
+}
+
+.summarySource {
   flex: 0 2 auto;
-  max-width: 40%;
+}
+
+.settingsButton {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
   color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
 }
 
-.sectionContents {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  min-height: 0;
+.settingsButton:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
 }
 
-.sectionContents[hidden] {
-  display: none;
-}
-
-.sectionBody {
+.panelBody {
   flex: 1 1 auto;
   min-height: 0;
+  padding: 4px 0;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -250,12 +247,10 @@
   border-radius: var(--dsw-radius-xs);
 }
 
-.sectionHeading:hover,
 .row:hover:not(:disabled) {
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
-.sectionHeading:focus-visible,
 .settingsButton:focus-visible,
 .row:focus-visible {
   outline: none;
@@ -310,12 +305,6 @@
   color: var(--dsw-alias-label-secondary);
 }
 
-.separator {
-  height: 0.5px;
-  background: var(--dsw-alias-border-l2);
-  margin: 6px 8px;
-}
-
 .routeNotice,
 .disabledNotice {
   display: flex;
@@ -347,39 +336,6 @@
   text-decoration: underline;
 }
 
-.sectionFooter {
-  flex: none;
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
-  padding: 4px 8px;
-  background: var(--dsw-menu-surface-fill, var(--dsw-alias-bg-module-platform));
-  backdrop-filter: var(--dsw-menu-backdrop-filter);
-  border-top: 0.5px solid var(--dsw-alias-border-l2);
-  margin-top: 4px;
-}
-
-.settingsButton {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 6px 8px;
-  border: none;
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
-  font: inherit;
-  font-size: 12px;
-  line-height: 16px;
-  border-radius: var(--dsw-radius-xs);
-  cursor: pointer;
-}
-
-.settingsButton:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-primary);
-}
-
 .empty {
   padding: 6px 12px;
   font-size: 12px;
@@ -388,4 +344,34 @@
 
 .optionsWrapper {
   padding: 4px 12px;
+}
+
+.notices {
+  flex: none;
+  padding: 4px 0;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.switcher {
+  flex: none;
+  padding: 8px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.tabLabel {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.tabTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tabMark {
+  flex: none;
 }

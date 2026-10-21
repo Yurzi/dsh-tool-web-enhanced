@@ -8,7 +8,7 @@ import { en as uiText } from '../packages/ui/src/client/locales.ts'
 import { en as searchText } from '../packages/search-enhanced/src/client/locales.ts'
 import { en as fetchText } from '../packages/fetch-enhanced/src/client/locales.ts'
 import { artifacts } from './harness/environment.ts'
-import { connectionButton, expandConnectionSection, newSession, openBundle, openConnections, openFetchSettings, openSearchSettings } from './harness/navigation.ts'
+import { connectionButton, connectionTabs, openConnectionTab, newSession, openBundle, openConnections, openFetchSettings, openSearchSettings } from './harness/navigation.ts'
 import { type WebServer, startWeb } from './harness/web.ts'
 import { expectTheme, setTheme, type ThemePreference } from './harness/theme.ts'
 
@@ -87,10 +87,10 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Screenshot matr
           await page.setViewportSize({ width, height: desktop.height })
           await page.locator('[data-conversation-session="' + sessionId + '"]').waitFor()
           const menu = await openConnections(page)
-          // A section title alone can render before its selection has loaded.
-          const search = await expandConnectionSection(menu, searchText['section.title'])
+          // A tab alone can render before its selection has loaded.
+          const search = await openConnectionTab(menu, searchText['section.title'])
           await search.getByRole('menuitemradio', { name: /^Exa\b/ }).waitFor()
-          await menu.getByRole('group', { name: fetchText['section.title'], exact: true }).getByRole('button', { name: /^Fetch · Local HTTP ·/ }).waitFor()
+          await expect.poll(() => connectionButton(page).getAttribute('aria-label')).toContain(fetchText['connection.local'])
           // DSH's first-run workspace warning must not obscure the menu evidence.
           await page.getByRole('alert').filter({ hasText: 'Unable to create default workspace.' }).waitFor({ state: 'hidden' })
           break
@@ -110,7 +110,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Screenshot matr
           await newSession(page)
           await page.setViewportSize({ width, height: desktop.height })
           const menu = await openConnections(page)
-          const fetch = await expandConnectionSection(menu, fetchText['section.title'])
+          const fetch = await openConnectionTab(menu, fetchText['section.title'])
           for (const name of ['Exa', 'Firecrawl', 'Tavily']) {
             const row = fetch.getByRole('menuitemradio', { name: new RegExp('^' + name + '(?: |$)') })
             await row.waitFor()
@@ -151,7 +151,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Screenshot matr
       }
       // Keep the matrix image as evidence before failing a visual regression.
       if (view === 'bundle-overview') await expectOverviewHealthy(page.getByRole('region', { name: uiText['overview.title'], exact: true }))
-      if (view === 'composer-menu') await expectMenuSectionsInView(page.getByRole('menu', { name: uiText['menu.aria'], exact: true }))
+      if (view === 'composer-menu') await expectMenuLayersInView(page.getByRole('dialog', { name: uiText['menu.aria'], exact: true }))
       expect(app.errors).toEqual([])
     } finally {
       // Dismiss the connection menu even if its screenshot or assertion failed.
@@ -159,26 +159,64 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Screenshot matr
     }
   })
 
+  it('collapses the connection button with the model selector instead of wrapping the composer row', async () => {
+    const { page } = app
+    await page.setViewportSize(desktop)
+    const sessionId = await newSession(page)
+    const conversation = page.locator('[data-conversation-session="' + sessionId + '"]')
+    const button = connectionButton(page)
+    await expect.poll(() => button.getAttribute('aria-label')).toContain(fetchText['connection.local'])
+    // DSH's own controls at both ends of the composer row.
+    const commands = conversation.getByRole('button', { name: 'Add files or run commands', exact: true })
+    const send = conversation.getByRole('button', { name: 'Send message', exact: true })
+    const middle = async (locator: Locator) => {
+      const box = await locator.boundingBox()
+      return box === null ? Number.NaN : box.y + box.height / 2
+    }
+    const compactWidths: number[] = []
+    for (const width of [1280, 1024, 900, 820, 768, 700, 640, 600, 560, 520, 480, 440, 400, 390, 360]) {
+      await page.setViewportSize({ width, height: desktop.height })
+      // The row re-measures on resize and the sidebar animates below 768 px: wait for the settled layout.
+      await expect.poll(async () => {
+        const { compact, labels } = await button.evaluate(element => ({
+          // The documented compact signal the composer row sets for its model seat.
+          compact: getComputedStyle(element).getPropertyValue('--dsh-composer-model-text-display').trim() === 'none',
+          labels: [...element.querySelectorAll('[data-capability]')].some(side => side.getBoundingClientRect().width > 0),
+        }))
+        const row = await middle(button)
+        const oneLine = Math.abs(row - await middle(commands)) < 6 && Math.abs(row - await middle(send)) < 6
+        if (compact) compactWidths.push(width)
+        return { width, labelsFollowModel: labels === !compact, oneLine }
+      }, { timeout: 5000 }).toEqual({ width, labelsFollowModel: true, oneLine: true })
+      if (width === 600) await app.screenshot('composer-compact-600')
+    }
+    // The sweep must have seen both displays, or it proves nothing.
+    expect(compactWidths.length).toBeGreaterThan(0)
+    expect(compactWidths).not.toContain(1280)
+    expect(app.errors).toEqual([])
+  })
+
   it('logs no browser errors across the matrix', () => {
     expect(app.errors).toEqual([])
   })
 })
 
-/** Both capability headings must actually appear in the screenshot, not just exist offscreen. */
-async function expectMenuSectionsInView(menu: Locator): Promise<void> {
+/** Both capability tabs and the shown panel's first rows must actually appear in the screenshot, not just exist offscreen. */
+async function expectMenuLayersInView(menu: Locator): Promise<void> {
+  const inView = (locator: Locator) => locator.evaluate(element => {
+    const box = element.getBoundingClientRect()
+    const panel = element.closest('[role="dialog"]')!.getBoundingClientRect()
+    return box.width > 0 && box.height > 0
+      && box.top >= Math.max(0, panel.top)
+      && box.bottom <= Math.min(window.innerHeight, panel.bottom)
+      && box.left >= Math.max(0, panel.left)
+      && box.right <= Math.min(window.innerWidth, panel.right)
+  })
   for (const title of [searchText['section.title'], fetchText['section.title']]) {
-    const group = menu.getByRole('group', { name: new RegExp('^' + title + '(?: ·|$)') })
-    const visible = await group.getByRole('button', { name: new RegExp('^' + title + ' ·') }).evaluate(element => {
-      const heading = element.getBoundingClientRect()
-      const panel = element.closest('[role="menu"]')!.getBoundingClientRect()
-      return heading.width > 0 && heading.height > 0
-        && heading.top >= Math.max(0, panel.top)
-        && heading.bottom <= Math.min(window.innerHeight, panel.bottom)
-        && heading.left >= Math.max(0, panel.left)
-        && heading.right <= Math.min(window.innerWidth, panel.right)
-    })
-    expect.soft(visible, title + ' heading must be inside the menu viewport').toBe(true)
+    expect.soft(await inView(connectionTabs(menu).getByRole('tab', { name: title, exact: true })), title + ' tab must be inside the menu viewport').toBe(true)
   }
+  expect.soft(await inView(menu.getByRole('button', { name: uiText['menu.settings'], exact: true })), 'the panel header must be inside the menu viewport').toBe(true)
+  expect.soft(await inView(menu.getByRole('menuitemradio', { name: uiText['menu.offRow'], exact: true })), 'the panel list must start inside the menu viewport').toBe(true)
 }
 
 async function expectOverviewHealthy(overview: Locator): Promise<void> {

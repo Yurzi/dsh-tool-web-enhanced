@@ -62,8 +62,9 @@ export async function openApp(url: string, contextOptions: BrowserContextOptions
     })
     await page.addLocatorHandler(page.getByRole('button', { name: 'Configure later' }), async (button) => { await button.click() })
     const welcome = contextOptions.locale === 'zh-CN' ? { title: '开始使用', close: '关闭' } : { title: 'Get started', close: 'Close' }
+    // DSH may open its sign-in dialog late, under an open connections menu: dismiss it without a pointer hit test.
     await page.addLocatorHandler(page.getByRole('dialog', { name: welcome.title, exact: true }), async (dialog) => {
-      await dialog.getByRole('button', { name: welcome.close, exact: true }).click()
+      await dialog.getByRole('button', { name: welcome.close, exact: true }).dispatchEvent('click')
     })
     await page.addLocatorHandler(page.getByRole('dialog', { name: copy['activation.title'] }), async (dialog) => {
       await dialog.getByRole('button', { name: copy['activation.later'], exact: true }).click()

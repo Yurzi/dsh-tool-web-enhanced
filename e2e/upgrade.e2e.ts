@@ -12,7 +12,7 @@ import { en as fetchText } from '../packages/fetch-enhanced/src/client/locales.t
 import { type App, browserRequired, chromiumPath, openApp, recordBrowserFailure } from './harness/browser.ts'
 import { artifacts, composedRows, enterIsolatedEnvironment } from './harness/environment.ts'
 import { bootHost } from './harness/host.ts'
-import { expandConnectionSection, newSession, openBundle, openConnections, openFetchSettings, openSearchSettings } from './harness/navigation.ts'
+import { openConnectionTab, newSession, openBundle, openConnections, openFetchSettings, openSearchSettings } from './harness/navigation.ts'
 import { createLegacyOffSession, installCoexistencePatch, installPredecessors, installUpgradeProfile, upgradeEnvironment } from './harness/upgrade.ts'
 import { type WebServer, startWeb } from './harness/web.ts'
 
@@ -117,9 +117,9 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('search and fetc
         await newSession(page)
         const invalidMenu = await openConnections(page)
         for (const capability of [searchText['section.title'], fetchText['section.title']]) {
-          const section = await expandConnectionSection(invalidMenu, capability)
+          const section = await openConnectionTab(invalidMenu, capability)
           await section.getByRole('alert').getByText(uiText['menu.invalidSettings'].replace('{capability}', capability), { exact: true }).waitFor()
-          await section.getByRole('menuitem', { name: uiText['menu.settings'], exact: true }).waitFor()
+          await section.getByRole('button', { name: uiText['menu.settings'], exact: true }).waitFor()
           expect(await section.getByRole('button', { name: uiText['button.readFailed'], exact: true }).count()).toBe(0)
           await app.screenshot('upgrade-menu-' + (capability === searchText['section.title'] ? 'search' : 'fetch') + '-invalid')
         }

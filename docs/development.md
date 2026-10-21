@@ -59,7 +59,7 @@ export PNPM_HOME=$PWD/.pnpm-home \
 | 输入框菜单、首次启用提示、概览与预检 | ui `src/client/*`；分区契约在 core `client/section.ts` | ui `client-components`、`client-service`、`client-pure`；search `client-composition` |
 | 界面文案 | 各包 `src/client/locales.ts`（zh 与 en 同键；键集的类型来源 search / fetch 取 `en`、ui 取 `zh`）；插件页标题与描述只在 `locale/{zh,en}.json` 的 `meta` | 各包 `client-locales`；`verify:package` 检查 `meta` |
 | 给模型的消息 | Host 代码里的英文 `WebError` 文案：传输与 MCP 在各能力的 `http.ts`，search 的畸形响应在 `src/search/adapter-result.ts`，fetch 的逐页失败在 `src/remote/page.ts`；core 的服务模块不写措辞 | 断言该消息的测试；规则见 [功能设计 · 错误与上游说明](design.md#错误与上游说明) |
-| 样式 | 各包的 `*.module.css`；两个插件的 `client/settings/Settings.module.css` 保持逐字一致；只用 DSH 的 `--dsw-*` 变量，窄屏用 container query | ui `client-settings-appearance`、`client-components`；改观感后看 e2e 截图 |
+| 样式 | 各包的 `*.module.css`；两个插件的 `client/settings/Settings.module.css` 保持逐字一致；只用 DSH 的 `--dsw-*` 变量，窄屏用 container query；输入框按钮不设断点，跟随输入栏的 `--dsh-composer-model-*-display` 收起 | ui `client-settings-appearance`、`client-components`；改观感后看 e2e 截图 |
 | 身份（包名、行 id、provider id） | 只在 core `shared/ids.ts`；profile 的 patch 同步 | profile `profile`；e2e |
 | profile 组合 | `packages/profile/cordis.patch.yml`（`web` 行两个字段一起写） | profile `profile`；e2e |
 | 构建与打包 | `build/*`、`scripts/*`、各包 `package.json` | `check`；改到产物形状时跑 e2e |
@@ -157,7 +157,7 @@ export PNPM_HOME=$PWD/.pnpm-home \
 
 - 远程抓取与模型搜索的 e2e 从不向真实服务发请求：实际调用只发往回环假服务；内置远程连接只检查可选性与就绪状态；测试凭据用 `describe` 检查（不读回），结束时删除。
 - 会建会话、写草稿、写用户层或多次重启 GUI 的规格用 `upgradeEnvironment(inject('e2e'))` 拿独立 home 并自己 `addPlugins`；改了共享状态（用户层、密钥、模型记忆）的规格在 `afterAll` 里恢复。
-- 定位一律用各包 `en` 字典的值、角色与可访问名称，不写死文字；中文界面用 Playwright 的 `zh-CN` context，不写持久语言设置。输入框菜单是手风琴，先展开目标分区。
+- 定位一律用各包 `en` 字典的值、角色与可访问名称，不写死文字；中文界面用 Playwright 的 `zh-CN` context，不写持久语言设置。输入框菜单按能力分页，先用 `openConnectionTab` 切到目标能力，它返回该能力的面板（`tabpanel`）。
 - 需要 Host 启动时诊断的规格，在 `bootHost` 的 `prepare` 回调里接日志。
 - 截图在断言之前保存。产物都在 `.e2e/artifacts`（CI 上传为 `e2e-artifacts`）：`web.log`、`<name>.png`、`<spec>-failure.json` / `.png` / `.aria.txt`、`upgrade-*`、`fetch-remote-wire-*.json`、`search-model-wire-*.json`、`search-model-host.log` 等。
 
@@ -183,7 +183,7 @@ export PNPM_HOME=$PWD/.pnpm-home \
 4. **`HttpFetchProvider`**：构造签名 `new HttpFetchProvider(settings, resolve)` 与 `HttpFetchResolver` 的约定、对 IP 字面量与代理的处理、默认上限与 User-Agent（fetch `DEFAULT_LOCAL_SETTINGS` 是原生行的副本）、它抛出的 `WebError` 码。
 5. **`ipaddr.js`**：catalog 版本与新版 `web-fetch-http` 的依赖一致；`src/local/rules.ts` 的非公网范围表与该版本 `range()` 对齐。
 6. **preset 与限制**：tool-web 仍由 agent preset 挂在 Agent 作用域的祖先上，`tools.get` 与 `tools.restrict({ deny })` 行为不变；`agent/request`、`agent/created`、`agent/disposed` 事件与 `currentInitiator()` 不变（两侧 `agent.spec.ts` 会发现）。
-7. **Settings 投影**：Host 侧 `settings.describe()` 里 `ns = web` 的值、`settings/document-updated` 事件、`settings.configure`；浏览器侧 `configForms`（`get` / `whileServed`）、`describe()` 的 `secrets`、`pluginNavigation`、各槽位名。
+7. **Settings 投影**：Host 侧 `settings.describe()` 里 `ns = web` 的值、`settings/document-updated` 事件、`settings.configure`；浏览器侧 `configForms`（`get` / `whileServed`）、`describe()` 的 `secrets`、`pluginNavigation`、各槽位名；输入栏在控件一行放不下时设置的 `--dsh-composer-model-text-display` / `--dsh-composer-model-icon-display`（输入框按钮随它收起，e2e `screenshots` 的宽度扫描会发现变化），以及菜单用到的 `SegmentedTabs`。
 8. **浏览器壳**：`build/platform.ts` 的平台模块表对照 DSH 的 `packages/client/web/src/platform.ts`；CSS Modules 的注入方式对照 DSH 的客户端构建。
 9. **测试补丁**：复查 `primitivesStub` 与 `zustand` / `immer` 是否仍需要。
 10. **跟随会话模型的耦合**（search `src/model/route.ts`、`deepseek.ts`；core `host/model.ts`）：

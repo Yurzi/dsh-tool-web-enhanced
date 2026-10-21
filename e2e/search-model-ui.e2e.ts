@@ -13,7 +13,7 @@ import { messagesAnswer, modelDocument, modelFixture, piAiFixture, piAiRows } fr
 import { type App, browserRequired, chromiumPath, openApp, recordBrowserFailure } from './harness/browser.ts'
 import { addPlugins, artifacts, composedRows, enterIsolatedEnvironment, profilePatchPath } from './harness/environment.ts'
 import { bootHost } from './harness/host.ts'
-import { connectionButton, expandConnectionSection, newSession, openBundle, openConnections, openSearchSettings } from './harness/navigation.ts'
+import { connectionButton, openConnectionTab, newSession, openBundle, openConnections, openSearchSettings } from './harness/navigation.ts'
 import { startModelApi } from './harness/model-api.ts'
 import { modelGroups, modelViewport } from './harness/model-visuals.ts'
 import { expectTheme, setTheme } from './harness/theme.ts'
@@ -104,7 +104,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Model search co
     app = await openApp(server.url)
     let sessionId = await newSession(app.page)
     const menu = await openConnections(app.page)
-    const search = await expandConnectionSection(menu, text['section.title'])
+    const search = await openConnectionTab(menu, text['section.title'])
     const row = search.getByRole('menuitemradio', { name: new RegExp('^' + modelName + '(?: |$)') })
     await row.getByText(text['status.sessionModelNeedsKey'], { exact: true }).waitFor()
     expect(await row.getAttribute('aria-checked')).toBe('false')
@@ -124,13 +124,13 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Model search co
     app = await openApp(server.url)
     sessionId = await currentConversation(app.page)
     const readyMenu = await openConnections(app.page)
-    const readySearch = await expandConnectionSection(readyMenu, text['section.title'])
+    const readySearch = await openConnectionTab(readyMenu, text['section.title'])
     const readyRow = readySearch.getByRole('menuitemradio', { name: new RegExp('^' + modelName + '(?: |$)') })
     await readyRow.getByText(text['status.sessionModelReady'].replace('{access}', text['access.apiKey']), { exact: true }).waitFor()
     await readyRow.click()
     await readyMenu.waitFor({ state: 'hidden' })
     await openConnections(app.page)
-    await expandConnectionSection(readyMenu, text['section.title'])
+    await openConnectionTab(readyMenu, text['section.title'])
     await expect.poll(() => readyRow.getAttribute('aria-checked')).toBe('true')
     await app.screenshot('search-model-menu-selected')
     expect(app.errors).toEqual([])
@@ -240,7 +240,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Model search co
     expect(await button.getAttribute('aria-label')).toBe(accessibleName)
     expect(await button.getAttribute('title')).toBe(accessibleName)
     const menu = await openConnections(app.page)
-    const search = await expandConnectionSection(menu, text['section.title'])
+    const search = await openConnectionTab(menu, text['section.title'])
     const modelRow = search.getByRole('menuitemradio', { name: new RegExp('^' + modelName + '(?: |$)') })
     await modelRow.scrollIntoViewIfNeeded()
     await modelRow.getByText(text['status.sessionModelNeedsKey'], { exact: true }).waitFor()
@@ -275,7 +275,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Model search co
       app = await openApp(server.url)
       await newSession(app.page)
       const menu = await openConnections(app.page)
-      const search = await expandConnectionSection(menu, text['section.title'])
+      const search = await openConnectionTab(menu, text['section.title'])
       const row = search.getByRole('menuitemradio', { name: new RegExp('^' + modelName + '(?: |$)') })
       await row.getByText(text['status.sessionModelReady'].replace('{access}', text['access.apiKey']), { exact: true }).waitFor()
       expect(await row.getAttribute('aria-checked')).toBe('true')

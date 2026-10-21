@@ -15,7 +15,7 @@ import { addPlugins, artifacts, composedRows, enterIsolatedEnvironment, profileP
 import { bootHost } from './harness/host.ts'
 import { startModelApi } from './harness/model-api.ts'
 import { modelViewport } from './harness/model-visuals.ts'
-import { expandConnectionSection, newSession, openConnections, openSearchSettings } from './harness/navigation.ts'
+import { openConnectionTab, newSession, openConnections, openSearchSettings } from './harness/navigation.ts'
 import { setTheme } from './harness/theme.ts'
 import { upgradeEnvironment } from './harness/upgrade.ts'
 import { type WebServer, startWeb } from './harness/web.ts'
@@ -192,7 +192,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Model UI review
     await browser.page.getByRole('treeitem', { name: 'New Session', exact: true }).last().click()
     await modelViewport(browser.page, width)
     const menu = await openConnections(browser.page)
-    const search = await expandConnectionSection(menu, text['section.title'])
+    const search = await openConnectionTab(menu, text['section.title'])
     const ready = search.getByRole('menuitemradio', { name: new RegExp('^' + modelFixture.label + '(?: |$)') })
     await ready.getByText(text['status.modelReady'].replace('{access}', text['access.apiKey']).replace('{name}', modelFixture.label), { exact: true }).waitFor()
     await shot(ready, 'fixed-menu-ready-' + width + '-light')
@@ -242,7 +242,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Model UI review
     await newSession(app.page)
     await setTheme(app.page, 'light')
     const menu = await openConnections(app.page)
-    const search = await expandConnectionSection(menu, text['section.title'])
+    const search = await openConnectionTab(menu, text['section.title'])
     const row = search.getByRole('menuitemradio', { name: new RegExp('^' + text['connection.sessionModel'] + '(?: |$)') })
     const message = reason === 'account' ? text['status.sessionModelNeedsSignIn'] : text[reason === 'headers' ? 'status.reason.headers' : 'status.reason.protocol']
     await row.getByText(message, { exact: true }).waitFor()
@@ -252,7 +252,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Model UI review
     await menu.waitFor({ state: 'hidden' })
     await modelViewport(app.page, 390)
     const narrowMenu = await openConnections(app.page)
-    await expandConnectionSection(narrowMenu, text['section.title'])
+    await openConnectionTab(narrowMenu, text['section.title'])
     await row.getByText(message, { exact: true }).waitFor()
     await row.scrollIntoViewIfNeeded()
     const box = await narrowMenu.boundingBox()
@@ -271,7 +271,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Model UI review
     app = await openApp(url, { locale: 'zh-CN', storageState, viewport: { width: 1280, height: 1100 } })
     await app.page.locator('[data-conversation-session="' + sessionId + '"]').waitFor()
     const menu = await openConnections(app.page, uiZh)
-    const search = await expandConnectionSection(menu, zh['section.title'])
+    const search = await openConnectionTab(menu, zh['section.title'])
     await search.getByText(zh['status.sessionModelNeedsKey'], { exact: true }).waitFor()
     await app.screenshot('search-model-review-menu-zh-1280-light')
     await app.page.keyboard.press('Escape')

@@ -14,8 +14,10 @@ import searchCss from '../../search-enhanced/src/client/settings/Settings.module
 import fetchCss from '../../fetch-enhanced/src/client/settings/Settings.module.css'
 import menuCss from '../src/client/ComposerConnectionMenu.module.css'
 import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 const settingsSource = (pkg: string) => readFileSync(new URL('../../' + pkg + '/src/client/settings/Settings.module.css', import.meta.url), 'utf8')
+const menuSource = () => readFileSync(join(import.meta.dirname, '../src/client/ComposerConnectionMenu.module.css'), 'utf8')
 /** The declarations of one exact selector list in a stylesheet. */
 const rule = (source: string, selector: string) => {
   const start = source.indexOf(selector + ' {')
@@ -115,9 +117,24 @@ describe('settings appearance regressions', () => {
     expect(source.match(/#[0-9a-f]{3,8}\b/giu)).toBeNull()
   })
 
-  it('menu rowCaption and sectionSource meet minimum WCAG AA contrast (>= 4.5:1) in light theme', () => {
+  it('collapses the composer button on DSH\'s compact signal instead of breakpoints of its own', () => {
+    const source = menuSource()
+    // The composer row sets these only when its expanded controls cannot share a line (the model selector's contract).
+    expect(rule(source, '.labels')).toContain('display: var(--dsh-composer-model-text-display, block)')
+    expect(rule(source, '.iconMarks')).toContain('display: var(--dsh-composer-model-icon-display, none)')
+    expect(source).not.toContain('@container')
+  })
+
+  it('stacks the capability panels in one grid cell and hides the inactive one without dropping its size', () => {
+    const source = menuSource()
+    expect(rule(source, '.panel')).toContain('grid-area: 1 / 1')
+    expect(rule(source, '.panelInactive')).toContain('visibility: hidden')
+    expect(rule(source, '.panelBody')).toContain('overflow-y: auto')
+  })
+
+  it('menu rowCaption and summarySource meet minimum WCAG AA contrast (>= 4.5:1) in light theme', () => {
     expect(menuCss.rowCaption).toBeDefined()
-    expect(menuCss.sectionSource).toBeDefined()
+    expect(menuCss.summarySource).toBeDefined()
 
     // Light mode colors from dsh-client-ui-theme design platform:
     // White background: #ffffff, --dsw-alias-label-secondary: #61666b (neutral-bluish-700)
