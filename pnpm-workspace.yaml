@@ -68,8 +68,12 @@ catalog:
 overrides:
   zod: 4.4.3
 
+# A fresh install fails on any dependency build script not listed here.
+# koffi (through DSH's dsh-fs-local) loads the binary of its prebuilt
+# @koromix/koffi-<platform> optional dependency, so its install script stays off.
 allowBuilds:
   esbuild: true
+  koffi: false
 
 # DSH publishes every 0.2.x prerelease as one train; releases younger than
 # pnpm's minimum age would otherwise block an upgrade to the Host under test.
