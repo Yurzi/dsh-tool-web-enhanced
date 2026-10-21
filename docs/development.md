@@ -202,7 +202,7 @@ export PNPM_HOME=$PWD/.pnpm-home \
 四个可发布包（profile、search、fetch、ui）同一节奏发布；core 是 private，不发布。
 
 1. 提升要发布的包的版本；profile 的版本决定标签，只要有包要发，profile 也要提升（它精确锁定其余三个包）。
-2. 把 CHANGELOG 的 “Unreleased” 整理成各包的版本小节，同步各包 README。
+2. 把 CHANGELOG 的 “Unreleased” 改成 `## v<profile 版本> (<日期>)`，其下是各包的版本小节；同步各包 README。这一节就是 GitHub Release 的正文（`node scripts/release-notes.ts v<版本>` 可预览）。
 3. 本地 `pnpm run check` 与 `pnpm run test:e2e`。
 4. 先推送 main，等 `ci` 通过，再打 `v<profile 版本>` 标签并推送。e2e 只在本地跑（第 3 步），`ci` 与 `publish` 都不跑。
 
@@ -213,7 +213,7 @@ npm 只能给已经存在的包配置可信发布（trusted publishing），所�
 | 工作流 | 触发 | 内容 |
 | --- | --- | --- |
 | `ci.yml` | push 到 main、PR | `check`：Node 22.19.0 与 24 上 `pnpm install --frozen-lockfile && pnpm run check`。不跑 e2e：它要安装真实 DSH 与 Chromium、跑十几分钟，截图类规格对时序敏感，只在本地开发与发布前运行 |
-| `publish.yml` | `v*` 标签 | 核对标签等于 `packages/profile/package.json` 的版本，跑 `check`，再 `pnpm --recursive publish --access public --no-git-checks --provenance`（npm trusted publishing，OIDC，不用 token）；registry 上已有的版本跳过 |
+| `publish.yml` | `v*` 标签 | `publish`：核对标签等于 `packages/profile/package.json` 的版本、CHANGELOG 有这个标签的小节，跑 `check`，再 `pnpm --recursive publish --access public --no-git-checks --provenance`（npm trusted publishing，OIDC，不用 token）；registry 上已有的版本跳过。通过后 `release`（只有它有 `contents: write`）：用 `scripts/release-notes.ts` 取出该小节，创建同名 GitHub Release，标签带 `-` 时标为 prerelease；Release 已存在则跳过 |
 
 ## 文档维护
 

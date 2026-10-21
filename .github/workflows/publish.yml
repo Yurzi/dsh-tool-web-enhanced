@@ -22,7 +22,35 @@ jobs:
           cache: pnpm
       - name: Tag matches the profile version
         run: test "v$(node -p 'require("./packages/profile/package.json").version')" = "$GITHUB_REF_NAME"
+      # The release job below needs these notes; fail before anything is published.
+      - name: CHANGELOG.md has notes for this tag
+        run: node scripts/release-notes.ts "$GITHUB_REF_NAME" > /dev/null
       - run: pnpm install --frozen-lockfile
       - run: pnpm run check
       # Publishes every public package whose version is not on the registry yet.
       - run: pnpm --recursive publish --access public --no-git-checks --provenance
+
+  release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      # A re-run after a successful release leaves the existing release alone.
+      - name: GitHub Release from CHANGELOG.md
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists"
+            exit 0
+          fi
+          node scripts/release-notes.ts "$GITHUB_REF_NAME" > release-notes.md
+          prerelease=()
+          case "$GITHUB_REF_NAME" in *-*) prerelease=(--prerelease) ;; esac
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --notes-file release-notes.md "${prerelease[@]}"

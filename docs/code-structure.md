@@ -215,6 +215,7 @@ src/
 | [workspace.ts](<../scripts/workspace.ts>) | 发现非 private 工作区包并以 pnpm pack 输出发布形态（verify-packages 与 e2e 共用）。 |
 | [verify-packages.ts](<../scripts/verify-packages.ts>) | 检查打包后的 manifest 范围、统一 DSH 范围、Host 外部导入、profile 版本锁定、仓库地址与 Plugins 页资源，再运行 publint。 |
 | [clean.ts](<../scripts/clean.ts>) | 清理当前包的相对产物目录，拒绝越界路径。 |
+| [release-notes.ts](<../scripts/release-notes.ts>) | 输出 CHANGELOG 中某个标签的小节，作为 publish.yml 创建的 GitHub Release 正文。 |
 
 [search](<../packages/search-enhanced/tsdown.config.ts>)、[fetch](<../packages/fetch-enhanced/tsdown.config.ts>) 与 [ui](<../packages/ui/tsdown.config.ts>) 的 tsdown.config.ts 都只调用 `pluginBuild(import.meta.url)`；profile 与 core 没有构建任务。
 
