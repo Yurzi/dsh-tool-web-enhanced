@@ -159,13 +159,13 @@ export PNPM_HOME=$PWD/.pnpm-home \
 - 会建会话、写草稿、写用户层或多次重启 GUI 的规格用 `upgradeEnvironment(inject('e2e'))` 拿独立 home 并自己 `addPlugins`；改了共享状态（用户层、密钥、模型记忆）的规格在 `afterAll` 里恢复。
 - 定位一律用各包 `en` 字典的值、角色与可访问名称，不写死文字；中文界面用 Playwright 的 `zh-CN` context，不写持久语言设置。输入框菜单按能力分页，先用 `openConnectionTab` 切到目标能力，它返回该能力的面板（`tabpanel`）。
 - 需要 Host 启动时诊断的规格，在 `bootHost` 的 `prepare` 回调里接日志。
-- 截图在断言之前保存。产物都在 `.e2e/artifacts`（CI 上传为 `e2e-artifacts`）：`web.log`、`<name>.png`、`<spec>-failure.json` / `.png` / `.aria.txt`、`upgrade-*`、`fetch-remote-wire-*.json`、`search-model-wire-*.json`、`search-model-host.log` 等。
+- 截图在断言之前保存。产物都在 `.e2e/artifacts`：`web.log`、`<name>.png`、`<spec>-failure.json` / `.png` / `.aria.txt`、`upgrade-*`、`fetch-remote-wire-*.json`、`search-model-wire-*.json`、`search-model-host.log` 等。
 
 ### 常见失败与排查
 
 | 现象 | 原因 | 处理 |
 | --- | --- | --- |
-| Chromium 启动失败，提示 SingletonSocket / socket 路径过长 | Linux 的 Unix socket 路径上限 108 字节，仓库路径较长（如 GitHub runner 的 `/home/runner/work/<repo>/<repo>`）时 `.e2e/run` 下的任何目录都放不下 | `openApp` 给 Chromium 一个 `/tmp/dsh-e2e-*` 短临时目录作 `TMPDIR`，浏览器关闭时删除；仍报错时检查是否有别的代码改了 Chromium 的 `TMPDIR` |
+| Chromium 启动失败，提示 SingletonSocket / socket 路径过长 | Linux 的 Unix socket 路径上限 108 字节，仓库路径较长时 `.e2e/run` 下的任何目录都放不下 | `openApp` 给 Chromium 一个 `/tmp/dsh-e2e-*` 短临时目录作 `TMPDIR`，浏览器关闭时删除；仍报错时检查是否有别的代码改了 Chromium 的 `TMPDIR` |
 | 进程内 Host 加载了工作区的插件而不是 profile 里装的；`upgrade` 报前身 “was not selected as a predecessor bundle” | pnpm 的 vitest shim 把工作区放进 `NODE_PATH`，Node 的全局查找路径让它优先 | 全局准备删除 `NODE_PATH`、worker 带 `--no-global-search-paths`；自己起子进程也加上，不要绕开 harness 直接调 vitest 二进制 |
 | GUI 规格偶发找不到元素、工作区选择器被打断、会话草稿串了，或目录选择框的 Edit path 超时 | 共用 home 的规格会恢复彼此的草稿与布局；同一 home 多次重启 GUI 留下状态 | 改用 `upgradeEnvironment` 的独立 home；不要在共享 harness 里再加 locator handler（Playwright 在 handler 内不运行其他 handler，会与欢迎对话框冲突） |
 | 打包前身 checkout 时 pnpm 去下载另一个 pnpm 或报 `packageManager` 不匹配 | 前身的 `packageManager` 字段触发版本管理 | harness 用 `--config.manage-package-manager-versions=false --config.package-manager-strict=false --config.ignore-scripts=true`；手工打包时照做 |
@@ -204,7 +204,7 @@ export PNPM_HOME=$PWD/.pnpm-home \
 1. 提升要发布的包的版本；profile 的版本决定标签，只要有包要发，profile 也要提升（它精确锁定其余三个包）。
 2. 把 CHANGELOG 的 “Unreleased” 整理成各包的版本小节，同步各包 README。
 3. 本地 `pnpm run check` 与 `pnpm run test:e2e`。
-4. 先推送 main，等 `ci` 通过（`publish` 不跑 e2e），再打 `v<profile 版本>` 标签并推送。
+4. 先推送 main，等 `ci` 通过，再打 `v<profile 版本>` 标签并推送。e2e 只在本地跑（第 3 步），`ci` 与 `publish` 都不跑。
 
 npm 只能给已经存在的包配置可信发布（trusted publishing），所以**新包的第一个版本手动发布**：在要打标签的提交上 `pnpm run build`，进包目录 `pnpm pack`（只有 pnpm 会改写 `workspace:` / `catalog:` 范围），再用 `npm publish <tarball> --access public` 发布；然后在该包的 npm 设置里添加 trusted publisher：GitHub Actions，仓库 `Yurzi/dsh-tool-web-enhanced`，工作流 `publish.yml`，不设 environment。之后再推标签，`publish` 会跳过已在 registry 上的版本。手动发布的版本没有 provenance。
 
@@ -212,7 +212,7 @@ npm 只能给已经存在的包配置可信发布（trusted publishing），所�
 
 | 工作流 | 触发 | 内容 |
 | --- | --- | --- |
-| `ci.yml` | push 到 main、PR | `check`：Node 22.19.0 与 24 上 `pnpm install --frozen-lockfile && pnpm run check`；通过后 `e2e`：Node 24 上装 Chromium、跑 `pnpm run test:e2e`（缺浏览器即失败），无论成败上传 `.e2e/artifacts` |
+| `ci.yml` | push 到 main、PR | `check`：Node 22.19.0 与 24 上 `pnpm install --frozen-lockfile && pnpm run check`。不跑 e2e：它要安装真实 DSH 与 Chromium、跑十几分钟，截图类规格对时序敏感，只在本地开发与发布前运行 |
 | `publish.yml` | `v*` 标签 | 核对标签等于 `packages/profile/package.json` 的版本，跑 `check`，再 `pnpm --recursive publish --access public --no-git-checks --provenance`（npm trusted publishing，OIDC，不用 token）；registry 上已有的版本跳过 |
 
 ## 文档维护
