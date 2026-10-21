@@ -45,7 +45,7 @@ docs/orchestration-prompt.md：维护者维护的多 agent 开发任务说明（
 
 ### profile
 
-没有 src、main 或构建脚本：[cordis.patch.yml](<../packages/profile/cordis.patch.yml>) 声明共享 web 路由与插件行的组合 patch，[locale/{en,zh}.json](<../packages/profile/locale/en.json>) 与 [icon.svg](<../packages/profile/icon.svg>) 提供 Plugins 页元数据与图标，另有 package.json、README.md 与 tests/profile.spec.ts。
+没有 src、main 或构建脚本：[cordis.patch.yml](<../packages/profile/cordis.patch.yml>) 声明共享 web 路由与插件行的组合 patch，[locale/{en,zh}.json](<../packages/profile/locale/en.json>) 与 [icon.svg](<../packages/profile/icon.svg>) 提供 Plugins 页元数据与图标，[screenshots.json](<../packages/profile/screenshots.json>) 给插件市场列出截图（指向根 docs/assets 的 raw 地址，不进 npm 包），另有 package.json、README.md 与 tests/profile.spec.ts。
 
 ### core
 
