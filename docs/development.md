@@ -165,7 +165,7 @@ export PNPM_HOME=$PWD/.pnpm-home \
 
 | 现象 | 原因 | 处理 |
 | --- | --- | --- |
-| Chromium 启动失败，提示 SingletonSocket / socket 路径过长 | Linux 的 Unix socket 路径上限 108 字节，独立 home 嵌套很深 | `openApp` 已把 Chromium 的 `TMPDIR` 设为 `.e2e/run`；仓库路径本身很长时把 checkout 移到更短的路径 |
+| Chromium 启动失败，提示 SingletonSocket / socket 路径过长 | Linux 的 Unix socket 路径上限 108 字节，仓库路径较长（如 GitHub runner 的 `/home/runner/work/<repo>/<repo>`）时 `.e2e/run` 下的任何目录都放不下 | `openApp` 给 Chromium 一个 `/tmp/dsh-e2e-*` 短临时目录作 `TMPDIR`，浏览器关闭时删除；仍报错时检查是否有别的代码改了 Chromium 的 `TMPDIR` |
 | 进程内 Host 加载了工作区的插件而不是 profile 里装的；`upgrade` 报前身 “was not selected as a predecessor bundle” | pnpm 的 vitest shim 把工作区放进 `NODE_PATH`，Node 的全局查找路径让它优先 | 全局准备删除 `NODE_PATH`、worker 带 `--no-global-search-paths`；自己起子进程也加上，不要绕开 harness 直接调 vitest 二进制 |
 | GUI 规格偶发找不到元素、工作区选择器被打断、会话草稿串了，或目录选择框的 Edit path 超时 | 共用 home 的规格会恢复彼此的草稿与布局；同一 home 多次重启 GUI 留下状态 | 改用 `upgradeEnvironment` 的独立 home；不要在共享 harness 里再加 locator handler（Playwright 在 handler 内不运行其他 handler，会与欢迎对话框冲突） |
 | 打包前身 checkout 时 pnpm 去下载另一个 pnpm 或报 `packageManager` 不匹配 | 前身的 `packageManager` 字段触发版本管理 | harness 用 `--config.manage-package-manager-versions=false --config.package-manager-strict=false --config.ignore-scripts=true`；手工打包时照做 |

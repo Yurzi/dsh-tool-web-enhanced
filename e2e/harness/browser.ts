@@ -1,10 +1,10 @@
 /**
  * Headless Chromium through Playwright, pointed at the isolated GUI.
  */
-import { existsSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { type Browser, type BrowserContextOptions, type Page, chromium } from 'playwright-core'
-import { artifacts, isolatedEnvironment, run } from './environment.ts'
+import { artifacts, isolatedEnvironment } from './environment.ts'
 import { en as uiText, zh as uiZh } from '../../packages/ui/src/client/locales.ts'
 
 /**
@@ -42,14 +42,20 @@ export interface App {
  */
 export async function openApp(url: string, contextOptions: BrowserContextOptions = {}): Promise<App> {
   if (chromiumPath === undefined) throw new Error('no Chromium found; set DSH_E2E_CHROMIUM')
-  // Chromium's SingletonSocket must fit Linux's 108-byte Unix-socket path limit.
-  // Upgrade homes are too deeply nested, so keep Chrome scratch short and still
-  // inside the run instead of falling back to any developer home or OS cache.
+  // Chromium's SingletonSocket must fit Linux's 108-byte Unix-socket path limit, which
+  // any directory of a checkout under a long path (GitHub's /home/runner/work/<repo>/<repo>)
+  // exceeds. Chrome's scratch is therefore a fresh short directory under /tmp, removed
+  // when the browser closes; it never falls back to a developer home or OS cache.
+  const scratch = mkdtempSync('/tmp/dsh-e2e-')
   const browser = await chromium.launch({
     executablePath: chromiumPath, headless: true,
     args: ['--no-sandbox', '--disable-dev-shm-usage'],
-    env: { ...isolatedEnvironment(), TMPDIR: run },
+    env: { ...isolatedEnvironment(), TMPDIR: scratch },
   })
+  const close = async () => {
+    await browser.close()
+    rmSync(scratch, { recursive: true, force: true })
+  }
   try {
     const page = await (await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: 'en-US', ...contextOptions })).newPage()
     const copy = contextOptions.locale === 'zh-CN' ? uiZh : uiText
@@ -75,10 +81,10 @@ export async function openApp(url: string, contextOptions: BrowserContextOptions
       page,
       errors,
       screenshot: async (name) => { await page.screenshot({ path: join(artifacts, `${name}.png`), fullPage: true }) },
-      close: () => browser.close(),
+      close,
     }
   } catch (error) {
-    await browser.close()
+    await close()
     throw error
   }
 }
