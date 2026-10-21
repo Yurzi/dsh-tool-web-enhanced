@@ -133,7 +133,7 @@ dsh plugin --profile <profile> add dsh-tool-web-enhanced-profile
 
 ## 从 0.1.x 升级
 
-dsh-web-search-enhanced 与 dsh-web-fetch-enhanced 的 0.1.x 版本原本各自是一个独立 bundle，在各自的仓库（[Yurzi/dsh-web-search-enhanced](https://github.com/Yurzi/dsh-web-search-enhanced)、[Yurzi/dsh-web-fetch-enhanced](https://github.com/Yurzi/dsh-web-fetch-enhanced)）发布。npm 包名不变，0.2.0 起由本仓库发布，只作为 profile 的组成部分安装。
+dsh-web-search-enhanced 与 dsh-web-fetch-enhanced 的 0.1.x 版本原本各自是一个独立 bundle，在各自的仓库（[Yurzi/dsh-web-search-enhanced](https://github.com/Yurzi/dsh-web-search-enhanced)、[Yurzi/dsh-web-fetch-enhanced](https://github.com/Yurzi/dsh-web-fetch-enhanced)，均已归档）发布。npm 包名不变，0.2.0 起由本仓库发布，只作为 profile 的组成部分安装。
 
 1. 先在同一个 profile 里移除两个旧插件：
 
