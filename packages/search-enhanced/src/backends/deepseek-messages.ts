@@ -13,11 +13,11 @@ import {
 } from '@deepseek-ai/dsh-web-search-deepseek'
 import { DEFAULT_NATIVE_OVERRIDES, nativeAuth, nativeBackend, type NativeOverrides } from './common.ts'
 
-export function messagesOptions(ctx: Context, { credentialRef, options }: NativeOverrides): DeepSeekSearchProviderOptions {
+export function messagesOptions(ctx: Context, { credentialRef, options }: NativeOverrides, auth = nativeAuth(ctx, credentialRef)): DeepSeekSearchProviderOptions {
   const environmentBase = launchEnvironmentOf(ctx).get('DEEPSEEK_SEARCH_BASE_URL')
   const defaultBase = environmentBase === undefined ? DEEPSEEK_DEFAULT_BASE_URL : environmentBase.value
   return {
-    ...nativeAuth(ctx, credentialRef),
+    ...auth,
     baseURL: typeof options.baseURL === 'string' ? options.baseURL : defaultBase,
     model: typeof options.model === 'string' ? options.model : DEEPSEEK_DEFAULT_MODEL,
     apiVersion: typeof options.apiVersion === 'string' ? options.apiVersion : DEEPSEEK_DEFAULT_API_VERSION,
@@ -32,5 +32,20 @@ export function messagesOptions(ctx: Context, { credentialRef, options }: Native
 }
 
 export function deepseekMessages(ctx: Context, overrides: () => NativeOverrides = () => DEFAULT_NATIVE_OVERRIDES): WebSearchProvider {
-  return nativeBackend(new DeepSeekSearchProvider(() => messagesOptions(ctx, overrides())), cause => { ctx.logger.debug('Native search failed', cause) })
+  const readiness = new DeepSeekSearchProvider(() => messagesOptions(ctx, overrides()))
+  return {
+    id: readiness.id,
+    available: () => readiness.available(),
+    search: (request, signal) => {
+      const secrets = new Set<string>()
+      let auth: ReturnType<typeof nativeAuth> | undefined
+      const upstream = new DeepSeekSearchProvider(() => {
+        const settings = overrides()
+        auth = nativeAuth(ctx, settings.credentialRef, secrets)
+        return messagesOptions(ctx, settings, auth)
+      })
+      const resolverFailed = () => auth !== undefined && auth.resolverFailed()
+      return nativeBackend(upstream, cause => { ctx.logger.debug('Native search failed', cause) }, secrets, resolverFailed).search(request, signal)
+    },
+  }
 }

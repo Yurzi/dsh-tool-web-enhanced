@@ -1,14 +1,15 @@
 /**
- * Operator-defined adapter connections. The catalog's adapter entries are the
- * formats; without one the section does not render. Removing the connection
- * that is the default restores the catalog default in the same write.
+ * Operator-defined connections. The catalog's adapter entries, then the model
+ * protocols a plugin passes, are the formats; without any the section does
+ * not render. Removing the connection that is the default restores the
+ * catalog default in the same write.
  */
 import { useState, type ReactNode } from 'react'
 import { Button, IconPlusOutlineRegular, StateDot, Switch, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { CredentialStatusMap } from '../credentials.ts'
 import type { ClientTranslate } from '../command.ts'
-import { createConnectionForm } from './connection-form.ts'
-import { createConnectionEditor, type CustomEditorTarget, type EditorCopyKey } from './ConnectionEditor.tsx'
+import { createConnectionForm, formatOf } from './connection-form.ts'
+import { createConnectionEditor, formatLabel, type CustomEditorTarget, type EditorCopyKey, type ModelFormats } from './ConnectionEditor.tsx'
 import type { CredentialEditorComponent, SaveCredential } from './CredentialEditor.tsx'
 import { catalogEntry, customConnections, type AdapterKeyOf, type CatalogSettings, type CustomConnection, type OptionCopyTable, type SettingsCatalog } from './model.ts'
 import type { OptionsEditor } from './OptionsEditor.tsx'
@@ -25,8 +26,8 @@ interface CustomProps<S, K extends string> {
   t: ClientTranslate<K>
 }
 
-export function createCustomConnectionsSection<S extends CatalogSettings, T extends SettingsCatalog, K extends string>({
-  classes: css, keys, parts, CredentialEditor, optionsEditor, sparse, catalog, optionCopy, defaultConnection,
+export function createCustomConnectionsSection<S extends CatalogSettings, T extends SettingsCatalog, K extends string, P extends string = never>({
+  classes: css, keys, parts, CredentialEditor, optionsEditor, sparse, catalog, optionCopy, protocols, defaultConnection,
 }: {
   classes: SettingsClasses
   keys: Readonly<Record<CustomCopyKey, K>>
@@ -37,18 +38,24 @@ export function createCustomConnectionsSection<S extends CatalogSettings, T exte
   catalog: T
   /** Copy for the options of each adapter entry. */
   optionCopy: (key: AdapterKeyOf<T>) => OptionCopyTable<K>
+  /** Model protocols offered after the adapters; a capability without model connections omits them. */
+  protocols?: ModelFormats<P, K> | undefined
   /** The catalog default that replaces a removed default connection. */
   defaultConnection: string
 }): (props: CustomProps<S, K>) => ReactNode {
   type A = AdapterKeyOf<T>
   const { Section, ErrorText, ConfirmRow, useWrite } = parts
-  const rules = createConnectionForm({ catalog, optionCopy })
-  const [initialAdapter] = rules.adapters
-  if (initialAdapter === undefined) return () => null
-  const ConnectionEditor = createConnectionEditor<S, T, K>({ classes: css, keys, parts, optionsEditor, sparse, catalog, rules, initialAdapter })
+  const rules = createConnectionForm<T, K, P>({ catalog, optionCopy, protocols })
+  const [initialFormat] = rules.formats
+  if (initialFormat === undefined) return () => null
+  const ConnectionEditor = createConnectionEditor<S, T, K, P>({ classes: css, keys, parts, optionsEditor, sparse, catalog, rules, initialFormat, protocols })
 
-  /** Who receives what a connection sends: the catalog service, and the host when the endpoint is not the catalog's. */
-  function recipient(connection: CustomConnection<A>): string {
+  /**
+   * Who receives what a connection sends: the catalog service, and the host
+   * when the endpoint is not the catalog's; a model connection's own endpoint host.
+   */
+  function recipient(connection: CustomConnection<A, P>): string {
+    if (connection.kind === 'model') return new URL(connection.endpoint).host
     const info = catalogEntry(catalog, connection.adapter)
     if (connection.endpoint === undefined || connection.endpoint === info.endpoint) return info.label
     return info.label + ' (' + new URL(connection.endpoint).host + ')'
@@ -57,7 +64,7 @@ export function createCustomConnectionsSection<S extends CatalogSettings, T exte
   function CustomConnectionsSection({ doc, write, credentials, saveCredential, t }: CustomProps<S, K>) {
     const [editor, setEditor] = useState<CustomEditorTarget | undefined>(undefined)
     const [notice, setNotice] = useState<string | undefined>(undefined)
-    const connections = customConnections<A>(doc.config)
+    const connections = customConnections<A, P>(doc.config)
     const taken = doc.config.connections === undefined ? [] : Object.keys(doc.config.connections)
 
     const open = (target: CustomEditorTarget | undefined) => {
@@ -127,7 +134,7 @@ export function createCustomConnectionsSection<S extends CatalogSettings, T exte
 
   function CustomRow({ id, connection, doc, write, credentials, saveCredential, editing, onEdit, editor, t }: CustomProps<S, K> & {
     id: string
-    connection: CustomConnection<A>
+    connection: CustomConnection<A, P>
     editing: boolean
     onEdit: () => void
     editor: ReactNode
@@ -160,11 +167,12 @@ export function createCustomConnectionsSection<S extends CatalogSettings, T exte
           <div className={css.rowMain}>
             <span className={css.rowTitle}>
               {connection.label}
-              <Tag tone="neutral">{t(keys['custom.kindStructured'])}</Tag>
+              <Tag tone="neutral">{connection.kind === 'adapter' ? t(keys['custom.kindStructured']) : formatLabel(catalog, protocols, formatOf(connection), t)}</Tag>
             </span>
             <span className={css.rowMeta}>
               <code>{id}</code>
               {' · '}
+              {connection.kind === 'model' ? <><code>{connection.model}</code>{' · '}</> : null}
               <code>{credentialRef}</code>
               {credentialStatus === 'configured' ? ' · ' + t(keys['credential.set']) : ''}
               {credentialStatus === 'missing' ? ' · ' + t(keys['credential.unset']) : ''}

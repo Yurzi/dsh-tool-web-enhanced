@@ -22,6 +22,7 @@ export function resolveSettings(document: unknown = {}): ResolvedSettings {
   const connections = new Map<string, Connection>()
   for (const [id, connection] of resolved.connections) {
     const { catalogKey, ...base } = connection
+    if (base.kind === 'model') throw new Error('fetch catalog cannot contain a model connection')
     const path = 'connections.' + id
     if (base.kind === 'local') {
       const options: LocalSettings = localOptions.parse(base.options)

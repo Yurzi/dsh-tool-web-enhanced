@@ -11,14 +11,15 @@ export interface NativeOverrides {
 
 const NATIVE_MESSAGES = {
   WEB_PROVIDER_CREDENTIAL_MISSING: 'DeepSeek fetch has no API key; ask the user to save the configured credential (DEEPSEEK_API_KEY by default) in fetch connection settings or use a DeepSeek account model.',
-  WEB_PROVIDER_ERROR: 'DeepSeek fetch failed; ask the user to check fetch connection settings, the API key or DeepSeek account sign-in. Do not retry in a loop.',
+  WEB_PROVIDER_ERROR: 'DeepSeek fetch failed. If every URL fails, ask the user to check fetch connection settings, the API key or DeepSeek account sign-in. Do not retry in a loop.',
   WEB_ABORTED: 'fetch aborted',
 } as const
 
-export const restateNativeError = restateNative(NATIVE_MESSAGES, FETCH.packageName + ': ')
+export const restateNativeError = restateNative(NATIVE_MESSAGES, FETCH.packageName + ': ',
+  'DeepSeek fetch failed; ask the user to check fetch connection settings, the API key or DeepSeek account sign-in. Do not retry in a loop.')
 
-export function nativeBackend(ctx: Context, upstream: WebFetchProvider): WebFetchProvider {
+export function nativeBackend(ctx: Context, upstream: WebFetchProvider, secrets: Iterable<string> = [], resolverFailed: () => boolean = () => false): WebFetchProvider {
   const backend = wrapNative(upstream, (request: WebFetchRequest, signal) => upstream.fetch(request, signal), restateNativeError,
-    error => { ctx.logger.debug('Native fetch failed', error) })
+    error => { ctx.logger.debug('Native fetch failed', error) }, secrets, resolverFailed)
   return { id: backend.id, available: backend.available, fetch: backend.execute }
 }

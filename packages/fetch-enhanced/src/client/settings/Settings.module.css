@@ -74,6 +74,12 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+/* Panels and editors sit on the platform background, where the tertiary label is too faint for what they explain. */
+.panel .hint,
+.editor .hint {
+  color: var(--dsw-alias-label-secondary);
+}
+
 .hint [role='status'] {
   display: flex;
   align-items: baseline;
@@ -452,7 +458,8 @@
 
 @container (max-width: 480px) {
   .optionGrid { grid-template-columns: minmax(0, 1fr); }
-  .settingControl { flex-basis: 100%; }
+  /* Wrapped under its text, a control starts where the text does, like the row actions. */
+  .settingControl { flex-basis: 100%; justify-content: flex-start; }
   .panel { padding: 12px; }
 }
 
@@ -535,4 +542,88 @@
   font-size: 12px;
   line-height: 18px;
   color: var(--dsw-alias-label-secondary);
+}
+
+/* A list option: one item per line, across the whole option grid. */
+.optionWide {
+  grid-column: 1 / -1;
+}
+
+.textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 72px;
+  padding: 8px 10px;
+  resize: vertical;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+/* Focus and placeholder as the Input primitive draws them. */
+.textarea:focus {
+  outline: none;
+  border-color: var(--dsw-alias-state-business-primary);
+}
+
+.textarea::placeholder {
+  color: var(--dsw-alias-label-dimmed);
+}
+
+.textarea[aria-invalid='true'] {
+  border-color: var(--dsw-alias-state-error-primary);
+}
+
+.textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* Options some protocols apply, under a title naming them. */
+.optionGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 0.5px solid var(--dsw-alias-border-l4);
+}
+
+.optionGroup:first-child,
+.fieldHead + .optionGroup {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.optionGroupTitle {
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+}
+
+/* Endpoint trust: a security decision, set apart from the fields around it. */
+.trust {
+  padding: 10px 12px;
+  border: 0.5px solid var(--dsw-alias-state-warn-primary);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.trust .trustCheck {
+  align-items: flex-start;
+}
+
+.trust .trustCheck input {
+  margin-top: 2px;
+}
+
+/* Why Save is unavailable, beside it. */
+.actions > .hint {
+  flex: 1 1 auto;
+  align-self: center;
 }

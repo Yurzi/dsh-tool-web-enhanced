@@ -24,7 +24,7 @@ describe('resolveAllowedAddresses', () => {
   it('refuses the whole set when any answer is outside the allowlist', async () => {
     await expect(resolveAllowedAddresses('mixed.test', signal(), policy(),
       answers({ address: '93.184.216.34', family: 4 }, { address: '10.0.0.2', family: 4 })))
-      .rejects.toMatchObject({ code: 'WEB_BLOCKED_URL' })
+      .rejects.toMatchObject({ code: 'WEB_BLOCKED_URL', message: 'dsh-web-fetch-enhanced: The destination is outside the local allowlist. Ask the operator to review it.' })
   })
 
   it('checks an IPv4 literal without DNS', async () => {
@@ -36,9 +36,9 @@ describe('resolveAllowedAddresses', () => {
 
   it('rejects empty and malformed answers as provider errors', async () => {
     await expect(resolveAllowedAddresses('empty.test', signal(), policy(), answers()))
-      .rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR' })
+      .rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR', message: 'dsh-web-fetch-enhanced: The destination has no DNS addresses. Check DNS and try again.' })
     await expect(resolveAllowedAddresses('family.test', signal(), policy(), answers({ address: '8.8.8.8', family: 6 })))
-      .rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR' })
+      .rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR', message: 'dsh-web-fetch-enhanced: DNS returned an invalid destination. Check DNS and try again.' })
   })
 
   it('checks the IPv4 address an active NAT64 prefix translates to', async () => {
@@ -46,7 +46,7 @@ describe('resolveAllowedAddresses', () => {
       ? [{ address: '2001:4860:64::c000:aa', family: 6 }]
       : [{ address: '2001:4860:64::c0a8:101', family: 6 }]
     await expect(resolveAllowedAddresses('nat64.test', signal(), policy(), lookup))
-      .rejects.toMatchObject({ code: 'WEB_BLOCKED_URL', message: 'The destination is outside the local allowlist. Ask the operator to review it.' })
+      .rejects.toMatchObject({ code: 'WEB_BLOCKED_URL', message: 'dsh-web-fetch-enhanced: The destination is outside the local allowlist. Ask the operator to review it.' })
     await expect(resolveAllowedAddresses('nat64.test', signal(), policy(['192.168.0.0/16']), lookup))
       .resolves.toHaveLength(1)
   })
@@ -65,7 +65,7 @@ describe('resolveAllowedAddresses', () => {
       ? [{ address: embed([192, 0, 0, 170]), family: 6 }]
       : [{ address: embed([10, 0, 0, 1]), family: 6 }]
     await expect(resolveAllowedAddresses('nat64.test', signal(), policy(), lookup))
-      .rejects.toMatchObject({ code: 'WEB_BLOCKED_URL' })
+      .rejects.toMatchObject({ code: 'WEB_BLOCKED_URL', message: 'dsh-web-fetch-enhanced: The destination is outside the local allowlist. Ask the operator to review it.' })
     await expect(resolveAllowedAddresses('nat64.test', signal(), policy(['10.0.0.1/32']), lookup))
       .resolves.toHaveLength(1)
   })
@@ -76,7 +76,7 @@ describe('resolveAllowedAddresses', () => {
       return [{ address: '2001:4860:4860::8888', family: 6 }]
     }
     await expect(resolveAllowedAddresses('public.test', signal(), policy(), lookup))
-      .rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR', message: 'Unable to resolve the destination. Check DNS and try again.' })
+      .rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR', message: 'dsh-web-fetch-enhanced: Unable to resolve the destination. Check DNS and try again.' })
   })
 
   it('checks every overlapping NAT64 prefix, not the first match', async () => {
@@ -88,22 +88,22 @@ describe('resolveAllowedAddresses', () => {
         ]
       : [{ address: '2001:4860:808:808::7f00:1', family: 6 }]
     await expect(resolveAllowedAddresses('overlap.test', signal(), policy(), lookup))
-      .rejects.toMatchObject({ code: 'WEB_BLOCKED_URL', message: 'The destination is outside the local allowlist. Ask the operator to review it.' })
+      .rejects.toMatchObject({ code: 'WEB_BLOCKED_URL', message: 'dsh-web-fetch-enhanced: The destination is outside the local allowlist. Ask the operator to review it.' })
   })
 
   it('does not start DNS for an already cancelled request or accept an IPv4 literal', async () => {
     const controller = new AbortController()
     controller.abort('cancelled')
     const lookup = vi.fn<AddressLookup>()
-    await expect(resolveAllowedAddresses('cancelled.test', controller.signal, policy(), lookup)).rejects.toThrow('aborted')
-    await expect(resolveAllowedAddresses('8.8.8.8', controller.signal, policy(), lookup)).rejects.toThrow('aborted')
+    await expect(resolveAllowedAddresses('cancelled.test', controller.signal, policy(), lookup)).rejects.toThrow('dsh-web-fetch-enhanced: web fetch aborted during hostname resolution')
+    await expect(resolveAllowedAddresses('8.8.8.8', controller.signal, policy(), lookup)).rejects.toThrow('dsh-web-fetch-enhanced: web fetch aborted during hostname resolution')
     expect(lookup).not.toHaveBeenCalled()
   })
 
   it('rejects invalid IPv6 answers before starting discovery', async () => {
     const lookup = answers({ address: 'not an address', family: 6 })
     await expect(resolveAllowedAddresses('invalid.test', signal(), policy(), lookup))
-      .rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR' })
+      .rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR', message: 'dsh-web-fetch-enhanced: DNS returned an invalid destination. Check DNS and try again.' })
     expect(lookup).toHaveBeenCalledTimes(1)
   })
 
@@ -117,7 +117,7 @@ describe('resolveAllowedAddresses', () => {
   it('does not expose resolver failures or retry them', async () => {
     const lookup = vi.fn<AddressLookup>().mockRejectedValue(new Error('secret DNS details'))
     await expect(resolveAllowedAddresses('failed.test', signal(), policy(), lookup))
-      .rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR', message: 'Unable to resolve the destination. Check DNS and try again.' })
+      .rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR', message: 'dsh-web-fetch-enhanced: Unable to resolve the destination. Check DNS and try again.' })
     expect(lookup).toHaveBeenCalledTimes(1)
   })
 
@@ -133,13 +133,13 @@ describe('resolveAllowedAddresses', () => {
     const pending = resolveAllowedAddresses('public.test', controller.signal, policy(), lookup)
     await started
     controller.abort('cancelled')
-    await expect(pending).rejects.toThrow('aborted during hostname resolution')
+    await expect(pending).rejects.toThrow('dsh-web-fetch-enhanced: web fetch aborted during hostname resolution')
   })
 
   it('stops waiting for DNS once the request is cancelled', async () => {
     const controller = new AbortController()
     const pending = resolveAllowedAddresses('slow.test', controller.signal, policy(), () => new Promise(() => {}))
     controller.abort('cancelled')
-    await expect(pending).rejects.toThrow('aborted during hostname resolution')
+    await expect(pending).rejects.toThrow('dsh-web-fetch-enhanced: web fetch aborted during hostname resolution')
   })
 })

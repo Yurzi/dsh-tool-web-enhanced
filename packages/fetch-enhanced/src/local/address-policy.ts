@@ -1,4 +1,5 @@
 import ipaddr from 'ipaddr.js'
+import { FETCH } from 'dsh-tool-web-enhanced-core/shared'
 import {
   type Cidr, type HostnameRule, type IpAddress, type ParseResult,
   describeProblem, matchesCidr, normalizeHost, parseCidr, parseHostnameRule, stripIpv6Brackets,
@@ -78,7 +79,7 @@ function parseAddress(input: string): IpAddress | undefined {
 
 function accept<T>(field: keyof AllowlistRules, rule: string, result: ParseResult<T>): T {
   if (result.ok) return result.value
-  throw new Error(`web-fetch-enhanced: ${field} entry ${JSON.stringify(rule)} ${describeProblem(result.problem)}`)
+  throw new Error(`${FETCH.packageName}: ${field} entry ${JSON.stringify(rule)} ${describeProblem(result.problem)}`)
 }
 
 

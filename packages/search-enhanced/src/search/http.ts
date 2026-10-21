@@ -1,4 +1,4 @@
-import { createMcpClient, createTransport } from 'dsh-tool-web-enhanced-core/host'
+import { createMcpClient, createTransport, upstreamSuffix } from 'dsh-tool-web-enhanced-core/host'
 import { SEARCH } from 'dsh-tool-web-enhanced-core/shared'
 import { searchErrors } from './errors.ts'
 
@@ -24,7 +24,7 @@ export const { withDeadline, readJson, requestJson, invalidResponse } = transpor
 export const mcp = createMcpClient(transport, searchErrors, {
   clientInfo: { name: SEARCH.packageName, version: __PLUGIN_VERSION__ },
   messages: {
-    toolFailed: label => label + ' could not complete the search; retry later or choose another search connection',
-    serverError: 'the MCP search server returned an error; retry later or choose another search connection',
+    toolFailed: (label, detail) => label + ' could not complete the search; retry later or choose another search connection' + upstreamSuffix(label, detail),
+    serverError: (label, detail) => 'the MCP search server returned an error; retry later or choose another search connection' + upstreamSuffix(label, detail),
   },
 })

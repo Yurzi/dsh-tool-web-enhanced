@@ -27,7 +27,7 @@ export type AccessMode = 'keyless' | 'api-key'
 /** How a call actually authenticates. */
 export type Access = AccessMode | 'account'
 
-/** The four backend kinds of docs/architecture.md section 6.4. */
+/** The four backend kinds (docs/architecture.md, "后端种类与执行层"). */
 export type BackendKind = 'native' | 'adapter' | 'model' | 'local'
 
 /**
@@ -69,6 +69,23 @@ export interface Descriptor {
   readonly remote: boolean
   readonly access: AccessFacts
   readonly options: Readonly<Record<string, OptionRule>>
+  /** Pairs of options at most one of which may be set. */
+  readonly exclusive?: readonly ExclusiveOptions[]
+}
+
+/** Two option names an operator may not set together. */
+export type ExclusiveOptions = readonly [string, string]
+
+/**
+ * A model wire protocol a custom `model` connection may name, with the
+ * operator options it accepts; the counterpart of an adapter catalog entry
+ * for custom adapter connections.
+ */
+export interface ProtocolDescriptor {
+  readonly label: string
+  readonly options: Readonly<Record<string, OptionRule>>
+  /** Pairs of options at most one of which may be set. */
+  readonly exclusive?: readonly ExclusiveOptions[]
 }
 
 export const builtinId = (key: string): ConnectionId => `${BUILTIN_PREFIX}${key}`
@@ -92,16 +109,21 @@ export function defaultAccess(access: AccessFacts): AccessMode {
  * @param rules - the descriptor's option rules.
  * @param options - the operator's options.
  * @param access - persisted access mode; keyless may reject or narrow an option.
- * @returns one English problem per invalid option; empty when all are valid.
+ * @param exclusive - the descriptor's option pairs that may not both be set.
+ * @returns one English problem per invalid option or exclusive pair; empty when all are valid.
  */
-export function validateOptions(label: string, rules: Readonly<Record<string, OptionRule>>, options: Readonly<Record<string, unknown>>, access: AccessMode): string[] {
-  return Object.entries(options).flatMap(([key, value]) => {
+export function validateOptions(label: string, rules: Readonly<Record<string, OptionRule>>, options: Readonly<Record<string, unknown>>, access: AccessMode, exclusive: readonly ExclusiveOptions[] = []): string[] {
+  const invalid = Object.entries(options).flatMap(([key, value]) => {
     const rule = Object.hasOwn(rules, key) ? rules[key] : undefined
     if (rule === undefined) return [`${label} has no option "${key}"`]
     if (!accepts(rule, value)) return [`${label} option "${key}" has an invalid value`]
     if (access === 'keyless' && !keylessAccepts(rule, value)) return [`${label} option "${key}" = ${JSON.stringify(value)} needs API-key access`]
     return []
   })
+  const combined = exclusive
+    .filter(([first, second]) => Object.hasOwn(options, first) && Object.hasOwn(options, second))
+    .map(([first, second]) => `${label} options "${first}" and "${second}" cannot both be set`)
+  return [...invalid, ...combined]
 }
 
 function accepts(rule: OptionRule, value: unknown): boolean {

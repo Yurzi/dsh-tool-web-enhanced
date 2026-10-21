@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { builtinId, builtinKey, CREDENTIAL_REF, CUSTOM_CONNECTION_ID, defaultAccess, TEXT_MAX_LENGTH, validateOptions, type AccessMode, type Descriptor } from './connections.ts'
+import { builtinId, builtinKey, CREDENTIAL_REF, CUSTOM_CONNECTION_ID, defaultAccess, TEXT_MAX_LENGTH, validateOptions, type AccessMode, type Descriptor, type ProtocolDescriptor } from './connections.ts'
 import { isEndpoint } from './url.ts'
 
 // Unversioned documents are permanently the first unified grammar, not the latest release.
@@ -80,7 +80,7 @@ export interface BuiltinOverride {
 }
 
 /** A persisted operator-defined connection; its grammar is customConnectionSchema, and a test keeps the two identical. */
-export interface CustomConnection<A extends string = string> {
+export interface CustomAdapterConnection<A extends string = string> {
   readonly kind: 'adapter'
   readonly adapter: A
   readonly label: string
@@ -91,12 +91,35 @@ export interface CustomConnection<A extends string = string> {
   readonly options?: Record<string, unknown> | undefined
 }
 
-export function customConnectionSchema(adapterKeys: readonly string[]) {
-  return z.strictObject({
+export interface CustomModelConnection<P extends string = string> {
+  readonly kind: 'model'
+  readonly protocol: P
+  readonly model: string
+  readonly label: string
+  readonly credentialRef: string
+  readonly endpoint: string
+  readonly trustedEndpoint: true
+  readonly disabled?: boolean | undefined
+  readonly options?: Record<string, unknown> | undefined
+}
+export type CustomConnection<A extends string = string, P extends string = string> = CustomAdapterConnection<A> | CustomModelConnection<P>
+
+export function customConnectionSchema<A extends string, P extends string>(adapterKeys: readonly A[], protocolKeys: readonly P[]) {
+  const adapterSchema = z.strictObject({
     kind: z.literal('adapter'), adapter: z.enum(adapterKeys), label, credentialRef,
     endpoint: endpoint.optional(), trustedEndpoint: z.boolean().optional(),
     disabled: z.boolean().optional(), options: options.optional(),
   })
+  const modelSchema = z.strictObject({
+    kind: z.literal('model'), protocol: z.enum(protocolKeys),
+    model: z.string().min(1).max(200).regex(/^[^\p{Cc}]+$/u, 'must not contain control characters').trim().min(1),
+    label, credentialRef, endpoint, trustedEndpoint: z.literal(true),
+    disabled: z.boolean().optional(), options: options.optional(),
+  })
+  if (adapterKeys.length === 0 && protocolKeys.length === 0) return z.never()
+  if (adapterKeys.length === 0) return z.discriminatedUnion('kind', [modelSchema])
+  if (protocolKeys.length === 0) return z.discriminatedUnion('kind', [adapterSchema])
+  return z.discriminatedUnion('kind', [adapterSchema, modelSchema])
 }
 
 interface CommonConnection {
@@ -108,8 +131,12 @@ interface CommonConnection {
   readonly options: Readonly<Record<string, unknown>>
   readonly catalogKey: string
 }
-export type ResolvedBase = CommonConnection & (
+export type ResolvedModel<P extends string = string> =
+  | { readonly kind: 'session' }
+  | { readonly kind: 'fixed'; readonly protocol: P; readonly model: string; readonly endpoint: string; readonly credentialRef: string }
+export type ResolvedBase<P extends string = string> = CommonConnection & (
   | { readonly kind: 'local'; readonly access: 'keyless' }
+  | { readonly kind: 'model'; readonly route: ResolvedModel<P> }
   | { readonly kind: 'native' | 'adapter'; readonly access: AccessMode; readonly credentialRef: string; readonly endpoint: string }
 )
 export interface ResolvedDocument<D, C = ResolvedBase> {
@@ -122,14 +149,15 @@ export interface ResolvedDocument<D, C = ResolvedBase> {
 export type SettingsDescriptor = Descriptor & { readonly endpoint?: string }
 
 /** Resolve the identical document and connection grammar for Host and browser. */
-export function resolveDocument<S extends z.ZodRawShape>({ catalog, document, defaults, capabilityLabel, retiredFields = [], migrations = SETTINGS_MIGRATIONS }: {
+export function resolveDocument<S extends z.ZodRawShape, P extends string = never>({ catalog, document, defaults, capabilityLabel, protocols, retiredFields = [], migrations = SETTINGS_MIGRATIONS }: {
   readonly catalog: Readonly<Record<string, SettingsDescriptor>>
+  readonly protocols?: Readonly<Record<P, ProtocolDescriptor>>
   readonly document: unknown
   readonly defaults: { readonly schema: z.ZodObject<S>; readonly defaultConnection: string }
   readonly capabilityLabel: string
   readonly retiredFields?: readonly string[]
   readonly migrations?: SettingsMigrations
-}): ResolvedDocument<z.output<z.ZodObject<S>>> {
+}): ResolvedDocument<z.output<z.ZodObject<S>>, ResolvedBase<P>> {
   const fail = (path: string, message: string): never => { throw new Error('invalid ' + capabilityLabel + ' settings: ' + path + ': ' + message) }
   const parse = <T>(schema: z.ZodType<T>, value: unknown, path: string): T => {
     const result = schema.safeParse(value)
@@ -146,18 +174,19 @@ export function resolveDocument<S extends z.ZodRawShape>({ catalog, document, de
   const settings = parse(documentSchema(defaults.schema, migrations.currentVersion), migrateDocument(document, migrations), 'settings')
   const overrides = settings.connections ?? {}
   const adapterKeys = Object.keys(catalog).filter(key => catalog[key]!.kind === 'adapter')
-  const customSchema = customConnectionSchema(adapterKeys)
-  const connections = new Map<string, ResolvedBase>()
+  const protocolKeys = protocols === undefined ? [] : Object.keys(protocols) as P[]
+  const customSchema = customConnectionSchema(adapterKeys, protocolKeys)
+  const connections = new Map<string, ResolvedBase<P>>()
   const rejectId = (id: string, path: string): never => fail(path, 'unknown connection id "' + id + '"; ' + SETTINGS_RESET_HINT)
-  const resolve = (id: string, key: string, override: z.infer<typeof builtinOverrideSchema>, customEndpoint?: string): ResolvedBase => {
+  const resolve = (id: string, key: string, override: z.infer<typeof builtinOverrideSchema>, customEndpoint?: string): ResolvedBase<P> => {
     const info = catalog[key]!
     const path = 'connections.' + id
-    const access = override.access ?? defaultAccess(info.access)
+    const access = info.kind === 'model' ? 'api-key' : override.access ?? defaultAccess(info.access)
     if (access === 'keyless' && !info.access.keyless) fail(path + '.access', 'no keyless access')
-    if (access === 'api-key' && !info.access.apiKey) fail(path + '.access', 'no API-key access')
+    if (info.kind !== 'model' && access === 'api-key' && !info.access.apiKey) fail(path + '.access', 'no API-key access')
     if (override.credentialRef !== undefined && !info.access.apiKey) fail(path + '.credentialRef', 'this connection does not accept credentials')
     const values = override.options ?? {}
-    const problems = validateOptions(info.label, info.options, values, access)
+    const problems = validateOptions(info.label, info.options, values, access, info.exclusive)
     if (problems.length > 0) fail(path + '.options', problems.join('; ') + '; ' + SETTINGS_RESET_HINT)
     const trustedEndpoint = override.trustedEndpoint ?? false
     for (const [name, rule] of Object.entries(info.options)) {
@@ -166,6 +195,7 @@ export function resolveDocument<S extends z.ZodRawShape>({ catalog, document, de
       }
     }
     const base = { id, catalogKey: key, label: override.label ?? info.label, disabled: override.disabled ?? false, remote: info.remote, trustedEndpoint, options: values }
+    if (info.kind === 'model') return { ...base, kind: 'model', route: { kind: 'session' } }
     if (info.kind === 'local') return { ...base, kind: 'local', access: 'keyless' }
     if (info.kind !== 'native' && info.kind !== 'adapter') return fail(path + '.kind', 'unsupported catalog kind')
     if (!info.access.apiKey || info.endpoint === undefined) return fail(path, 'remote catalog entry needs credentials and an endpoint')
@@ -175,15 +205,33 @@ export function resolveDocument<S extends z.ZodRawShape>({ catalog, document, de
   }
   for (const key of Object.keys(catalog)) {
     const id = builtinId(key)
-    const override = overrides[id] === undefined ? {} : parse(builtinOverrideSchema, overrides[id], 'connections.' + id)
+    const raw = overrides[id]
+    if (catalog[key]!.kind === 'model' && raw !== null && typeof raw === 'object') {
+      for (const field of ['access', 'credentialRef', 'trustedEndpoint']) {
+        if (Object.hasOwn(raw, field)) fail('connections.' + id + '.' + field, 'this connection takes its route from the Session model')
+      }
+    }
+    const override = raw === undefined ? {} : parse(builtinOverrideSchema, raw, 'connections.' + id)
     connections.set(id, resolve(id, key, override))
   }
   for (const [id, raw] of Object.entries(overrides)) {
     if (connections.has(id)) continue
-    // A custom connection takes its format from an adapter entry; a catalog without one has no custom connections.
-    if (adapterKeys.length === 0 || !CUSTOM_CONNECTION_ID.test(id) || builtinKey(id) !== undefined) rejectId(id, 'connections.' + id)
-    const custom = parse(customSchema, raw, 'connections.' + id)
-    connections.set(id, resolve(id, custom.adapter, { ...custom, access: 'api-key' }, custom.endpoint))
+    if ((adapterKeys.length === 0 && protocolKeys.length === 0) || !CUSTOM_CONNECTION_ID.test(id) || builtinKey(id) !== undefined) rejectId(id, 'connections.' + id)
+    const path = 'connections.' + id
+    const custom = parse(customSchema, raw, path)
+    if (custom.kind === 'adapter') {
+      connections.set(id, resolve(id, custom.adapter, { ...custom, access: 'api-key' }, custom.endpoint))
+    } else {
+      const info = protocols![custom.protocol]
+      const values = custom.options ?? {}
+      const problems = validateOptions(info.label, info.options, values, 'api-key', info.exclusive)
+      if (problems.length > 0) fail(path + '.options', problems.join('; ') + '; ' + SETTINGS_RESET_HINT)
+      connections.set(id, {
+        id, catalogKey: custom.protocol, kind: 'model', label: custom.label, disabled: custom.disabled ?? false,
+        remote: true, trustedEndpoint: true, options: values,
+        route: { kind: 'fixed', protocol: custom.protocol, model: custom.model, endpoint: custom.endpoint, credentialRef: custom.credentialRef },
+      })
+    }
   }
   const defaultConnection = settings.defaultConnection ?? defaults.defaultConnection
   if (!connections.has(defaultConnection)) rejectId(defaultConnection, 'defaultConnection')

@@ -114,7 +114,7 @@ describe('search unified settings resolution', () => {
     expect(() => resolveSettings({ connections })).toThrow('200')
   })
 
-  it.each(['structured', 'model'])('rejects retired custom kind %s rather than normalizing it', kind => {
+  it.each(['structured'])('rejects retired custom kind %s rather than normalizing it', kind => {
     expect(() => resolveSettings({ connections: { 'custom:work': { ...custom, kind } } })).toThrow('kind')
   })
 
@@ -126,7 +126,7 @@ describe('search unified settings resolution', () => {
     }
   })
 
-  it.each(['custom:missing', 'builtin:missing', 'builtin:deepseek', 'builtin:session-model', 'other:x'])('rejects unknown connection/default id %s with reset guidance', id => {
+  it.each(['custom:missing', 'builtin:missing', 'builtin:deepseek', 'other:x'])('rejects unknown connection/default id %s with reset guidance', id => {
     expectReset({ defaultConnection: id }, id)
     if (id !== 'custom:missing') expectReset({ connections: { [id]: {} } }, id)
   })
@@ -171,6 +171,74 @@ describe('search unified settings resolution', () => {
 
   it.each([null, [], 'settings', 1])('rejects non-document input %j', document => {
     expect(() => resolveSettings(document)).toThrow('settings')
+  })
+})
+
+describe('search model settings', () => {
+  const fixed = { kind: 'model', protocol: 'anthropic-messages', model: 'search-model', label: 'Fixed search', endpoint: 'https://model.example/v1', trustedEndpoint: true, credentialRef: 'MODEL_KEY' }
+  const resolveFixed = (override: Record<string, unknown> = {}) => resolveSettings({ defaultConnection: 'custom:model', connections: { 'custom:model': { ...fixed, ...override } } })
+
+  it('enables Session model by default and accepts it as the default connection', () => {
+    const settings = resolveSettings({ defaultConnection: 'builtin:session-model', connections: { 'builtin:session-model': { label: 'Follow model', disabled: true, options: { maxTokens: 4096, maxUses: 5, searchContextSize: 'medium' } } } })
+    expect(settings.defaultConnection).toBe('builtin:session-model')
+    expect(resolveSettings().connections.get('builtin:session-model')).toEqual({ id: 'builtin:session-model', kind: 'model', label: 'Session model', disabled: false, remote: true, trustedEndpoint: false, options: {}, route: { kind: 'session' } })
+    expect(settings.connections.get('builtin:session-model')).toMatchObject({ label: 'Follow model', disabled: true, options: { maxTokens: 4096, maxUses: 5, searchContextSize: 'medium' }, route: { kind: 'session' } })
+  })
+  it.each(['access', 'credentialRef', 'trustedEndpoint'])('refuses a Session model %s override', field => {
+    expect(() => resolveSettings({ connections: { 'builtin:session-model': { [field]: undefined } } })).toThrow('connections.builtin:session-model.' + field)
+    expect(() => resolveSettings({ connections: { 'builtin:session-model': { [field]: undefined } } })).toThrow('takes its route from the Session model')
+  })
+  it.each(['anthropic-messages', 'openai-responses', 'openai-chat-completions'])('accepts a fixed %s model and its protocol options as a default', protocol => {
+    const options = protocol === 'anthropic-messages' ? { maxTokens: 32_000, maxUses: 10 } : { maxTokens: 1, searchContextSize: 'high' }
+    const settings = resolveFixed({ protocol, options })
+    expect(settings.defaultConnection).toBe('custom:model')
+    expect(settings.connections.get('custom:model')).toEqual({ id: 'custom:model', kind: 'model', label: 'Fixed search', disabled: false, remote: true, trustedEndpoint: true, options, route: { kind: 'fixed', protocol, model: fixed.model, endpoint: fixed.endpoint, credentialRef: fixed.credentialRef } })
+  })
+  it.each([
+    ['protocol', undefined], ['protocol', 'unknown'], ['model', undefined], ['model', ''], ['model', 'x'.repeat(201)], ['model', 'bad\nmodel'],
+    ['endpoint', undefined], ['endpoint', 'relative'], ['endpoint', 'https://user:pass@model.example'], ['endpoint', 'https://model.example?key=x'],
+    ['trustedEndpoint', undefined], ['trustedEndpoint', false], ['credentialRef', undefined], ['credentialRef', 'bad ref'],
+  ])('rejects invalid fixed model %s (%j)', (field, value) => {
+    expect(() => resolveFixed({ [field]: value })).toThrow('connections.custom:model.' + field)
+  })
+  it.each([
+    ['anthropic-messages', { searchContextSize: 'low' }], ['openai-responses', { maxUses: 1 }], ['openai-chat-completions', { maxUses: 1 }],
+    ['anthropic-messages', { maxUses: 51 }], ['anthropic-messages', { maxTokens: 128_001 }], ['openai-responses', { searchContextSize: 'huge' }],
+  ])('rejects unsupported options on %s (%j)', (protocol, options) => {
+    expect(() => resolveFixed({ protocol, options })).toThrow('connections.custom:model.options')
+  })
+  it.each([false, true])('rejects simultaneous domain policies on Messages or Session model (disabled: %s)', disabled => {
+    for (const options of [{ allowedDomains: ['allowed.test'], blockedDomains: ['blocked.test'] }, { allowedDomains: [], blockedDomains: [] }]) {
+      for (const [id, connection] of [
+        ['builtin:session-model', { options, disabled }],
+        ['custom:model', { ...fixed, options, disabled }],
+      ] as const) {
+        const config = { connections: { [id]: connection } }
+        // The catalog declares the pair exclusive; the shared option check reports it with the other option problems.
+        expect(() => resolveSettings(config)).toThrow('connections.' + id + '.options')
+        expect(() => resolveSettings(config)).toThrow('options "allowedDomains" and "blockedDomains" cannot both be set')
+      }
+    }
+  })
+  it('allows Responses to combine domain policies, while either alone is valid for Messages and Session model', () => {
+    const combined = { allowedDomains: ['allowed.test'], blockedDomains: ['blocked.test'] }
+    expect(resolveFixed({ protocol: 'openai-responses', options: combined }).connections.get('custom:model')).toMatchObject({ options: combined })
+    for (const options of [{ allowedDomains: ['allowed.test'] }, { blockedDomains: ['blocked.test'] }, { allowedDomains: [] }]) {
+      expect(resolveFixed({ options }).connections.get('custom:model')).toMatchObject({ options })
+      expect(resolveSettings({ connections: { 'builtin:session-model': { options } } }).connections.get('builtin:session-model')).toMatchObject({ options })
+    }
+  })
+  it.each([
+    ['anthropic-messages', { maxTokens: 128_000, maxUses: 50, anthropicTool: 'web_search_20260318', allowedCallers: 'direct', responseInclusion: 'excluded', allowedDomains: ['example.com/blog'], userCity: 'Boston', userRegion: 'Massachusetts', userCountry: 'US', userTimezone: 'America/New_York' }],
+    ['openai-responses', { responsesTool: 'web_search_preview', searchContextSize: 'high', externalWebAccess: false, returnTokenBudget: 'unlimited', allowedDomains: ['example.com'], blockedDomains: ['blocked.test'], userCountry: 'GB' }],
+    ['openai-chat-completions', { maxTokens: 128_000, searchContextSize: 'low', userCountry: 'GB', userTimezone: 'Europe/London' }],
+  ])('accepts configurable %s tool options', (protocol, options) => {
+    expect(resolveFixed({ protocol, options }).connections.get('custom:model')).toMatchObject({ options })
+  })
+  it('keeps Reset guidance on unknown model fields and options', () => {
+    expectReset({ connections: { 'builtin:session-model': { endpoint: fixed.endpoint } } }, 'endpoint')
+    expectReset({ connections: { 'builtin:session-model': { options: { typo: true } } } }, 'typo')
+    expectReset({ connections: { 'custom:model': { ...fixed, adapter: 'exa' } } }, 'adapter')
   })
 })
 

@@ -3,13 +3,16 @@ import { CATALOG, type CatalogKey } from '../../catalog.ts'
 import type { SearchSettings } from '../../settings/types.ts'
 import type { LocaleKey } from '../locales.ts'
 import { CredentialEditor } from './CredentialEditor.tsx'
-import { optionCopy } from './model.ts'
+import { localLabel, optionCopy, SESSION_MODEL_GROUPS } from './model.ts'
 import { optionsEditor } from './OptionsEditor.tsx'
 import { settingsParts } from './parts.tsx'
 import * as sparse from './sparse.ts'
 import css from './Settings.module.css'
 export const ServicesSection = createServicesSection<SearchSettings, CatalogKey, LocaleKey>({
-  classes: css, parts: settingsParts, CredentialEditor, optionsEditor, sparse, catalog: CATALOG, optionCopy,
+  classes: css, parts: settingsParts, CredentialEditor, optionsEditor, sparse, catalog: CATALOG, optionCopy, label: localLabel,
+  notes: { 'session-model': 'services.sessionModel.note' },
+  summaries: { 'session-model': 'services.sessionModel.summary' },
+  optionGroups: { 'session-model': SESSION_MODEL_GROUPS },
   keys: {
     'services.title': 'services.title',
     'options.hint': 'options.hint',

@@ -9,7 +9,7 @@ import { planFor, Snapshots, type Plan } from './plans.ts'
 import { createConnectionsService } from './remote.ts'
 import { ToolRestriction } from './restriction.ts'
 import { providerView, routeFacts } from './route.ts'
-import { isSelectable, type Selectable } from './selectable.ts'
+import { isSelectable } from './selectable.ts'
 import { Sessions } from './sessions.ts'
 import { SessionStorage } from './storage.ts'
 
@@ -73,7 +73,7 @@ export function installCapability<S extends CapabilitySettings, O extends Record
         const current = capability.settings().connections.get(selected.connectionId)
         if (!isSelectable(current)) throw invalid()
         const call: CapabilityCall = { ctx, agent, signal }
-        const target = capability.target(current as Selectable<ConnectionOf<S>>, selected.options, call)
+        const target = capability.target(current as ConnectionOf<S>, selected.options, call)
         return capability.execute(target, request, call)
       }
     }

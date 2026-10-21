@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { tinyfishFetch as tinyfish, MAX_BODY_CHARS, type FetchInput } from 'dsh-tool-web-enhanced-core/host'
 import { CATALOG } from '../src/catalog.ts'
-import { tinyfish } from '../src/remote/adapters/tinyfish.ts'
-import { fetchResult, MAX_BODY_CHARS } from '../src/remote/page.ts'
-import type { FetchInput } from '../src/remote/types.ts'
+import { fetchResult } from '../src/remote/page.ts'
 import { expectPage } from './fixtures/page.ts'
 
 const input: FetchInput = { url: 'http://127.0.0.1/private?q=%2F#raw', options: {} }
@@ -69,12 +68,12 @@ describe('Tinyfish fetch REST request and page mapping', () => {
     ['timeout', 'timeout'], ['content_too_large', 'too-large'], ['invalid_url', 'invalid-url'],
     ['invalid_redirect_url', 'invalid-url'], ['empty_content', 'empty'], ['bot_blocked', 'failed'],
     ['login_required', 'failed'], ['page_not_found', 'failed'], ['target_unreachable', 'failed'],
-  ] as const)('maps per-URL %s without disclosing its text', (error, failure) => {
-    expect(responseOutcome({ results: [], errors: [{ error, message: 'UPSTREAM_SECRET' }] })).toEqual({ kind: 'failure', failure: failure })
+  ] as const)('maps per-URL %s and preserves its service message', (error, failure) => {
+    expect(responseOutcome({ results: [], errors: [{ error, message: 'UPSTREAM_SECRET' }] })).toStrictEqual({ kind: 'failure', failure, detail: 'UPSTREAM_SECRET' })
   })
 
   it.each([null, '404', 0, 600, 403.5])('never guesses a target status from %s', status => {
-    expect(responseOutcome({ results: [], errors: [{ error: 'page_not_found', status }] })).toEqual({ kind: 'failure', failure: 'failed' })
+    expect(responseOutcome({ results: [], errors: [{ error: 'page_not_found', status }] })).toStrictEqual({ kind: 'failure', failure: 'failed', detail: 'page_not_found' })
   })
 
   it.each([

@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "增强网页搜索",
-    "description": "用你选择的搜索后端提供 web_search：原生 DeepSeek 搜索，或免 Key、个人 Key 的搜索服务。"
+    "description": "用你选择的搜索后端提供 web_search：原生 DeepSeek 搜索、免密钥或个人密钥的搜索服务，或带服务端网页搜索的模型。"
   }
 }

@@ -35,6 +35,15 @@ export interface Pairing {
 export const CONNECTION_STATUS = ['ready', 'disabled', 'needs-credential', 'unsupported'] as const
 export type ConnectionStatus = typeof CONNECTION_STATUS[number]
 
+/**
+ * Why a connection that follows the Session model cannot serve its current
+ * route: no model yet, a provider without a public route, an undeclared or
+ * unsupported protocol, no usable endpoint, custom request headers, or no
+ * single credential reference. The browser words each reason.
+ */
+export const UNSUPPORTED_REASONS = ['no-model', 'unknown-route', 'protocol', 'endpoint', 'headers', 'credential'] as const
+export type UnsupportedReason = typeof UNSUPPORTED_REASONS[number]
+
 const KINDS = ['native', 'adapter', 'model', 'local'] as const satisfies readonly BackendKind[]
 const ACCESS = ['keyless', 'api-key', 'account'] as const satisfies readonly Access[]
 
@@ -51,8 +60,8 @@ export const connectionViewBase = z.object({
   /** How the next call would authenticate. */
   access: z.enum(ACCESS),
   status: z.enum(CONNECTION_STATUS),
-  /** English diagnostic for `unsupported`. */
-  detail: z.string().optional(),
+  /** Present exactly when `status` is `unsupported`. */
+  reason: z.enum(UNSUPPORTED_REASONS).optional(),
 })
 
 export const selectionRequest = z.object({ sessionId }).strict()

@@ -3,10 +3,10 @@
  * capability's catalog. Everything is keyed by the catalog, so a new catalog
  * entry appears on the page without page code naming it.
  */
-import { builtinId, builtinKey, CUSTOM_CONNECTION_ID, type AccessMode, type Descriptor, type OptionRule } from '../../shared/connections.ts'
+import { builtinId, builtinKey, CUSTOM_CONNECTION_ID, type AccessMode, type Descriptor, type ExclusiveOptions, type OptionRule, type ProtocolDescriptor } from '../../shared/connections.ts'
 import type { BuiltinOverride, CustomConnection, SettingsDescriptor } from '../../shared/settings.ts'
-export type { CustomConnection } from '../../shared/settings.ts'
-import type { OptionField } from './fields.ts'
+export type { CustomConnection, CustomAdapterConnection, CustomModelConnection } from '../../shared/settings.ts'
+import type { OptionField, OptionGroup } from './fields.ts'
 
 /** A capability catalog; key order is display order. */
 export type SettingsCatalog = Readonly<Record<string, SettingsDescriptor>>
@@ -49,16 +49,24 @@ export function builtinOverride(config: CatalogSettings, key: string): BuiltinOv
 }
 
 /** Custom connections in document order; the document has passed the capability's validation. */
-export function customConnections<A extends string = string>(config: CatalogSettings): [string, CustomConnection<A>][] {
+export function customConnections<A extends string = string, P extends string = string>(config: CatalogSettings): [string, CustomConnection<A, P>][] {
   if (config.connections === undefined) return []
   return Object.entries(config.connections)
     .filter(([id]) => CUSTOM_CONNECTION_ID.test(id))
-    .map(([id, connection]) => [id, connection as CustomConnection<A>])
+    .map(([id, connection]) => [id, connection as CustomConnection<A, P>])
 }
 
+/**
+ * The access an operator configures for a built-in entry: one of its routes,
+ * or `none` when the catalog offers neither a keyless nor an API-key route
+ * (the entry takes its route and credentials from the Session model).
+ */
+export type BuiltinAccess = AccessMode | 'none'
+
 /** Built-in connections default to the anonymous route where one exists. */
-export function builtinAccess(info: Descriptor, override: BuiltinOverride): AccessMode {
-  return info.access.keyless ? (override.access ?? 'keyless') : 'api-key'
+export function builtinAccess(info: Descriptor, override: BuiltinOverride): BuiltinAccess {
+  if (info.access.keyless) return override.access ?? 'keyless'
+  return info.access.apiKey ? 'api-key' : 'none'
 }
 
 /** The credential a built-in connection resolves on its API-key route, and the catalog's name for it. */
@@ -103,13 +111,13 @@ export function connectionName<C extends string>(catalog: Readonly<Record<C, Set
 /**
  * Editable fields for a catalog entry's option rules. The keyless route drops
  * options it rejects and narrows enums it limits; `restricted` reports either.
- * List options have no generic editor and need one registered by the plugin.
+ * A list option is edited one item per line; a plugin editor that owns it
+ * (`ExtraEditor.options`) takes it over.
  */
-export function catalogFields<K extends string>(rules: Readonly<Record<string, OptionRule>>, access: AccessMode, copy: OptionCopyTable<K>): { fields: OptionField<K>[]; restricted: boolean } {
+export function catalogFields<K extends string>(rules: Readonly<Record<string, OptionRule>>, access: AccessMode, copy: OptionCopyTable<K>, exclusive: readonly ExclusiveOptions[] = []): { fields: OptionField<K>[]; restricted: boolean } {
   const fields: OptionField<K>[] = []
   let restricted = false
   for (const [name, rule] of Object.entries(rules)) {
-    if (rule.kind === 'list') continue
     const scope: KeylessScope = access === 'keyless' ? keylessScope(rule) : { kind: 'all' }
     if (scope.kind === 'none') {
       restricted = true
@@ -131,9 +139,35 @@ export function catalogFields<K extends string>(rules: Readonly<Record<string, O
       ...(optionCopy?.hint === undefined ? {} : { hint: optionCopy.hint }),
       ...(rule.kind === 'text' ? { pattern: rule.pattern } : {}),
       ...(rule.kind === 'integer' ? { min: rule.min, max: rule.max } : {}),
+      ...(rule.kind === 'list' ? { pattern: rule.pattern, maxItems: rule.max } : {}),
+      ...exclusiveWith(name, exclusive),
     })
   }
   return { fields, restricted }
+}
+
+/**
+ * The options of several protocols, grouped by the protocols that apply them:
+ * one group per distinct set, in order of first appearance, titled with those
+ * protocols' labels. An entry that takes every protocol's options (one that
+ * follows the Session model) shows which apply where.
+ */
+export function protocolGroups(protocols: Readonly<Record<string, ProtocolDescriptor>>): OptionGroup[] {
+  const entries = Object.values(protocols)
+  const groups = new Map<string, { title: string; options: string[] }>()
+  for (const option of new Set(entries.flatMap(entry => Object.keys(entry.options)))) {
+    const title = entries.filter(entry => Object.hasOwn(entry.options, option)).map(entry => entry.label).join(' / ')
+    const group = groups.get(title)
+    if (group === undefined) groups.set(title, { title, options: [option] })
+    else group.options.push(option)
+  }
+  return [...groups.values()]
+}
+
+/** The options an option is declared exclusive with; nothing when it has none. */
+function exclusiveWith(name: string, exclusive: readonly ExclusiveOptions[]): { exclusive?: readonly string[] } {
+  const others = exclusive.flatMap(([first, second]) => first === name ? [second] : second === name ? [first] : [])
+  return others.length === 0 ? {} : { exclusive: others }
 }
 
 /** What the keyless route accepts of one option: all of it, nothing, or only some enum values. */

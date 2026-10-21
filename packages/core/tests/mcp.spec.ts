@@ -1,11 +1,11 @@
 import { createServer } from 'node:http'
 import { once } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { capabilityErrors, createMcpClient, createTransport, toolJson, toolTexts, type McpToolCall } from '../src/host/index.ts'
+import { capabilityErrors, createMcpClient, createTransport, toolJson, toolTexts, secretMatcher, upstreamSuffix, type UpstreamDetail, type McpToolCall, type McpMessages } from '../src/host/index.ts'
 
 const TIMEOUT_MS = 90_000
 
-function client() {
+function client(messages: McpMessages = { toolFailed: label => label + ' fixture tool failed', serverError: () => 'fixture server error' }) {
   const errors = capabilityErrors('fixture')
   const transport = createTransport(errors, {
     timeoutMs: TIMEOUT_MS,
@@ -20,7 +20,7 @@ function client() {
   })
   const mcp = createMcpClient(transport, errors, {
     clientInfo: { name: 'fixture-client', version: '1.2.3' },
-    messages: { toolFailed: label => label + ' fixture tool failed', serverError: 'fixture server error' },
+    messages,
   })
   return { ...transport, ...mcp }
 }
@@ -137,6 +137,107 @@ describe('MCP stream framing and limits', () => {
   ])('uses caller supplied error messages without upstream details', async (response, message) => {
     vi.stubGlobal('fetch', async () => Response.json(response))
     await expect(statelessCall()).rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR', message })
+  })
+})
+
+describe('MCP failure details through local HTTP', () => {
+  it.each([
+    { format: 'json', failure: 'rpc' }, { format: 'json', failure: 'tool' }, { format: 'json', failure: 'success' },
+    { format: 'sse', failure: 'rpc' }, { format: 'sse', failure: 'tool' }, { format: 'sse', failure: 'success' },
+  ] as const)('withholds raw failure reports and masks successful values at every HTTP split for $format $failure', async ({ format, failure }) => {
+    const secret = 'sk-"key\\value'
+    const matcher = secretMatcher([secret])
+    const text = 'invalid ' + (failure === 'success' ? secret : JSON.stringify(secret).slice(1, -1))
+    const result = { ...(failure === 'tool' ? { isError: true } : {}), content: [{ type: 'text', text }] }
+    const payload = { jsonrpc: '2.0', id: 1, ...(failure === 'rpc' ? { error: { code: -32000, message: text } } : { result }) }
+    const wire = format === 'json' ? JSON.stringify(payload) : 'data: ' + JSON.stringify(payload) + '\n\n'
+    let split = 1
+    let received = Promise.withResolvers<void>()
+    const server = createServer((_req, res) => {
+      res.setHeader('content-type', format === 'json' ? 'application/json' : 'text/event-stream')
+      res.write(wire.slice(0, split))
+      void received.promise.then(() => { res.end(wire.slice(split)) })
+    })
+    server.listen(0, '127.0.0.1')
+    await once(server, 'listening')
+    const address = server.address()
+    if (address === null || typeof address === 'string') throw new Error('expected TCP listener')
+    const originalFetch = globalThis.fetch
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      const response = await originalFetch(url, init)
+      const body = response.body!.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
+        transform(chunk, controller) { controller.enqueue(chunk); received.resolve() },
+      }))
+      return new Response(body, { status: response.status, headers: response.headers })
+    })
+    const mcp = client({ toolFailed: (label, detail) => 'tool failed' + upstreamSuffix(label, detail), serverError: (label, detail) => 'RPC failed' + upstreamSuffix(label, detail) })
+    try {
+      for (; split < wire.length; split++) {
+        received = Promise.withResolvers<void>()
+        const pending = mcp.withDeadline(undefined, signal => mcp.callTool({ url: 'http://127.0.0.1:' + address.port, tool: 'fixture', arguments: {}, handshake: false }, signal, { label: 'Fixture', access: 'api-key', matcher }))
+        if (failure === 'success') await expect(pending).resolves.toEqual({ content: [{ type: 'text', text: 'invalid [redacted]' }] })
+        else await expect(pending).rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR', message: 'fixture: ' + (failure === 'tool' ? 'tool failed' : 'RPC failed') + "\n\nFixture's response was withheld because it contained this request's credential." })
+      }
+    } finally {
+      vi.unstubAllGlobals()
+      server.closeAllConnections()
+      await new Promise<void>((resolve, reject) => server.close(error => { if (error === undefined) resolve(); else reject(error) }))
+    }
+  })
+
+  it.each(['json', 'sse'] as const)('redacts matching successful MCP %s messages without changing field names', async format => {
+    const server = createServer((_req, res) => {
+      const payload = { jsonrpc: '2.0', id: 1, result: { content: [{ type: 'text', text: 'echo error' }], error: true } }
+      res.setHeader('content-type', format === 'json' ? 'application/json' : 'text/event-stream')
+      res.end(format === 'json' ? JSON.stringify(payload) : 'data: ' + JSON.stringify(payload) + '\n\n')
+    })
+    server.listen(0, '127.0.0.1')
+    await once(server, 'listening')
+    const address = server.address()
+    if (address === null || typeof address === 'string') throw new Error('expected TCP listener')
+    const mcp = client()
+    try {
+      await expect(mcp.withDeadline(undefined, signal => mcp.callTool({ url: 'http://127.0.0.1:' + address.port, tool: 'fixture', arguments: {}, handshake: false }, signal, { label: 'Fixture', access: 'api-key', matcher: secretMatcher(['error']) })))
+        .resolves.toEqual({ content: [{ type: 'text', text: 'echo [redacted]' }], error: true })
+    } finally {
+      server.closeAllConnections()
+      await new Promise<void>((resolve, reject) => server.close(error => { if (error === undefined) resolve(); else reject(error) }))
+    }
+  })
+
+  it.each(['json', 'sse'] as const)('passes bounded text or whole-withheld tool and RPC explanations via %s', async format => {
+    const payloads = [
+      { result: { isError: true, content: [{ type: 'text', text: ' first secret ' }, { type: 'image', text: 'ignored' }, { type: 'text', text: 'second' }] } },
+      { error: { code: -32000, message: ' RPC secret ' } },
+      { result: { isError: true } },
+      { error: { code: -32000, message: 'x'.repeat(2001) } },
+    ]
+    let index = 0
+    const server = createServer((_req, res) => {
+      const payload = { jsonrpc: '2.0', id: 1, ...payloads[index++] }
+      res.setHeader('content-type', format === 'json' ? 'application/json' : 'text/event-stream')
+      res.end(format === 'json' ? JSON.stringify(payload) : 'data: ' + JSON.stringify(payload) + '\n\n')
+    })
+    server.listen(0, '127.0.0.1')
+    await once(server, 'listening')
+    const address = server.address()
+    if (address === null || typeof address === 'string') throw new Error('expected TCP listener')
+    const details: UpstreamDetail[] = []
+    const mcp = client({
+      toolFailed: (label, detail) => { details.push(detail); return label + ' tool failure' },
+      serverError: (label, detail) => { expect(label).toBe('Fixture'); details.push(detail); return 'RPC failure' },
+    })
+    try {
+      for (let invocation = 0; invocation < payloads.length; invocation++) {
+        await expect(mcp.withDeadline(undefined, signal => mcp.callTool({
+          url: 'http://127.0.0.1:' + address.port, tool: 'fixture', arguments: {}, handshake: false,
+        }, signal, { label: 'Fixture', access: 'api-key', matcher: secretMatcher(['secret']) }))).rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR' })
+      }
+      expect(details).toEqual([{ kind: 'withheld' }, { kind: 'withheld' }, undefined, { kind: 'text', text: 'x'.repeat(1999) + '…' }])
+    } finally {
+      server.closeAllConnections()
+      await new Promise<void>((resolve, reject) => server.close(error => { if (error === undefined) resolve(); else reject(error) }))
+    }
   })
 })
 

@@ -1,8 +1,10 @@
+import { exaFetch, firecrawlFetch, tavilyFetch, tinyfishFetch } from 'dsh-tool-web-enhanced-core/host'
 import type { AdapterKey } from '../../catalog.ts'
 import type { FetchWireFor } from '../types.ts'
-import { exa } from './exa.ts'
-import { firecrawl } from './firecrawl.ts'
-import { tavily } from './tavily.ts'
-import { tinyfish } from './tinyfish.ts'
 
-export const ADAPTER_WIRES = { exa, firecrawl, tavily, tinyfish } satisfies { readonly [K in AdapterKey]: FetchWireFor<K> }
+export const ADAPTER_WIRES = {
+  exa: exaFetch,
+  firecrawl: firecrawlFetch,
+  tavily: tavilyFetch,
+  tinyfish: tinyfishFetch,
+} satisfies { readonly [K in AdapterKey]: FetchWireFor<K> }

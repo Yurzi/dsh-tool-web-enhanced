@@ -4,7 +4,7 @@ import { ADAPTER_KEYS, CATALOG, DEFAULT_CONNECTION, FRESHNESS, NATIVE_KEYS, hono
 
 describe('search catalog', () => {
   it('places native backends first and retains the adapter display order', () => {
-    expect(Object.keys(CATALOG)).toEqual(['deepseek-messages', 'deepseek-search-api', 'exa', 'firecrawl', 'tavily', 'tinyfish', 'openalex', 'semanticscholar'])
+    expect(Object.keys(CATALOG)).toEqual(['deepseek-messages', 'deepseek-search-api', 'session-model', 'exa', 'firecrawl', 'tavily', 'tinyfish', 'openalex', 'semanticscholar'])
     expect(NATIVE_KEYS).toEqual(['deepseek-messages', 'deepseek-search-api'])
     expect(ADAPTER_KEYS).toEqual(['exa', 'firecrawl', 'tavily', 'tinyfish', 'openalex', 'semanticscholar'])
     expect(DEFAULT_CONNECTION).toBe('builtin:deepseek-messages')
@@ -21,8 +21,14 @@ describe('search catalog', () => {
     expect(isEndpoint(CATALOG[key].endpoint)).toBe(true)
   })
 
+  it('describes Session model without an endpoint or operator-selected authentication', () => {
+    expect(isCatalogKey('session-model')).toBe(true)
+    expect(CATALOG['session-model']).toMatchObject({ kind: 'model', remote: true, access: { keyless: false, apiKey: false, account: false }, freshness: [] })
+    expect(CATALOG['session-model']).not.toHaveProperty('endpoint')
+  })
+
   it('does not recognize retired or inherited object keys', () => {
-    for (const value of ['deepseek', 'session-model', 'toString', '__proto__', null, 1]) expect(isCatalogKey(value)).toBe(false)
+    for (const value of ['deepseek', 'toString', '__proto__', null, 1]) expect(isCatalogKey(value)).toBe(false)
     for (const value of Object.keys(CATALOG)) expect(isCatalogKey(value)).toBe(true)
   })
 
@@ -31,7 +37,7 @@ describe('search catalog', () => {
     expect(honorsFreshness('exa', 'keyless')).toBe(false)
     expect(honorsFreshness('firecrawl', 'api-key')).toBe(true)
     expect(honorsFreshness('firecrawl', 'keyless')).toBe(true)
-    for (const key of ['deepseek-messages', 'deepseek-search-api', 'tavily', 'tinyfish', 'openalex', 'semanticscholar'] as const) {
+    for (const key of ['deepseek-messages', 'deepseek-search-api', 'session-model', 'tavily', 'tinyfish', 'openalex', 'semanticscholar'] as const) {
       expect(honorsFreshness(key, 'api-key')).toBe(false)
       expect(honorsFreshness(key, 'keyless')).toBe(false)
     }

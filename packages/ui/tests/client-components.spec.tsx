@@ -88,7 +88,6 @@ function mockConnection(
     remote: true,
     access: 'api-key',
     status,
-    ...(status !== 'ready' ? { detail: 'Missing API key' } : {}),
   }
 }
 

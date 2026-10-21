@@ -22,4 +22,4 @@ Remove dsh-web-search-enhanced 0.1.x and dsh-web-fetch-enhanced 0.1.x (the old
 standalone bundles) before installing: they insert the same row ids. Their
 settings are not migrated; see the upgrade notes in each plugin's README.
 
-Design: [docs/architecture.md](../../docs/architecture.md).
+Behaviour and configuration: [docs/design.md](../../docs/design.md). Architecture: [docs/architecture.md](../../docs/architecture.md).

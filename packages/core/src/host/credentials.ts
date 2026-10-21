@@ -13,20 +13,46 @@ export async function resolveApiKey(ctx: Context, ref: string): Promise<string |
   return found === undefined ? undefined : found.value
 }
 
-/** Native providers alone retain DSH's launch-plane fallback when Credentials is absent. */
-export function nativeAuth(ctx: Context, ref: string) {
+/** Route authentication retains DSH's launch-plane fallback only when Credentials is absent. */
+export async function routeApiKey(ctx: Context, ref: string): Promise<string | undefined> {
+  if (ctx.get('credentials') !== undefined) return resolveApiKey(ctx, ref)
+  const ambient = launchEnvironmentOf(ctx).get(credentialRef(ref))
+  return ambient !== undefined && ambient.value.length > 0 ? ambient.value : undefined
+}
+
+/** Readiness follows the same source boundary as routeApiKey, without resolving secrets. */
+export async function routeKeyConfigured(ctx: Context, ref: string, source: 'credentials' | 'route'): Promise<boolean> {
+  const credentials = ctx.get('credentials')
+  if (credentials !== undefined) return (await credentials.describe(credentialRef(ref))).configured
+  if (source === 'credentials') return false
+  const ambient = launchEnvironmentOf(ctx).get(credentialRef(ref))
+  return ambient !== undefined && ambient.value.length > 0
+}
+
+/** Native providers use the same credential source as DSH model routes. */
+export function nativeAuth(ctx: Context, ref: string, secrets = new Set<string>()) {
   const apiKeyEnv = credentialRef(ref)
+  let resolverFailed = false
+  const tracked = async (resolve: () => Promise<string | undefined>): Promise<string | undefined> => {
+    try {
+      const value = await resolve()
+      if (value !== undefined) secrets.add(value)
+      return value
+    } catch {
+      resolverFailed = true
+      // A resolver can fail before returning any secret, so its text cannot be safely retained.
+      throw new Error('Native credential resolution failed')
+    }
+  }
   return {
     apiKeyEnv,
-    resolveAccountToken: async (endpoint: string): Promise<string | undefined> => {
+    secrets,
+    resolverFailed: () => resolverFailed,
+    resolveAccountToken: (endpoint: string): Promise<string | undefined> => tracked(async () => {
       const resolve = accountTokenFor(ctx, ctx.get('agents')?.currentInitiator())
       return resolve === undefined ? undefined : await resolve(endpoint)
-    },
-    resolveApiKey: async (): Promise<string | undefined> => {
-      if (ctx.get('credentials') !== undefined) return resolveApiKey(ctx, ref)
-      const ambient = launchEnvironmentOf(ctx).get(apiKeyEnv)
-      return ambient !== undefined && ambient.value.length > 0 ? ambient.value : undefined
-    },
+    }),
+    resolveApiKey: () => tracked(() => routeApiKey(ctx, ref)),
   }
 }
 

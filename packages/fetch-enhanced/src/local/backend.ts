@@ -9,6 +9,7 @@ import { isIP } from 'node:net'
 import { Context } from '@deepseek-ai/cordis'
 import { WebError, type WebFetchProvider } from '@deepseek-ai/dsh-web'
 import { HttpFetchProvider, type HttpFetchResolver } from '@deepseek-ai/dsh-web-fetch-http'
+import { FETCH } from 'dsh-tool-web-enhanced-core/shared'
 import { AddressPolicy } from './address-policy.ts'
 import { resolveAllowedAddresses } from './resolver.ts'
 import { stripIpv6Brackets } from './rules.ts'
@@ -28,7 +29,7 @@ export function createLocalBackend(read: () => LocalSettings, logger: Pick<Conte
     available: () => true,
     async fetch(request, signal) {
       try {
-        if (signal !== undefined && signal.aborted) throw new WebError('The local fetch was cancelled.', 'WEB_ABORTED')
+        if (signal !== undefined && signal.aborted) throw new WebError(`${FETCH.packageName}: The local fetch was cancelled.`, 'WEB_ABORTED')
         const settings = read()
         const policy = new AddressPolicy(settings)
         assertLiteralAllowed(request.url, policy)
@@ -37,7 +38,7 @@ export function createLocalBackend(read: () => LocalSettings, logger: Pick<Conte
       } catch (error: unknown) {
         if (error instanceof WebError) throw error
         logger.debug('Local fetch failed', error)
-        throw new WebError('The local fetch failed. Check the URL and local connection settings.', 'WEB_PROVIDER_ERROR')
+        throw new WebError(`${FETCH.packageName}: The local fetch failed. Check the URL and local connection settings.`, 'WEB_PROVIDER_ERROR')
       }
     },
   }
@@ -58,5 +59,5 @@ function assertLiteralAllowed(url: string, policy: AddressPolicy): void {
   if (parsed === null || parsed.username !== '' || parsed.password !== '' || (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')) return
   const hostname = parsed.hostname
   if (isIP(stripIpv6Brackets(hostname)) === 0 || policy.allows(hostname, hostname)) return
-  throw new WebError('The destination is outside the local allowlist. Ask the operator to review it.', 'WEB_BLOCKED_URL')
+  throw new WebError(`${FETCH.packageName}: The destination is outside the local allowlist. Ask the operator to review it.`, 'WEB_BLOCKED_URL')
 }

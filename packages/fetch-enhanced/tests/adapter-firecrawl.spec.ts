@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { firecrawlFetch as firecrawl, MAX_BODY_CHARS, type FetchInput } from 'dsh-tool-web-enhanced-core/host'
 import { CATALOG } from '../src/catalog.ts'
-import { firecrawl } from '../src/remote/adapters/firecrawl.ts'
-import { fetchResult, MAX_BODY_CHARS } from '../src/remote/page.ts'
-import type { FetchInput } from '../src/remote/types.ts'
+import { fetchResult } from '../src/remote/page.ts'
 import { expectPage } from './fixtures/page.ts'
 
 const KEY = 'fixture-secret-key'
@@ -66,7 +65,7 @@ describe('Firecrawl fetch request and page mapping', () => {
     { success: false, error: 'private upstream ' + KEY, code: 'SCRAPE_TIMEOUT', data: { metadata: { statusCode: 404 } } },
     { success: false, code: 'SCRAPE_ALL_ENGINES_FAILED' },
   ])('reports unsuccessful envelopes as a page failure: %#', payload => {
-    expect(parseOutcome(payload)).toEqual({ kind: 'failure', failure: 'failed' })
+    expect(parseOutcome(payload)).toStrictEqual({ kind: 'failure', failure: 'failed', detail: 'error' in payload ? payload.error : undefined })
   })
 
   it.each([

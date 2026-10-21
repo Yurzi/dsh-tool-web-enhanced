@@ -8,6 +8,7 @@ import { lookup } from 'node:dns/promises'
 import type { LookupAddress } from 'node:dns'
 import { isIP } from 'node:net'
 import ipaddr from 'ipaddr.js'
+import { FETCH } from 'dsh-tool-web-enhanced-core/shared'
 import { WebError } from '@deepseek-ai/dsh-web'
 import type { AddressPolicy } from './address-policy.ts'
 import { stripIpv6Brackets } from './rules.ts'
@@ -54,12 +55,12 @@ export async function resolveAllowedAddresses(
     ? await lookupAnswers(bare, signal, resolve)
     : [{ address: bare, family: literal }]
   if (answers.length === 0) {
-    throw new WebError('The destination has no DNS addresses. Check DNS and try again.', 'WEB_PROVIDER_ERROR')
+    throw new WebError(`${FETCH.packageName}: The destination has no DNS addresses. Check DNS and try again.`, 'WEB_PROVIDER_ERROR')
   }
 
   const validated: ValidatedAddress[] = answers.map(({ address, family }) => {
     if ((family !== 4 && family !== 6) || isIP(address) !== family) {
-      throw new WebError('DNS returned an invalid destination. Check DNS and try again.', 'WEB_PROVIDER_ERROR')
+      throw new WebError(`${FETCH.packageName}: DNS returned an invalid destination. Check DNS and try again.`, 'WEB_PROVIDER_ERROR')
     }
     return { address, family }
   })
@@ -67,14 +68,14 @@ export async function resolveAllowedAddresses(
   return validated.map(({ address, family }) => {
     if (!policy.allows(hostname, address)) {
       throw new WebError(
-        'The destination is outside the local allowlist. Ask the operator to review it.',
+        `${FETCH.packageName}: The destination is outside the local allowlist. Ask the operator to review it.`,
         'WEB_BLOCKED_URL',
       )
     }
     for (const translated of embeddedIpv4Addresses(address, nat64)) {
       if (!policy.allows(hostname, translated)) {
         throw new WebError(
-          'The destination is outside the local allowlist. Ask the operator to review it.',
+          `${FETCH.packageName}: The destination is outside the local allowlist. Ask the operator to review it.`,
           'WEB_BLOCKED_URL',
         )
       }
@@ -134,13 +135,13 @@ async function lookupAnswers(hostname: string, signal: AbortSignal, resolve: Add
     return answers
   } catch {
     if (signal.aborted) throw resolutionAborted()
-    throw new WebError('Unable to resolve the destination. Check DNS and try again.', 'WEB_PROVIDER_ERROR')
+    throw new WebError(`${FETCH.packageName}: Unable to resolve the destination. Check DNS and try again.`, 'WEB_PROVIDER_ERROR')
   }
 }
 
 function resolutionAborted(): Error {
   // The official transport uses its signal to distinguish cancellation from its own deadline.
-  return new Error('web fetch aborted during hostname resolution')
+  return new Error(`${FETCH.packageName}: web fetch aborted during hostname resolution`)
 }
 
 /** Stop waiting for a non-cancellable OS lookup when the request is cancelled. */

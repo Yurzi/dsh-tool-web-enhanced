@@ -65,7 +65,7 @@ describe('local provider over the official transport', () => {
     const controller = new AbortController()
     controller.abort()
     const before = seen.length
-    await expect(createLocalBackend(read).fetch({ url: origin }, controller.signal)).rejects.toMatchObject({ code: 'WEB_ABORTED' })
+    await expect(createLocalBackend(read).fetch({ url: origin }, controller.signal)).rejects.toMatchObject({ code: 'WEB_ABORTED', message: 'dsh-web-fetch-enhanced: The local fetch was cancelled.' })
     expect(read).not.toHaveBeenCalled()
     expect(seen).toHaveLength(before)
   })
@@ -133,15 +133,22 @@ describe('local provider over the official transport', () => {
   it('uses plugin wording only for its own literal and resolver blocks', async () => {
     const provider = createLocalBackend(() => settings())
     for (const url of [origin, origin.replace('127.0.0.1', 'localhost')]) {
-      await expect(provider.fetch({ url })).rejects.toMatchObject({ code: 'WEB_BLOCKED_URL', message: 'The destination is outside the local allowlist. Ask the operator to review it.' })
+      await expect(provider.fetch({ url })).rejects.toMatchObject({ code: 'WEB_BLOCKED_URL', message: 'dsh-web-fetch-enhanced: The destination is outside the local allowlist. Ask the operator to review it.' })
     }
+  })
+
+  it('preserves the plugin prefix on resolver failures through the official transport', async () => {
+    const provider = createLocalBackend(() => settings())
+    await expect(provider.fetch({ url: 'http://failed.test/' })).rejects.toMatchObject({
+      code: 'WEB_PROVIDER_ERROR', message: 'dsh-web-fetch-enhanced: Unable to resolve the destination. Check DNS and try again.',
+    })
   })
 
   it('logs unexpected exceptions and exposes only a generic provider error', async () => {
     const error = new Error('internal secret details')
     const logger = { debug: vi.fn() }
     const provider = createLocalBackend(() => { throw error }, logger)
-    await expect(provider.fetch({ url: origin })).rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR', message: 'The local fetch failed. Check the URL and local connection settings.' })
+    await expect(provider.fetch({ url: origin })).rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR', message: 'dsh-web-fetch-enhanced: The local fetch failed. Check the URL and local connection settings.' })
     expect(logger.debug).toHaveBeenCalledWith('Local fetch failed', error)
   })
 

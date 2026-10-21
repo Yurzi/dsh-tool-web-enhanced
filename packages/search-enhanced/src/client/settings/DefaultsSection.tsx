@@ -1,10 +1,11 @@
 /** Defaults for new sessions and the composer button switch. */
 import { Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import { CATALOG, FRESHNESS, honorsFreshness, type CatalogKey, type Freshness } from '../../catalog.ts'
-import { freshnessLabel, listText, type Translate } from '../connections.ts'
+import { connectionLabel, freshnessLabel, listText, type Translate } from '../connections.ts'
 import { connectionChoices } from './model.ts'
 import { createDefaultsSection, type CredentialStatusMap } from 'dsh-tool-web-enhanced-core/client'
-import { resolveSettings } from '../../settings/resolve.ts'
+import { resolveSettings, type Connection } from '../../settings/resolve.ts'
+import { credentialRefsOf } from '../credentials.ts'
 import type { LocaleKey } from '../locales.ts'
 import { settingsParts, SelectMenu, SettingRow, type SettingsDoc, type WriteSettings } from './parts.tsx'
 import * as sparse from './sparse.ts'
@@ -14,18 +15,25 @@ const BaseDefaultsSection = createDefaultsSection<LocaleKey>({ parts: settingsPa
   connectionUnset: 'defaults.connectionUnset', connectionMissing: 'defaults.connectionMissing',
 } })
 
+/**
+ * What the page can tell about the default from local facts: whether it is on
+ * and has its key. The Session-model connection's route, and so its
+ * credential, is known only per conversation.
+ */
+function availability(connection: Connection, credentials: CredentialStatusMap, t: Translate) {
+  const [ref] = credentialRefsOf(connection)
+  const warning = t(connection.disabled ? 'status.disabled' : connection.kind === 'native' ? 'status.needsAccount' : 'status.needsCredential', { name: connectionLabel(connection, t) })
+  if (ref === undefined) return { disabled: connection.disabled, access: 'none', credentialStatus: undefined, warning } as const
+  return { disabled: connection.disabled, access: connection.kind === 'model' ? 'api-key' : connection.access, credentialStatus: credentials[ref], warning } as const
+}
+
 export function DefaultsSection({ doc, write, credentials = {}, t }: { doc: SettingsDoc; write: WriteSettings; credentials?: CredentialStatusMap; t: Translate }) {
   const { defaultConnection, showSelector = true } = doc.config
   const freshness = doc.config.defaults?.freshness ?? 'auto'
   const choices = connectionChoices(doc.config, t)
   const resolved = resolveSettings(doc.config)
   const connection = resolved.connections.get(resolved.defaultConnection)
-  const defaultAvailability = connection && {
-    disabled: connection.disabled,
-    access: connection.access,
-    credentialStatus: credentials[connection.credentialRef],
-    warning: t(connection.disabled ? 'status.disabled' : connection.kind === 'native' ? 'status.needsAccount' : 'status.needsCredential', { name: connection.label }),
-  }
+  const defaultAvailability = connection && availability(connection, credentials, t)
 
   const freshnessOptions = FRESHNESS.map(value => ({
     id: value,

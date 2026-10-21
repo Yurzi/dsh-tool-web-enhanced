@@ -291,7 +291,7 @@ describe('settings page', () => {
     type(input, 'https://api.example/v1')
     blur(input)
     await flush()
-    expect(onCommit).toHaveBeenCalledExactlyOnceWith('baseURL', 'https://api.example/v1')
+    expect(onCommit).toHaveBeenCalledExactlyOnceWith({ baseURL: 'https://api.example/v1' })
   })
 
   it('shows unset boolean options as the service default and returns a chosen one to it', async () => {
@@ -549,5 +549,109 @@ describe('settings page', () => {
       { op: 'unset', path: ['connections', 'builtin:deepseek-messages', 'options'] },
       { op: 'unset', path: ['connections', 'builtin:deepseek-messages', 'trustedEndpoint'] },
     ], 8)
+  })
+})
+
+
+describe('model connections on the settings page', () => {
+  const sessionRow = (h: ReturnType<typeof mountPage>) => h.row(tZh('services.sessionModel.summary'))
+
+  it('shows the conversation model as a switch, its options by protocol and who receives the query, without key controls', async () => {
+    const h = mountPage()
+    const row = sessionRow(h)
+    expect(row.textContent).toContain(tZh('connection.sessionModel'))
+    expect(row.querySelector('[data-state]')?.getAttribute('data-state')).toBe('idle')
+    click(row.querySelector('button[aria-expanded]'))
+    expect(row.textContent).toContain(tZh('services.sessionModel.note'))
+    expect(row.textContent).not.toContain(tZh('services.remoteNotice', { name: tZh('connection.sessionModel') }))
+    expect(row.querySelector('input[type="password"], [role="tab"]')).toBeNull()
+    expect(row.textContent).not.toContain(tZh('credential.reference'))
+    const groups = [...row.querySelectorAll('[role="group"]')].map(group => group.getAttribute('aria-label'))
+    expect(groups).toEqual([
+      'Anthropic Messages / OpenAI Responses / OpenAI Chat Completions', 'Anthropic Messages', 'Anthropic Messages / OpenAI Responses',
+      'OpenAI Responses', 'OpenAI Responses / OpenAI Chat Completions',
+    ])
+    expect(row.textContent).toContain(tZh('option.model.allowedCallers.hint'))
+    const uses = labelled(row, 'option.model.maxUses')
+    type(uses, '3')
+    blur(uses)
+    await flush()
+    expect(h.mutate).toHaveBeenLastCalledWith([{ op: 'set', path: ['connections', 'builtin:session-model', 'options', 'maxUses'], value: 3 }], 8)
+    const domains = row.querySelector<HTMLTextAreaElement>('textarea[title="blockedDomains"]')!
+    type(domains, 'spam.example\nhttps://bad.example')
+    blur(domains)
+    await flush()
+    expect(row.textContent).toContain(tZh('options.invalidItem', { line: 2, item: 'https://bad.example' }))
+    type(domains, 'spam.example\nbad.example/path')
+    blur(domains)
+    await flush()
+    expect(h.mutate).toHaveBeenLastCalledWith([{ op: 'set', path: ['connections', 'builtin:session-model', 'options', 'blockedDomains'], value: ['spam.example', 'bad.example/path'] }], 8)
+  })
+
+  it('marks both domain lists of the conversation model in place and saves neither while both are filled', async () => {
+    const h = mountPage({ user: { version: 2, connections: { 'builtin:session-model': { options: { allowedDomains: ['example.org'] } } } } })
+    const row = sessionRow(h)
+    click(row.querySelector('button[aria-expanded]'))
+    const allowed = row.querySelector<HTMLTextAreaElement>('textarea[title="allowedDomains"]')!
+    const blocked = row.querySelector<HTMLTextAreaElement>('textarea[title="blockedDomains"]')!
+    type(blocked, 'blocked.example.org')
+    blur(blocked)
+    await flush()
+    expect(h.mutate).not.toHaveBeenCalled()
+    expect(allowed.getAttribute('aria-invalid')).toBe('true')
+    expect(blocked.getAttribute('aria-invalid')).toBe('true')
+    expect(document.getElementById(blocked.getAttribute('aria-describedby')!.split(' ')[0]!)?.textContent).toBe(tZh('options.exclusive', { other: tZh('option.model.allowedDomains') }))
+    expect(row.textContent).toContain(tZh('options.exclusive', { other: tZh('option.model.blockedDomains') }))
+  })
+
+  it('names the default conversation model without a key warning, and warns about a fixed model without its key', () => {
+    const { container } = mountPage({ user: { version: 2, defaultConnection: 'builtin:session-model' } })
+    expect(container.querySelector('[role="status"]')).toBeNull()
+    const fixed = mountPage({ user: { version: 2, defaultConnection: 'custom:claude', connections: { 'custom:claude': {
+      kind: 'model', protocol: 'anthropic-messages', model: 'claude-x', label: 'Claude', credentialRef: 'CLAUDE_KEY', endpoint: 'https://api.anthropic.com', trustedEndpoint: true,
+    } } }, credentialsMap: { CLAUDE_KEY: 'missing' } })
+    expect(fixed.container.querySelector('[role="status"]')?.textContent).toContain(tZh('status.needsCredential'))
+  })
+
+  it('adds a fixed model connection with its protocol options, the endpoint trust and the DeepSeek notes', async () => {
+    const h = mountPage()
+    click(byText(h.container, 'button', tZh('custom.addStructured')))
+    const form = h.container.querySelector('form')!
+    click(form.querySelector('button[aria-label="' + tZh('editor.adapter') + '"]'))
+    const items = [...document.querySelectorAll('[role="menuitem"]')].map(item => item.textContent)
+    expect(items.slice(-3)).toEqual(['Anthropic Messages', 'OpenAI Responses', 'OpenAI Chat Completions'].map(protocol => tZh('model.format', { protocol })))
+    click(byText(document.body, '[role="menuitem"]', tZh('model.format', { protocol: 'OpenAI Chat Completions' })))
+    expect(form.textContent).toContain(tZh('model.protocol.openai-chat-completions'))
+    expect(form.textContent).toContain('DeepSeek 请用 Anthropic Messages')
+    expect(form.querySelector('textarea')).toBeNull()
+    click(form.querySelector('button[aria-label="' + tZh('editor.adapter') + '"]'))
+    click(byText(document.body, '[role="menuitem"]', tZh('model.format', { protocol: 'Anthropic Messages' })))
+    expect(form.textContent).toContain(tZh('option.model.domains.exclusiveHint'))
+    type(labelled(form, 'editor.label'), 'Claude')
+    type(labelled(form, 'editor.id'), 'claude')
+    type(labelled(form, 'model.id'), 'claude-sonnet-4-5')
+    type(labelled(form, 'editor.endpoint'), 'https://api.anthropic.com')
+    type(labelled(form, 'option.model.maxUses'), '2')
+    const trust = form.querySelector<HTMLInputElement>('input[type="checkbox"]')!
+    expect(trust.checked).toBe(false)
+    expect(form.querySelector('.actions')?.textContent ?? form.textContent).toContain(tZh('draft.trust'))
+    expect(trust.closest('label')?.textContent).toBe(tZh('editor.trust', { ref: 'CUSTOM_CLAUDE_API_KEY' }))
+    click(trust)
+    click(byText(form, 'button', tZh('editor.save')))
+    await flush()
+    expect(h.mutate).toHaveBeenCalledExactlyOnceWith([{ op: 'set', path: ['connections', 'custom:claude'], value: {
+      kind: 'model', protocol: 'anthropic-messages', model: 'claude-sonnet-4-5', label: 'Claude', credentialRef: 'CUSTOM_CLAUDE_API_KEY',
+      endpoint: 'https://api.anthropic.com', trustedEndpoint: true, options: { maxUses: 2 },
+    } }], 8)
+  })
+
+  it('lists a fixed model connection with its format and the host that receives its queries', () => {
+    const { row } = mountPage({ user: { version: 2, connections: { 'custom:claude': {
+      kind: 'model', protocol: 'openai-responses', model: 'gpt-x', label: 'Team GPT', credentialRef: 'TEAM_KEY', endpoint: 'https://gateway.example/v1', trustedEndpoint: true,
+    } } } })
+    const text = row('Team GPT').textContent
+    expect(text).toContain(tZh('model.format', { protocol: 'OpenAI Responses' }))
+    expect(text).toContain(tZh('services.remoteNotice', { name: 'gateway.example' }))
+    expect(text).toContain('gpt-x')
   })
 })

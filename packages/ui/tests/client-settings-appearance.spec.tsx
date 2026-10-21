@@ -13,6 +13,21 @@ import type { FetchSettings } from '../../fetch-enhanced/src/settings/types.ts'
 import searchCss from '../../search-enhanced/src/client/settings/Settings.module.css'
 import fetchCss from '../../fetch-enhanced/src/client/settings/Settings.module.css'
 import menuCss from '../src/client/ComposerConnectionMenu.module.css'
+import { readFileSync } from 'node:fs'
+
+const settingsSource = (pkg: string) => readFileSync(new URL('../../' + pkg + '/src/client/settings/Settings.module.css', import.meta.url), 'utf8')
+/** The declarations of one exact selector list in a stylesheet. */
+const rule = (source: string, selector: string) => {
+  const start = source.indexOf(selector + ' {')
+  if (start < 0) throw new Error('missing rule ' + selector)
+  return source.slice(start, source.indexOf('}', start))
+}
+const luminance = (hex: string) => {
+  const channel = (c: number) => { const v = c / 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4 }
+  const [r, g, b] = [1, 3, 5].map(i => Number.parseInt(hex.slice(i, i + 2), 16)) as [number, number, number]
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+}
+const contrast = (a: string, b: string) => { const [x, y] = [luminance(a), luminance(b)].toSorted((p, q) => q - p) as [number, number]; return (x + 0.05) / (y + 0.05) }
 
 const translate = <K extends string>(locale: Record<K, string>) => (key: string, params?: Record<string, unknown>): string =>
   (locale[key as K] ?? key).replace(/\{(\w+)\}/g, (match, name: string) => params && name in params ? String(params[name]) : match)
@@ -74,6 +89,30 @@ describe('settings appearance regressions', () => {
     const warning = screen.getByRole('status')
     expect(warning.querySelector('[data-state="warning"]')).not.toBeNull()
     expect(warning.textContent).toContain('Local HTTP is turned off')
+  })
+
+  it('keeps both plugin settings stylesheets identical', () => {
+    expect(settingsSource('fetch-enhanced')).toBe(settingsSource('search-enhanced'))
+  })
+
+  it('reads hints in panels and editors with the secondary label, AA on the light platform background', () => {
+    const source = settingsSource('search-enhanced')
+    expect(rule(source, '.panel .hint,\n.editor .hint')).toContain('var(--dsw-alias-label-secondary)')
+    // Light theme: --dsw-alias-label-secondary #61666b on --dsw-alias-bg-module-platform #f5f6f7; tertiary #81858c failed (3.42:1).
+    expect(contrast('#61666b', '#f5f6f7')).toBeGreaterThanOrEqual(4.5)
+    expect(contrast('#81858c', '#f5f6f7')).toBeLessThan(4.5)
+  })
+
+  it('draws list fields like the Input primitive, sets option groups and endpoint trust apart', () => {
+    const source = settingsSource('search-enhanced')
+    expect(rule(source, '.textarea::placeholder')).toContain('var(--dsw-alias-label-dimmed)')
+    expect(rule(source, '.textarea:focus')).toContain('border-color: var(--dsw-alias-state-business-primary)')
+    expect(source).not.toContain('outline: 2px solid')
+    expect(rule(source, '.optionGroupTitle')).toContain('var(--dsw-alias-label-primary)')
+    expect(rule(source, '.trust')).toContain('var(--dsw-alias-state-warn-primary)')
+    for (const name of ['optionGroup', 'optionGroupTitle', 'trust', 'trustCheck', 'textarea', 'optionWide']) expect(searchCss[name], name).toBeDefined()
+    // Every colour comes from DSH variables.
+    expect(source.match(/#[0-9a-f]{3,8}\b/giu)).toBeNull()
   })
 
   it('menu rowCaption and sectionSource meet minimum WCAG AA contrast (>= 4.5:1) in light theme', () => {

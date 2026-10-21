@@ -1,4 +1,6 @@
-import { isRecord, toolJson, toolTexts, type McpToolResult } from 'dsh-tool-web-enhanced-core/host'
+/** Shared row formats returned by hosted search MCP tools. */
+import { isRecord } from '../adapter.ts'
+import { toolJson, toolTexts, type McpToolResult } from '../mcp.ts'
 
 const NO_RESULTS = /^No (?:search )?results (?:found|returned)/iu
 

@@ -1,12 +1,11 @@
-/** OpenAlex works search: scholarly metadata, anonymous by default. */
-import { authors, collect, firstSourceUrl, MAX_SNIPPET_LENGTH, summary, text } from '../sources.ts'
-import { isRecord, getJson } from 'dsh-tool-web-enhanced-core/host'
-import { rowsAt, type AdapterFor } from './types.ts'
+/** OpenAlex works search, scholarly field mapping and bounded inverted abstracts. */
+import { getJson, isRecord, type KeylessWire } from '../adapter.ts'
+import { authors, firstSourceUrl, mapRows, MAX_SNIPPET_LENGTH, rowsAt, summary, text, type SearchWire } from './search.ts'
 
 /** OpenAlex asks anonymous clients to identify themselves for the polite pool. */
 const DEFAULT_MAILTO = 'dsh-web-search@users.noreply.github.com'
 
-export const openalex: AdapterFor<'openalex'> = {
+export const openalexSearch: KeylessWire<SearchWire> = {
   request(input, endpoint, auth) {
     const { filter, is_oa: openAccess, mailto, sort } = input.options
     const query: Record<string, string> = { search: input.query }
@@ -18,22 +17,26 @@ export const openalex: AdapterFor<'openalex'> = {
     if (typeof sort === 'string') query.sort = sort
     return getJson(endpoint, query)
   },
-  parse: payload => collect(rowsAt(payload, 'results'), row => {
-    const openAccessUrl = isRecord(row.open_access) ? text(row.open_access.oa_url) : undefined
-    const landingPage = isRecord(row.primary_location) ? text(row.primary_location.landing_page_url) : undefined
-    const url = firstSourceUrl([row.url, row.doi, openAccessUrl, landingPage, row.id])
-    return {
-      url,
-      title: row.title ?? row.display_name,
-      snippet: row.snippet ?? summary([
-        typeof row.cited_by_count === 'number' ? `[Citations: ${row.cited_by_count}]` : undefined,
-        authors(row.authorships, item => isRecord(item.author) ? item.author.display_name : undefined),
-        openAccessUrl !== undefined && openAccessUrl !== url ? `[OA PDF: ${openAccessUrl}]` : undefined,
-        invertedAbstract(row.abstract_inverted_index) ?? text(row.description),
-      ]),
-      publishedAt: row.publication_date ?? (typeof row.publication_year === 'number' ? `${row.publication_year}-01-01` : undefined),
-    }
-  }),
+  parse(payload) {
+    const rows = rowsAt(payload, 'results')
+    if (rows.kind === 'failure') return rows
+    return mapRows(rows.rows, row => {
+      const openAccessUrl = isRecord(row.open_access) ? text(row.open_access.oa_url) : undefined
+      const landingPage = isRecord(row.primary_location) ? text(row.primary_location.landing_page_url) : undefined
+      const url = firstSourceUrl([row.url, row.doi, openAccessUrl, landingPage, row.id])
+      return {
+        url,
+        title: row.title ?? row.display_name,
+        snippet: row.snippet ?? summary([
+          typeof row.cited_by_count === 'number' ? `[Citations: ${row.cited_by_count}]` : undefined,
+          authors(row.authorships, item => isRecord(item.author) ? item.author.display_name : undefined),
+          openAccessUrl !== undefined && openAccessUrl !== url ? `[OA PDF: ${openAccessUrl}]` : undefined,
+          invertedAbstract(row.abstract_inverted_index) ?? text(row.description),
+        ]),
+        publishedAt: row.publication_date ?? (typeof row.publication_year === 'number' ? `${row.publication_year}-01-01` : undefined),
+      }
+    })
+  },
   keyless: 'rest',
 }
 

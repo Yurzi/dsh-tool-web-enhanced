@@ -1,16 +1,33 @@
 import { createCustomConnectionsSection } from 'dsh-tool-web-enhanced-core/client'
-import { CATALOG, DEFAULT_CONNECTION } from '../../catalog.ts'
+import { CATALOG, DEFAULT_CONNECTION, MODEL_PROTOCOLS, type ModelProtocol } from '../../catalog.ts'
 import type { SearchSettings } from '../../settings/types.ts'
 import type { LocaleKey } from '../locales.ts'
 import { CredentialEditor } from './CredentialEditor.tsx'
-import { optionCopy } from './model.ts'
+import { optionCopy, protocolCopy } from './model.ts'
 import { optionsEditor } from './OptionsEditor.tsx'
 import { settingsParts } from './parts.tsx'
 import * as sparse from './sparse.ts'
 import css from './Settings.module.css'
 
-export const CustomConnectionsSection = createCustomConnectionsSection<SearchSettings, typeof CATALOG, LocaleKey>({
+export const CustomConnectionsSection = createCustomConnectionsSection<SearchSettings, typeof CATALOG, LocaleKey, ModelProtocol>({
   classes: css, parts: settingsParts, CredentialEditor, optionsEditor, sparse, catalog: CATALOG, optionCopy, defaultConnection: DEFAULT_CONNECTION,
+  protocols: {
+    catalog: MODEL_PROTOCOLS,
+    optionCopy: protocolCopy,
+    notes: {
+      'anthropic-messages': 'model.protocol.anthropic-messages',
+      'openai-responses': 'model.protocol.openai-responses',
+      'openai-chat-completions': 'model.protocol.openai-chat-completions',
+    },
+    keys: {
+      'model.format': 'model.format',
+      'model.id': 'model.id',
+      'model.idHint': 'model.idHint',
+      'model.endpointHint': 'model.endpointHint',
+      'model.note': 'model.note',
+      'draft.model': 'draft.model',
+    },
+  },
   keys: {
     'services.remoteNotice': 'services.remoteNotice',
     'custom.title': 'custom.title',

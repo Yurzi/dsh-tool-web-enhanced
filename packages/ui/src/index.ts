@@ -8,7 +8,7 @@
  * injection, so this row stays healthy with either plugin row, both, or
  * neither enabled. The browser face (`webConnections` service, menu,
  * activation prompt, bundle overview) lives in src/client; see
- * docs/architecture.md, section 9.
+ * docs/architecture.md, "浏览器面".
  * @module dsh-tool-web-enhanced-ui
  */
 import { UI } from 'dsh-tool-web-enhanced-core/shared'

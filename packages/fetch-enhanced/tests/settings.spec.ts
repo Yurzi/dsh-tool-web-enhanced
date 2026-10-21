@@ -113,6 +113,12 @@ describe('fetch unified settings resolution', () => {
     expect(() => resolveSettings({ connections: { 'custom:!': custom } })).toThrow('custom:!')
   })
 
+  it('rejects custom model connections because fetch declares no model protocols', () => {
+    const resolve = () => resolveSettings({ connections: { 'custom:model': { kind: 'model', protocol: 'anthropic-messages', model: 'search-model', label: 'Model', endpoint: 'https://model.example/v1', trustedEndpoint: true, credentialRef: 'MODEL_KEY' } } })
+    expect(resolve).not.toThrow('expected one of ')
+    expect(resolve).toThrow('connections.custom:model.kind')
+  })
+
   it.each(['builtin:missing', 'builtin:session-model', 'other:x'])('rejects unknown connection/default id %s with reset guidance', id => {
     expectReset({ connections: { [id]: {} } }, id)
     expectReset({ defaultConnection: id }, id)

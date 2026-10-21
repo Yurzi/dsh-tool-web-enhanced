@@ -15,8 +15,8 @@ const connections: SelectionView['connections'] = [
   { id: 'builtin:semanticscholar', label: 'Semantic Scholar', kind: 'adapter', remote: true, access: 'api-key', status: 'needs-credential', freshness: false },
 ]
 
-function fixture(connectionId: string | null = 'builtin:exa', freshness = true) {
-  let current: SelectionView = { selection: { connectionId, options: { freshness: 'realtime' }, revision: 3 }, source: 'session', connections: connections.map(connection => ({ ...connection, freshness })) }
+function fixture(connectionId: string | null = 'builtin:exa', freshness = true, listed: SelectionView['connections'] = connections) {
+  let current: SelectionView = { selection: { connectionId, options: { freshness: 'realtime' }, revision: 3 }, source: 'session', connections: listed.map(connection => ({ ...connection, freshness })) }
   const remote = {
     get: vi.fn(async () => ({ ok: true as const, value: current })),
     set: vi.fn(async (request: { connectionId?: string | null; options?: Record<string, unknown> }) => {
@@ -96,6 +96,35 @@ describe('/setup-search', () => {
     await ui.options(session, signal)
     remote.get.mockResolvedValueOnce({ ok: false, error: new RemoteError('gateway/internal', 'network', {}) } as never)
     await expect(ui.options(session, signal)).rejects.toThrow(tZh('command.readFailed'))
+  })
+
+  it('describes model connections: who receives the query, and why one cannot serve', async () => {
+    const model = { kind: 'model', remote: true, freshness: false } as const
+    const listed: SelectionView['connections'] = [
+      { ...model, id: 'builtin:session-model', label: 'Session model', access: 'account', status: 'ready' },
+      { ...model, id: 'custom:claude', label: 'Claude', access: 'api-key', status: 'ready' },
+      { ...model, id: 'custom:off', label: 'Off model', access: 'api-key', status: 'disabled' },
+    ]
+    const [session, fixed] = listed as [SelectionView['connections'][number], SelectionView['connections'][number]]
+    expect(describeConnection(session, tZh)).toEqual({ label: tZh('connection.sessionModel'), caption: tZh('status.sessionModelReady', { access: tZh('access.account') }) })
+    expect(describeConnection(session, tZh).caption).toBe('DeepSeek 账号 · 查询发送给会话模型的服务商')
+    expect(describeConnection({ ...session, label: 'Team model' }, tZh).label).toBe('Team model')
+    expect(describeConnection(fixed, tZh).caption).toBe(tZh('status.modelReady', { access: tZh('access.apiKey'), name: 'Claude' }))
+    // The conversation model names its own key; on the account route only a fresh sign-in helps.
+    expect(describeConnection({ ...session, access: 'api-key', status: 'needs-credential' }, tZh).reason).toBe('会话模型的 API Key 未设置')
+    expect(describeConnection({ ...session, status: 'needs-credential' }, tZh)).toMatchObject({ caption: '需要登录', reason: '请重新登录 DeepSeek 账号' })
+    expect(describeConnection({ ...session, access: 'api-key', status: 'needs-credential' }, tZh).caption).toBe(tZh('status.short.needsCredential'))
+    expect(describeConnection({ ...fixed, status: 'needs-credential' }, tZh).reason).toBe(tZh('status.needsCredential'))
+    for (const reason of ['no-model', 'unknown-route', 'protocol', 'endpoint', 'headers', 'credential'] as const) {
+      const text = describeConnection({ ...session, status: 'unsupported', reason }, tZh)
+      expect(text).toEqual({ label: tZh('connection.sessionModel'), caption: tZh('status.short.unsupported'), reason: tZh(('status.reason.' + reason) as LocaleKey) })
+    }
+    expect(describeConnection({ ...session, status: 'unsupported', reason: 'protocol' }, tZh).reason).toBe('该路由在模型设置里没有声明支持的 api')
+
+    const { ui, session: popup } = fixture('custom:claude', false, [...listed, { ...model, id: 'builtin:x', label: 'X', access: 'api-key', status: 'unsupported', reason: 'headers' }])
+    const options = await ui.options(popup, signal)
+    expect(ids(options)).toEqual(['off', 'connection:builtin:session-model', 'connection:custom:claude'])
+    expect(options[2]).toMatchObject({ active: true, detail: tZh('status.modelReady', { access: tZh('access.apiKey'), name: 'Claude' }) + ' · ' + tZh('command.current') })
   })
 
   it('parses only the option ids it issues', () => {

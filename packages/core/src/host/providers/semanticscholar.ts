@@ -1,12 +1,10 @@
-/** Semantic Scholar paper search; requires a personal API key. */
-import { invalidResponse } from '../http.ts'
-import { authors, collect, firstSourceUrl, summary, text } from '../sources.ts'
-import { isRecord, apiKeyHeader, getJson } from 'dsh-tool-web-enhanced-core/host'
-import { envelope, type AdapterFor } from './types.ts'
+/** Semantic Scholar paper search and scholarly candidate field mapping. */
+import { apiKeyHeader, getJson, isRecord } from '../adapter.ts'
+import { authors, envelope, firstSourceUrl, mapRows, summary, text, type SearchWire } from './search.ts'
 
 const FIELDS = 'title,url,abstract,tldr,authors,year,publicationDate,citationCount,openAccessPdf,externalIds'
 
-export const semanticscholar: AdapterFor<'semanticscholar'> = {
+export const semanticscholarSearch: SearchWire = {
   request(input, endpoint, auth) {
     const query: Record<string, string> = { query: input.query }
     if (input.maxResults !== undefined) query.limit = String(Math.min(input.maxResults, 100))
@@ -15,11 +13,13 @@ export const semanticscholar: AdapterFor<'semanticscholar'> = {
     return getJson(endpoint, query, apiKeyHeader(auth))
   },
   parse(payload) {
-    const root = envelope(payload)
+    const decoded = envelope(payload)
+    if (decoded.kind === 'failure') return decoded
+    const root = decoded.value
     // An empty result omits `data` and reports `total: 0`.
     const rows = root.data ?? (root.total === 0 ? [] : undefined)
-    if (!Array.isArray(rows)) throw invalidResponse('no "data" array')
-    return collect(rows, row => {
+    if (!Array.isArray(rows)) return { kind: 'failure', failure: 'invalid', reason: 'data-array' }
+    return mapRows(rows, row => {
       const pdf = isRecord(row.openAccessPdf) ? text(row.openAccessPdf.url) : undefined
       const paperId = text(row.paperId)
       const url = firstSourceUrl([row.url, pdf, paperId === undefined ? undefined : `https://www.semanticscholar.org/paper/${paperId}`])

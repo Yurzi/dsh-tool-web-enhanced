@@ -1,4 +1,4 @@
-import { createMcpClient, createTransport } from 'dsh-tool-web-enhanced-core/host'
+import { createMcpClient, createTransport, upstreamSuffix } from 'dsh-tool-web-enhanced-core/host'
 import { FETCH } from 'dsh-tool-web-enhanced-core/shared'
 import { fetchErrors } from './errors.ts'
 
@@ -20,7 +20,7 @@ export const transport = createTransport(fetchErrors, {
 export const mcp = createMcpClient(transport, fetchErrors, {
   clientInfo: { name: FETCH.packageName, version: __PLUGIN_VERSION__ },
   messages: {
-    toolFailed: label => label + ' could not read the page; retry later or choose another fetch connection',
-    serverError: 'the MCP fetch server returned an error; retry later or choose another fetch connection',
+    toolFailed: (label, detail) => label + ' could not read the page; retry later or choose another fetch connection' + upstreamSuffix(label, detail),
+    serverError: (label, detail) => 'the MCP fetch server returned an error; retry later or choose another fetch connection' + upstreamSuffix(label, detail),
   },
 })

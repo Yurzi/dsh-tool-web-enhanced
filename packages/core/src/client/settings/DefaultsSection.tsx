@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react'
 import { StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { AccessMode } from '../../shared/connections.ts'
 import { configurationState } from './ServicesSection.tsx'
 import type { ClientTranslate } from '../command.ts'
+import type { BuiltinAccess } from './model.ts'
 import type { SettingsDoc, SettingsParts, WriteSettings, SelectOption } from './parts.tsx'
 import type { SparseSettings } from './sparse.ts'
 
@@ -26,7 +26,7 @@ export function createDefaultsSection<K extends string>({ parts: { Section, Sett
     defaultLabel: string
     defaultAvailability?: {
       readonly disabled: boolean
-      readonly access: AccessMode
+      readonly access: BuiltinAccess
       readonly credentialStatus: string | undefined
       readonly warning: string
     } | undefined
@@ -40,7 +40,7 @@ export function createDefaultsSection<K extends string>({ parts: { Section, Sett
     }
     const missing = defaultConnection !== undefined && !choices.some(choice => choice.id === defaultConnection)
     const warning = missing ? t(keys.connectionMissing, { id: defaultConnection })
-      : defaultAvailability && configurationState(!defaultAvailability.disabled, defaultAvailability.access, defaultAvailability.credentialStatus) !== 'done'
+      : defaultAvailability && (defaultAvailability.disabled || configurationState(true, defaultAvailability.access, defaultAvailability.credentialStatus) === 'warning')
         ? defaultAvailability.warning : undefined
     const connectionOptions = [
       { id: '', label: t(keys.connectionUnset, { name: defaultLabel }) },

@@ -9,11 +9,12 @@ import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 import Settings from '@deepseek-ai/dsh-settings'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
+import { installModelSelection, type ModelSelectionRef } from '@deepseek-ai/dsh-agent'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import AgentPresets from '@deepseek-ai/dsh-agent-preset-registry'
 import SessionController from '@deepseek-ai/dsh-api-session-controller'
 import TypertRegistry from '@deepseek-ai/dsh-typert-registry'
-import { LlmAdapter, createUserMessage, type GenerateOptions, type StreamChunk } from '@deepseek-ai/dsh-llm'
+import { LlmAdapter, ToolCallId, createUserMessage, type GenerateOptions, type StreamChunk } from '@deepseek-ai/dsh-llm'
 import { SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
 import Projections from '@deepseek-ai/dsh-session-projection'
 import Storage from '@deepseek-ai/dsh-storage'
@@ -23,6 +24,9 @@ import * as ToolWeb from '@deepseek-ai/dsh-tool-web'
 import WebRuntime from '@deepseek-ai/dsh-web'
 import { scopeOf, scopeParentOf } from '@deepseek-ai/dsh-scope'
 import { SEARCH } from 'dsh-tool-web-enhanced-core/shared'
+import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
+import type { ToolExecutionResult } from '@deepseek-ai/dsh-tools'
+import { MODEL_SETTINGS_NS, modelServer, modelSettingsPlugin } from './fixtures/model-host.ts'
 import { afterEach, expect, it, vi } from 'vitest'
 import { Pairings } from 'dsh-tool-web-enhanced-core/host'
 import { SearchSessions, SearchRestriction, searchDomain } from './fixtures/core-host.ts'
@@ -35,10 +39,11 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0).toReversed()) await cleanup()
 })
 
-async function presetHost() {
+async function presetHost(routes: Record<string, unknown> = {}) {
   const root = await mkdtemp(join(tmpdir(), 'search-agent-'))
   cleanups.push(() => rm(root, { recursive: true, force: true }))
   const ctx = new Context()
+  ctx.provide('launchEnvironment', createLaunchEnvironmentSnapshot([{ source: 'process', values: { ROUTE_KEY: 'agent-fixture-key' } }]))
   cleanups.push(() => ctx.fiber.dispose())
   ctx.baseUrl = pathToFileURL(process.cwd() + '/').href
   await ctx.plugin(Loader)
@@ -46,7 +51,7 @@ async function presetHost() {
   await mountAgentLoopTestDependencies(ctx, { tools: { mode: 'native' } })
   await ctx.plugin(Projections)
   await ctx.plugin(AgentLoop)
-  await mountWebSettings(ctx, root)
+  await mountWebSettings(ctx, root, routes)
   await ctx.plugin(Storage)
   await ctx.plugin(StorageJson, { root })
   await ctx.plugin(StorageDomain, { backend: 'json' })
@@ -173,7 +178,7 @@ it('plugin disposal prevents a pending Remote write from reinstalling tool restr
 })
 
 /** Real public Settings data over a disposable profile; the Web service is not mocked. */
-async function mountWebSettings(ctx: Context, root: string): Promise<void> {
+async function mountWebSettings(ctx: Context, root: string, routes: Record<string, unknown>): Promise<void> {
   const requireSettings = createRequire(import.meta.resolve('@deepseek-ai/dsh-settings'))
   const editorPath = requireSettings.resolve('@deepseek-ai/dsh-config-editor')
   const { default: ConfigEditor } = await import(pathToFileURL(editorPath).href) as { default: Plugin }
@@ -188,9 +193,13 @@ async function mountWebSettings(ctx: Context, root: string): Promise<void> {
   const profile = { name: 'test', startedBundles: [], dir, patchPath: join(dir, 'cordis.patch.yml'), installAnchor: join(root, 'package.json'), cwd: root, home: root, overlays: [], telemetryDisabledEnv: undefined }
   await writeFile(profile.installAnchor, JSON.stringify({ name: 'search-agent-test' }))
   await writeFile(join(dir, 'cordis.yml'), '[]')
-  await writeFile(profile.patchPath, JSON.stringify([{ insert: [{ id: 'web', name: 'cordis:webRuntimeForTest', config: { searchProvider: SEARCH.providerId } }] }]))
+  await writeFile(profile.patchPath, JSON.stringify([{ insert: [
+    { id: 'web', name: 'cordis:webRuntimeForTest', config: { searchProvider: SEARCH.providerId } },
+    { id: MODEL_SETTINGS_NS, name: 'cordis:modelSettingsFixture', config: { routes } },
+  ] }]))
   ctx.provide('profileContext', profile)
   ctx.loader.builtins.webRuntimeForTest = WebRuntime
+  ctx.loader.builtins.modelSettingsFixture = modelSettingsPlugin
   await ctx.plugin(ConfigEditor)
   await ctx.plugin(Settings)
   await boot.mountRootInclude(ctx, join(dir, 'cordis.yml'), boot.readProfilePatches('dsh', profile))
@@ -224,6 +233,98 @@ async function mountRemote(ctx: Context) {
   void new SessionController(ctx, { nativeOpen: false })
   await ctx.fiber.await()
 }
+
+/** Script only the provider transport; every web_search is dispatched by the real Agent loop. */
+class SearchAdapter extends LlmAdapter {
+  readonly requests: GenerateOptions[] = []
+  readonly entered = Promise.withResolvers<void>()
+  readonly release = Promise.withResolvers<void>()
+  override resolveModel(provider: string, model: string) {
+    return Promise.resolve({ provider, id: model, name: model })
+  }
+  async * stream(request: GenerateOptions): AsyncIterable<StreamChunk> {
+    this.requests.push(request)
+    if (this.requests.length === 1) {
+      this.entered.resolve()
+      await this.release.promise
+    }
+    if (this.requests.length % 2 === 1) {
+      const block = { type: 'tool-call' as const, id: ToolCallId('search-' + String(this.requests.length)), name: 'web_search', arguments: JSON.stringify({ queries: ['fixture search'] }) }
+      yield { type: 'block-start', index: 0, blockType: 'tool-call' }
+      yield { type: 'tool-call-delta', index: 0, id: block.id, name: block.name, argumentsDelta: block.arguments }
+      yield { type: 'block-end', index: 0, block }
+      yield { type: 'usage', usage: { inputTokens: 1, outputTokens: 1 } }
+      yield { type: 'finish', reason: { kind: 'tool-calls' } }
+    } else {
+      yield { type: 'block-start', index: 0, blockType: 'text' }
+      yield { type: 'text-delta', index: 0, text: 'done' }
+      yield { type: 'block-end', index: 0, block: { type: 'text', text: 'done' } }
+      yield { type: 'usage', usage: { inputTokens: 1, outputTokens: 1 } }
+      yield { type: 'finish', reason: { kind: 'stop' } }
+    }
+  }
+}
+
+it('a real Web preset Agent follows A then B, rejects an unsupported next model, and never changes the search selection', async () => {
+  const api = await modelServer()
+  cleanups.push(api.close)
+  const { ctx, create } = await presetHost({ fixture: {
+    api: 'anthropic-messages', apiKeyEnv: 'ROUTE_KEY', models: [
+      { id: 'model-a', baseURL: api.url + '/a' },
+      { id: 'model-b', baseURL: api.url + '/b' },
+      { id: 'unsupported', api: 'google-generative-ai', baseURL: api.url + '/never' },
+    ],
+  } })
+  await mountRemote(ctx)
+  const adapter = new SearchAdapter()
+  ctx.llm.registerAdapter(['fixture'], adapter)
+  ctx.llm.registerConfigurableProviders([{ provider: 'fixture', displayName: 'Fixture model transport', settingsNs: MODEL_SETTINGS_NS, settingsPath: ['routes', 'fixture'] }])
+  const handle = await create('follow-model')
+  cleanups.push(() => handle.dispose())
+  const { agent } = handle
+  const selection: ModelSelectionRef = { current: undefined, assembled: undefined }
+  // Same public installer used by SessionController; no route fields are copied into search plans.
+  const disposeSelection = installModelSelection(agent.ctx, selection)
+  cleanups.push(async () => { disposeSelection() })
+  const select = (model: string) => {
+    selection.current = { provider: 'fixture', model }
+    agent.session.append('model/selection', selection.current)
+  }
+  const results: ToolExecutionResult[] = []
+  agent.ctx.on('tools/result', (exec, result) => { if (exec.name === 'web_search') results.push(result) })
+  await ctx.searchConnections.set({ sessionId: agent.id, connectionId: 'builtin:session-model', expectedRevision: 0 })
+  select('model-a')
+  const send = () => {
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'search now' }], source: { kind: 'user' } }))
+    return agent.whenIdle()
+  }
+  const first = send()
+  try {
+    await adapter.entered.promise
+    expect(agent.session.requestContext()).toMatchObject({ provider: 'fixture', model: 'model-a' })
+    // A queued switch changes menu readiness, never this already resolved call.
+    select('model-b')
+  } finally { adapter.release.resolve() }
+  await first
+  expect(api.calls).toMatchObject([{ path: '/a/v1/messages', headers: { 'x-api-key': 'agent-fixture-key' }, body: { model: 'model-a' } }])
+  expect(results).toMatchObject([{ isError: false }])
+  await send()
+  expect(api.calls).toMatchObject([
+    { path: '/a/v1/messages', body: { model: 'model-a' } },
+    { path: '/b/v1/messages', body: { model: 'model-b' } },
+  ])
+  expect(agent.session.requestContext()).toMatchObject({ provider: 'fixture', model: 'model-b' })
+  select('unsupported')
+  const unsupportedView = await ctx.searchConnections.get({ sessionId: agent.id })
+  expect(unsupportedView.connections.find(connection => connection.id === 'builtin:session-model')).toMatchObject({ status: 'unsupported', reason: 'protocol' })
+  await send()
+  expect(results).toHaveLength(3)
+  expect(results[2]).toMatchObject({ isError: true, error: { info: { code: 'WEB_PROVIDER_CONFIGURED_UNAVAILABLE' }, message: 'dsh-web-search-enhanced: the session model cannot run web search: the route does not declare a supported protocol; choose another search connection' } })
+  expect(api.calls).toHaveLength(2)
+  expect((await ctx.searchConnections.get({ sessionId: agent.id })).selection).toMatchObject({ connectionId: 'builtin:session-model', revision: 1 })
+  expect(adapter.requests).toHaveLength(6)
+  expect(adapter.requests[5]!.messages.filter(message => message.role === 'tool').at(-1)).toMatchObject({ isError: true })
+})
 
 it('the real loop omits web_search in the next request header after off and restores it after on', async () => {
   const { ctx, create } = await presetHost()

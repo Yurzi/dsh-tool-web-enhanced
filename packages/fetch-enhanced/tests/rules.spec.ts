@@ -158,8 +158,8 @@ describe('AddressPolicy', () => {
   })
 
   it('refuses invalid rules with the offending entry named', () => {
-    expect(() => policy(['198.18.1.1/15'])).toThrow('allowCidrs entry "198.18.1.1/15" must name its network address 198.18.0.0/15')
-    expect(() => policy([], ['https://example.com'])).toThrow('allowHostnames entry')
+    expect(() => policy(['198.18.1.1/15'])).toThrow('dsh-web-fetch-enhanced: allowCidrs entry "198.18.1.1/15" must name its network address 198.18.0.0/15')
+    expect(() => policy([], ['https://example.com'])).toThrow('dsh-web-fetch-enhanced: allowHostnames entry')
   })
 
   it('classifies public unicast like the native provider', () => {

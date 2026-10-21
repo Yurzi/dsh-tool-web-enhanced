@@ -1,6 +1,7 @@
 import type { CapabilityErrors } from './errors.ts'
-import type { Transport, Upstream } from './transport.ts'
+import { upstreamDetail, type UpstreamDetail, type Transport, type Upstream } from './transport.ts'
 import { isRecord } from './adapter.ts'
+import { redactJson, secretMatcher, type SecretMatcher } from './redaction.ts'
 
 export interface McpToolCall {
   readonly url: string
@@ -15,13 +16,15 @@ export interface McpToolCall {
 export type McpToolResult = Readonly<Record<string, unknown>>
 
 export interface McpMessages {
-  readonly toolFailed: (label: string) => string
-  readonly serverError: string
+  readonly toolFailed: (label: string, detail: UpstreamDetail) => string
+  readonly serverError: (label: string, detail: UpstreamDetail) => string
 }
 
 export interface McpClient {
   callTool(call: McpToolCall, signal: AbortSignal, upstream: Upstream): Promise<McpToolResult>
 }
+
+type MatchedUpstream = Upstream & { readonly matcher: SecretMatcher }
 
 /** Minimal Streamable HTTP client; session state never outlives one tools/call. */
 export function createMcpClient(transport: Transport, errors: CapabilityErrors, spec: {
@@ -31,7 +34,8 @@ export function createMcpClient(transport: Transport, errors: CapabilityErrors, 
   const PROTOCOL_VERSION = '2025-06-18'
   const { send, discard, readJson, readText, invalidResponse } = transport
 
-  async function callTool(call: McpToolCall, signal: AbortSignal, upstream: Upstream): Promise<McpToolResult> {
+  async function callTool(call: McpToolCall, signal: AbortSignal, source: Upstream): Promise<McpToolResult> {
+    const upstream: MatchedUpstream = { ...source, matcher: source.matcher === undefined ? secretMatcher([]) : source.matcher }
     const post = (body: object, session: Readonly<Record<string, string>> = {}) => send({
       url: call.url,
       method: 'POST',
@@ -53,25 +57,25 @@ export function createMcpClient(transport: Transport, errors: CapabilityErrors, 
         'mcp-protocol-version': typeof initialized.protocolVersion === 'string' && initialized.protocolVersion.trim() !== '' ? initialized.protocolVersion.trim() : PROTOCOL_VERSION,
       }
       const notified = await post({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} }, session)
-      await discard(notified, signal, upstream.onDiagnostic)
+      await discard(notified, signal, upstream.onDiagnostic, upstream.matcher)
       id = 2
     }
     const response = await post({ jsonrpc: '2.0', id, method: 'tools/call', params: { name: call.tool, arguments: call.arguments } }, session)
     const result = await readResult(response, id, signal, upstream)
-    if (result.isError === true) throw errors.error('WEB_PROVIDER_ERROR', spec.messages.toolFailed(upstream.label))
-    return result
+    if (result.isError === true) throw errors.error('WEB_PROVIDER_ERROR', spec.messages.toolFailed(upstream.label, upstreamDetail(toolTexts(result).join('\n\n'), upstream.matcher)))
+    return redactJson(result, upstream.matcher)
   }
 
-  async function readResult(response: Response, id: number, signal: AbortSignal, upstream: Upstream): Promise<Record<string, unknown>> {
+  async function readResult(response: Response, id: number, signal: AbortSignal, upstream: MatchedUpstream): Promise<Record<string, unknown>> {
     if (!response.headers.get('content-type')?.toLowerCase().includes('text/event-stream')) {
-      const result = matching(await readJson(response, signal, upstream.onDiagnostic), id)
+      const result = matching(await readJson(response, signal, upstream.onDiagnostic, upstream.matcher), id, upstream)
       if (result === undefined) throw invalidResponse('no matching MCP response')
       return result
     }
     const lineParts: string[] = []
     const lines: string[] = []
     let afterCR = false
-    for await (const chunk of readText(response, signal, upstream.onDiagnostic)) {
+    for await (const chunk of readText(response, signal, upstream.onDiagnostic, upstream.matcher)) {
       let start = 0
       // Each character is inspected once. A CR ends a line immediately; only its
       // optional following LF is skipped, including when split across chunks.
@@ -90,7 +94,7 @@ export function createMcpClient(transport: Transport, errors: CapabilityErrors, 
         start = index + 1
         if (line !== '') lines.push(line)
         else {
-          const result = eventResult(lines.join('\n'), id)
+          const result = eventResult(lines.join('\n'), id, upstream)
           lines.length = 0
           if (result !== undefined) return result
         }
@@ -98,12 +102,12 @@ export function createMcpClient(transport: Transport, errors: CapabilityErrors, 
       if (start < chunk.length) lineParts.push(chunk.slice(start))
     }
     if (lineParts.length > 0) lines.push(lineParts.join(''))
-    const result = eventResult(lines.join('\n'), id)
+    const result = eventResult(lines.join('\n'), id, upstream)
     if (result === undefined) throw invalidResponse('no matching MCP response')
     return result
   }
 
-  function eventResult(event: string, id: number): Record<string, unknown> | undefined {
+  function eventResult(event: string, id: number, upstream: MatchedUpstream): Record<string, unknown> | undefined {
     const data = event.split(/\r\n|\r|\n/u)
       .filter(line => line.startsWith('data:'))
       .map(line => line.slice(5).replace(/^ /u, ''))
@@ -111,14 +115,15 @@ export function createMcpClient(transport: Transport, errors: CapabilityErrors, 
     if (data === '' || data === '[DONE]') return undefined
     const message = toolJson(data)
     if (message.kind === 'text') throw invalidResponse('an MCP event that is not JSON')
-    return matching(message.value, id)
+    return matching(message.value, id, upstream)
   }
 
-  function matching(value: unknown, id: number): Record<string, unknown> | undefined {
+  function matching(value: unknown, id: number, upstream: MatchedUpstream): Record<string, unknown> | undefined {
     const message = (Array.isArray(value) ? value : [value]).find(item => isRecord(item) && item.id === id)
     if (message === undefined) return undefined
     if (message.jsonrpc !== '2.0' || message.error !== undefined || !isRecord(message.result)) {
-      throw errors.error('WEB_PROVIDER_ERROR', spec.messages.serverError)
+      const messageText = isRecord(message.error) && typeof message.error.message === 'string' ? message.error.message : ''
+      throw errors.error('WEB_PROVIDER_ERROR', spec.messages.serverError(upstream.label, upstreamDetail(messageText, upstream.matcher)))
     }
     return message.result
   }

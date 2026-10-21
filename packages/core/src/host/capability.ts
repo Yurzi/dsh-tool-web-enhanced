@@ -2,7 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { z } from 'zod'
 import type { ConnectionView, PluginIdentity, SelectionChange } from '../shared/index.ts'
-import type { ConnectionBase, Selectable } from './selectable.ts'
+import type { ConnectionBase } from './selectable.ts'
 
 /** The settings facts used by the selection mechanism; capabilities retain all other fields. */
 export interface CapabilitySettings<C extends ConnectionBase = ConnectionBase> {
@@ -54,7 +54,7 @@ export interface Capability<S extends CapabilitySettings, O extends Record<strin
   /** Describe local readiness without leaking credential references or secrets. */
   describe(settings: S, agent: Agent): Promise<V[]>
   /** Construct afresh for every call, after core rechecks current selectability. Never cache a plan target. */
-  target(connection: Selectable<ConnectionOf<S>>, options: O, call: CapabilityCall): T
+  target(connection: ConnectionOf<S>, options: O, call: CapabilityCall): T
   execute(target: T, request: Q, call: CapabilityCall): Promise<R>
   /** Register exactly one native Web provider and bind its lifetime to ctx. */
   register(ctx: Context, invoke: CapabilityInvoke<Q, R>): void

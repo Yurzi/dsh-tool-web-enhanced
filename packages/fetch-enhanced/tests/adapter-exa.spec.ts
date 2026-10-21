@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { McpToolResult } from 'dsh-tool-web-enhanced-core/host'
+import { exaFetch as exa, MAX_BODY_CHARS, type FetchInput, type McpToolResult } from 'dsh-tool-web-enhanced-core/host'
 import { CATALOG } from '../src/catalog.ts'
-import { exa } from '../src/remote/adapters/exa.ts'
-import { fetchResult, MAX_BODY_CHARS } from '../src/remote/page.ts'
-import type { FetchInput } from '../src/remote/types.ts'
+import { fetchResult } from '../src/remote/page.ts'
 import { expectPage } from './fixtures/page.ts'
 
 const input: FetchInput = { url: 'http://127.0.0.1/private?q=%2F#raw', options: {} }
@@ -55,11 +53,11 @@ describe('Exa fetch REST request and page mapping', () => {
     ['CRAWL_TIMEOUT', 'timeout'], ['CRAWL_LIVECRAWL_TIMEOUT', 'timeout'],
     ['CRAWL_NOT_FOUND', 'failed'], ['SOURCE_NOT_AVAILABLE', 'failed'], ['CRAWL_UNKNOWN_ERROR', 'failed'],
   ] as const)('maps %s without guessing an HTTP code', (tag, failure) => {
-    expect(responseOutcome({ results: [], statuses: [{ status: 'error', error: { tag, httpStatusCode: null, message: 'UPSTREAM_SECRET' } }] })).toEqual({ kind: 'failure', failure: failure })
+    expect(responseOutcome({ results: [], statuses: [{ status: 'error', error: { tag, httpStatusCode: null, message: 'UPSTREAM_SECRET' } }] })).toStrictEqual({ kind: 'failure', failure, detail: tag + ': UPSTREAM_SECRET' })
   })
 
   it.each(['404', 99, 600, 403.5])('does not accept invalid target status %s', httpStatusCode => {
-    expect(responseOutcome({ results: [], statuses: [{ status: 'error', error: { tag: 'CRAWL_NOT_FOUND', httpStatusCode } }] })).toEqual({ kind: 'failure', failure: 'failed' })
+    expect(responseOutcome({ results: [], statuses: [{ status: 'error', error: { tag: 'CRAWL_NOT_FOUND', httpStatusCode } }] })).toStrictEqual({ kind: 'failure', failure: 'failed', detail: 'CRAWL_NOT_FOUND' })
   })
 
   it.each([
@@ -139,8 +137,8 @@ describe('Exa keyless MCP request and page mapping', () => {
     expect(page.content).toBe('First body\n\nSecond body')
   })
 
-  it('recognizes metadata rate limiting instead of returning the upstream prose', () => {
-    expect(mcpOutcome({ ...toolText('UPSTREAM_SECRET'), _meta: { 'ai.exa/rateLimited': true } })).toMatchObject({ kind: 'failure', failure: 'rate-limited' })
+  it('recognizes metadata rate limiting and preserves the service prose as failure detail', () => {
+    expect(mcpOutcome({ ...toolText('UPSTREAM_SECRET'), _meta: { 'ai.exa/rateLimited': true } })).toStrictEqual({ kind: 'failure', failure: 'rate-limited', detail: 'UPSTREAM_SECRET' })
   })
 
   it('recognizes no-content text as empty', () => {

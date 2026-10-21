@@ -1,6 +1,6 @@
 /**
  * The browser-side seam between the two plugins and the ui package
- * (docs/architecture.md section 9.2). The ui package provides the
+ * (docs/architecture.md, "浏览器面"). The ui package provides the
  * `webConnections` service and renders one composer menu from the registered
  * sections. Each plugin registers its route facts independently of the optional
  * section and supplies the capability-specific selection store, labels, and

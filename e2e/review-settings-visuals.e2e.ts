@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { FETCH, PROFILE_PACKAGE, rowConfigKey } from 'dsh-tool-web-enhanced-core/shared'
 import { parse, stringify } from 'yaml'
-import { afterAll, afterEach, beforeAll, describe, expect, inject, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest'
 import { en as fetchText, zh as fetchZh } from '../packages/fetch-enhanced/src/client/locales.ts'
 import { en as searchText } from '../packages/search-enhanced/src/client/locales.ts'
 import { zh as uiZh } from '../packages/ui/src/client/locales.ts'
@@ -14,7 +14,7 @@ import { expectTheme, setTheme, type ThemePreference } from './harness/theme.ts'
 import { upgradeEnvironment } from './harness/upgrade.ts'
 import { type WebServer, startWeb } from './harness/web.ts'
 
-const e2e = upgradeEnvironment(inject('e2e'))
+const base = inject('e2e')
 const views = ['custom-list', 'custom-editor', 'firecrawl-personal', 'tavily', 'tinyfish', 'zh-settings', 'zh-menu', 'search-freshness'] as const
 const schemes = ['light', 'dark'] as const
 const matrix = [
@@ -25,6 +25,7 @@ const viewport = { width: 1280, height: 1100 }
 const draftRef = 'REVIEW_DRAFT_FETCH_KEY'
 
 describe.skipIf(chromiumPath === undefined && !browserRequired)('UI review settings and Chinese screenshots', () => {
+  let e2e: ReturnType<typeof upgradeEnvironment>
   let app: App | undefined
   let server: WebServer | undefined
   let api: Awaited<ReturnType<typeof startRemoteFetchApi>>
@@ -33,13 +34,17 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('UI review setti
   let language: 'en-US' | 'zh-CN' = 'en-US'
   let savedPatch: { path: string; content: string } | undefined
 
-  beforeAll(async () => {
+  beforeAll(async () => { api = await startRemoteFetchApi(firecrawlResponse()) })
+
+  beforeEach(() => {
+    // Native workspace/draft restoration is outside this visual matrix. Give
+    // every restart its own home, matching the model screenshot specifications.
+    e2e = upgradeEnvironment(base)
     const { [PROFILE_PACKAGE]: profile, ...plugins } = e2e.tarballs
     if (profile === undefined) throw new Error('the global setup did not pack the profile bundle')
     addPlugins(e2e, [profile], plugins)
     const path = profilePatchPath(e2e)
     savedPatch = { path, content: existsSync(path) ? readFileSync(path, 'utf8') : '' }
-    api = await startRemoteFetchApi(firecrawlResponse())
     const original: unknown = savedPatch.content.trim() === '' ? [] : parse(savedPatch.content)
     if (!Array.isArray(original)) throw new Error('The public profile user patch must be a YAML list')
     visualPatch = stringify([...original, { id: FETCH.rowId, config: {

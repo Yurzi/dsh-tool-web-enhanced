@@ -15,12 +15,14 @@ dsh plugin --profile <profile> add dsh-tool-web-enhanced-profile
 
 两个插件用同一种方式切换后端：运维在插件设置里定义可用的连接，每个会话从中选一个（或关闭）。
 
-**状态：M0–M3 已完成。** 搜索有 8 个内置连接（原生 DeepSeek Messages / Search API，以及 Exa、Firecrawl、Tavily、Tinyfish、OpenAlex、Semantic Scholar）；抓取有 6 个：本机 HTTP(S)（可配置内网白名单）、DeepSeek Fetch API，以及 Exa、Firecrawl、Tavily、Tinyfish 远程读取服务。两侧都可以添加自定义连接。每个会话可以分别选择搜索与抓取连接或关闭；后续计划见[路线图](docs/architecture.md#13-路线图与扩展点)。
+搜索有 9 个内置连接：原生 DeepSeek Messages / Search API，Exa、Firecrawl、Tavily、Tinyfish、OpenAlex、Semantic Scholar，以及跟随会话模型的模型搜索；抓取有 6 个：本机 HTTP(S)（可配置内网白名单）、DeepSeek Fetch API，以及 Exa、Firecrawl、Tavily、Tinyfish 远程读取服务。两侧都可以添加自定义连接（search 另可添加固定模型的模型搜索）。每个会话可以分别选择搜索与抓取连接或关闭。后续计划见[计划与路线图](docs/plan.md)。
 
-从 dsh-web-search-enhanced / dsh-web-fetch-enhanced 0.1.x 升级：先移除这两个插件，再安装 profile。0.1.x 的行配置不再被读取——设置页会点名旧字段并提供“恢复默认”；会话的连接选择与模型记忆保留。详见[架构文档第 11 节](docs/architecture.md#11-从-01x-升级)。
+从 dsh-web-search-enhanced / dsh-web-fetch-enhanced 0.1.x 升级：先移除这两个插件，再安装 profile。0.1.x 的行配置不再被读取——设置页会点名旧字段并提供“恢复默认”；会话的连接选择与模型记忆保留。详见[功能设计 · 从 0.1.x 升级](docs/design.md#从-01x-升级)。
 
-- [架构（设计）](docs/architecture.md)
-- [代码结构（现状）](docs/code-structure.md)
-- [开发指南](docs/development.md)
+- [架构](docs/architecture.md)：组成、组合与运行时结构、安全边界
+- [功能设计](docs/design.md)：连接、会话选择、配置、各后端的行为、错误
+- [开发流程](docs/development.md)：环境、命令、测试与 e2e、发布
+- [代码结构](docs/code-structure.md)：目录、模块与测试清单
+- [计划与路线图](docs/plan.md)
 
 MIT © Yurzi

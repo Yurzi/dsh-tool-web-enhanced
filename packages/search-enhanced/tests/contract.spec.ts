@@ -1,5 +1,5 @@
 import type { RemoteResult, TypertRemoteMap, TypertRemoteNamespaceMap } from '@deepseek-ai/dsh-typert-protocol'
-import type { Auth } from '../src/search/adapters/index.ts'
+import type { Auth } from 'dsh-tool-web-enhanced-core/host'
 import type { SearchDeps } from '../src/search/execute.ts'
 import { SEARCH, type PairingsView } from 'dsh-tool-web-enhanced-core/shared'
 import { describe, expect, expectTypeOf, it } from 'vitest'

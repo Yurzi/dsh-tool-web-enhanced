@@ -14,6 +14,9 @@ import Storage from '@deepseek-ai/dsh-storage'
 import * as StorageDomain from '@deepseek-ai/dsh-storage-domain'
 import * as StorageJson from '@deepseek-ai/dsh-storage-json'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
+import { MemoryCredentials } from './fixtures/credentials.ts'
+import { credentialRef } from '@deepseek-ai/dsh-credentials'
+import { MODEL_SETTINGS_NS, modelServer, mountModelSettings } from './fixtures/model-host.ts'
 import { remoteMethods, type PeerId, type PeerScope } from '@deepseek-ai/dsh-typert-protocol'
 import TypertRegistry from '@deepseek-ai/dsh-typert-registry'
 import WebRuntime from '@deepseek-ai/dsh-web'
@@ -34,13 +37,14 @@ afterEach(async () => {
 })
 const INITIAL: SearchSettings = { version: 2, defaultConnection: 'builtin:openalex' }
 
-async function host(options: { storage?: boolean; root?: string; rawSettings?: Record<string, unknown>; settings?: SearchSettings } = {}) {
+async function host(options: { storage?: boolean; root?: string; rawSettings?: Record<string, unknown>; settings?: SearchSettings; environment?: Record<string, string>; routes?: Record<string, unknown> } = {}) {
   const root = options.root ?? await mkdtemp(join(tmpdir(), 'search-host-'))
   if (options.root === undefined) cleanups.push(() => rm(root, { recursive: true, force: true }))
   const ctx = new Context()
   cleanups.push(() => ctx.fiber.dispose())
-  ctx.provide('launchEnvironment', createLaunchEnvironmentSnapshot([{ source: 'process', values: {} }]))
+  ctx.provide('launchEnvironment', createLaunchEnvironmentSnapshot([{ source: 'process', values: options.environment ?? {} }]))
   await mountAgentLoopTestDependencies(ctx, { tools: { mode: 'native' } })
+  if (options.routes !== undefined) await mountModelSettings(ctx, root, options.routes)
   await ctx.plugin(Projections)
   await ctx.plugin(AgentLoop)
   await ctx.plugin(Storage)
@@ -97,6 +101,182 @@ function network() {
   return calls
 }
 
+const fixedModel = (endpoint: string) => ({ kind: 'model', label: 'Fixed model', protocol: 'anthropic-messages', model: 'fixed-search', endpoint, credentialRef: 'FIXED_KEY', trustedEndpoint: true } as const)
+
+function registerRoute(ctx: Context, provider = 'fixture') {
+  return ctx.llm.registerConfigurableProviders([{ provider, displayName: provider, settingsNs: MODEL_SETTINGS_NS, settingsPath: ['routes', provider] }])
+}
+
+describe('searchConnections model Host', () => {
+  it('shows no-model and unknown-route without changing the selected connection or Seat availability', async () => {
+    const h = await host({ settings: { defaultConnection: 'builtin:session-model' } })
+    expect((await h.get()).connections.find(connection => connection.id === 'builtin:session-model')).toMatchObject({ status: 'unsupported', reason: 'no-model', freshness: false })
+    await expect(h.ctx.web.search({ query: 'outside' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_CONFIGURED_UNAVAILABLE', message: 'dsh-web-search-enhanced: the session model cannot run web search: no session model is available; choose another search connection' })
+    const agent = await h.add('unknown', { agentOptions: { provider: 'unknown', model: 'm' } })
+    expect((await h.get(agent)).connections.find(connection => connection.id === 'builtin:session-model')).toMatchObject({ status: 'unsupported', reason: 'unknown-route' })
+    expect(await h.set({ connectionId: 'builtin:session-model', expectedRevision: 0 }, agent)).toMatchObject({ selection: { connectionId: 'builtin:session-model' } })
+    agent.session.append('request/context', { provider: 'unknown', model: 'm' })
+    await h.request(agent)
+    await expect(h.search(agent)).rejects.toMatchObject({ code: 'WEB_PROVIDER_CONFIGURED_UNAVAILABLE', message: 'dsh-web-search-enhanced: the session model cannot run web search: the model route is unknown; choose another search connection' })
+    expect((await h.get(agent)).selection.connectionId).toBe('builtin:session-model')
+  })
+
+  it('describes fixed model Credentials readiness, never account or ambient fallback', async () => {
+    const h = await host({ settings: { connections: { 'custom:fixed': fixedModel('https://fixture.test') } }, environment: { FIXED_KEY: 'ambient' } })
+    const agent = await h.add('fixed-account', { agentOptions: { provider: 'deepseek-account', model: 'm' } })
+    const fixed = async () => (await h.get(agent)).connections.find(connection => connection.id === 'custom:fixed')
+    expect(await fixed()).toMatchObject({ access: 'api-key', status: 'needs-credential', freshness: false })
+    const credentials = await h.ctx.plugin(MemoryCredentials)
+    expect(await fixed()).toMatchObject({ status: 'needs-credential' })
+    await h.ctx.credentials.set(credentialRef('FIXED_KEY'), 'stored')
+    expect(await fixed()).toMatchObject({ access: 'api-key', status: 'ready' })
+    await credentials.dispose()
+    expect(await fixed()).toMatchObject({ access: 'api-key', status: 'needs-credential' })
+  })
+
+  it('describes session API-key readiness from the launch environment only without Credentials', async () => {
+    const h = await host({ routes: { fixture: { api: 'anthropic-messages', baseURL: 'https://fixture.test', apiKeyEnv: 'ROUTE_KEY' } }, environment: { ROUTE_KEY: 'ambient' } })
+    registerRoute(h.ctx)
+    const agent = await h.add('route', { agentOptions: { provider: 'fixture', model: 'm' } })
+    const session = async () => (await h.get(agent)).connections.find(connection => connection.id === 'builtin:session-model')
+    expect(await session()).toMatchObject({ access: 'api-key', status: 'ready', freshness: false })
+    await h.ctx.plugin(MemoryCredentials)
+    expect(await session()).toMatchObject({ status: 'needs-credential' })
+    await h.ctx.credentials.set(credentialRef('OTHER_KEY'), 'stored')
+    await h.ctx.settings.replace(MODEL_SETTINGS_NS, { routes: { fixture: { api: 'anthropic-messages', baseURL: 'https://fixture.test', apiKeyEnv: 'OTHER_KEY' } } })
+    expect(await session()).toMatchObject({ status: 'ready' })
+    await h.ctx.credentials.unset(credentialRef('OTHER_KEY'))
+    expect(await session()).toMatchObject({ status: 'needs-credential' })
+  })
+
+  it('keeps account readiness and authentication separate from API keys, pending models and outside calls', async () => {
+    const api = await modelServer()
+    cleanups.push(api.close)
+    const h = await host({ routes: {
+      'deepseek-account': { baseURL: api.url + '/account' },
+      'deepseek-official': { baseURL: api.url + '/official' },
+    }, settings: { defaultConnection: 'builtin:session-model' }, environment: { DEEPSEEK_API_KEY: 'must-not-be-used-for-account' } })
+    registerRoute(h.ctx, 'deepseek-account')
+    registerRoute(h.ctx, 'deepseek-official')
+    const endpoints: string[] = []
+    let token: string | undefined
+    // External account credential boundary, as in the native-backend tests;
+    // routing, Settings, Agent request metadata, transport and protocol are real.
+    h.ctx.provide('deepseekAccount', { resolveToken: async (url: string) => { endpoints.push(url); return token } } as never)
+    const agent = await h.add('account-model', { agentOptions: { provider: 'deepseek-account', model: 'account-search' } })
+    const session = async () => (await h.get(agent)).connections.find(connection => connection.id === 'builtin:session-model')
+    expect(await session()).toMatchObject({ access: 'account', status: 'needs-credential', freshness: false })
+    token = 'account-token'
+    expect(await session()).toMatchObject({ access: 'account', status: 'ready' })
+    expect(endpoints).toContain(api.url + '/account/v1/messages')
+    endpoints.length = 0
+    await expect(h.search(agent)).rejects.toMatchObject({ code: 'WEB_PROVIDER_CONFIGURED_UNAVAILABLE' }) // no resolved request yet
+    expect(endpoints).toEqual([])
+    agent.session.append('request/context', { provider: 'deepseek-account', model: 'account-search' })
+    await h.request(agent)
+    await h.search(agent)
+    expect(api.calls[0]).toMatchObject({ path: '/account/v1/messages', headers: { 'x-dsh-auth-token': 'account-token' }, body: { model: 'account-search', thinking: { type: 'disabled' }, tools: [{ type: 'web_search_20250305' }] } })
+    expect(api.calls[0]!.headers['x-api-key']).toBeUndefined()
+    token = undefined
+    await expect(h.search(agent)).rejects.toMatchObject({ code: 'WEB_PROVIDER_CREDENTIAL_MISSING' })
+    expect(api.calls).toHaveLength(1)
+    token = 'account-token'
+    // Menu looks ahead to account, but the request is now the official key route.
+    agent.session.append('request/header', { reason: 'change', header: { config: { provider: 'deepseek-official', model: 'key-search' } } })
+    agent.session.append('request/context', { provider: 'deepseek-official', model: 'key-search' })
+    agent.session.append('model/selection', { provider: 'deepseek-account', model: 'account-search' })
+    expect(await session()).toMatchObject({ access: 'account', status: 'ready' })
+    endpoints.length = 0
+    await h.request(agent, 1)
+    await h.search(agent)
+    expect(api.calls[1]).toMatchObject({ path: '/official/v1/messages', headers: { 'x-api-key': 'must-not-be-used-for-account' }, body: { model: 'key-search' } })
+    expect(api.calls[1]!.headers['x-dsh-auth-token']).toBeUndefined()
+    await expect(h.ctx.web.search({ query: 'outside' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_CONFIGURED_UNAVAILABLE' })
+    expect(endpoints).toEqual([])
+  })
+
+  it.each([
+    [{}, 'protocol'],
+    [{ api: 'anthropic-messages' }, 'endpoint'],
+    [{ api: 'anthropic-messages', baseURL: 'https://fixture.test', headers: { secret: 'not-returned' } }, 'headers'],
+    [{ api: 'anthropic-messages', baseURL: 'https://fixture.test' }, 'credential'],
+  ])('exposes the closed reason %s and never raw route values', async (profile, reason) => {
+    const h = await host({ routes: { fixture: profile }, settings: { defaultConnection: 'builtin:session-model' } })
+    registerRoute(h.ctx)
+    const agent = await h.add('unsupported', { agentOptions: { provider: 'fixture', model: 'm' } })
+    expect((await h.get(agent)).connections.find(connection => connection.id === 'builtin:session-model')).toMatchObject({ status: 'unsupported', reason, freshness: false })
+    agent.session.append('request/context', { provider: 'fixture', model: 'm' })
+    await h.request(agent)
+    const failure = h.search(agent)
+    const phrases: Record<string, string> = {
+      protocol: 'the route does not declare a supported protocol',
+      endpoint: 'the route has no supported endpoint',
+      headers: 'the route uses custom request headers',
+      credential: 'the route has no supported credential reference',
+    }
+    await expect(failure).rejects.toMatchObject({ code: 'WEB_PROVIDER_CONFIGURED_UNAVAILABLE', message: 'dsh-web-search-enhanced: the session model cannot run web search: ' + phrases[reason] + '; choose another search connection' })
+    await expect(failure).rejects.not.toThrow('not-returned')
+  })
+
+  it('runs fixed and following model searches over real Host and local HTTP, and rereads routes every call', async () => {
+    const api = await modelServer()
+    cleanups.push(api.close)
+    const h = await host({ settings: { defaultConnection: 'custom:fixed', connections: { 'custom:fixed': fixedModel(api.url + '/fixed') } }, routes: { fixture: { api: 'anthropic-messages', baseURL: api.url + '/first', apiKeyEnv: 'FIRST_KEY' } }, environment: { FIRST_KEY: 'first-key', SECOND_KEY: 'second-key' } })
+    registerRoute(h.ctx)
+    await h.ctx.plugin(MemoryCredentials)
+    await h.ctx.credentials.set(credentialRef('FIXED_KEY'), 'fixed-key')
+    await h.ctx.credentials.set(credentialRef('FIRST_KEY'), 'first-key')
+    await h.ctx.credentials.set(credentialRef('SECOND_KEY'), 'second-key')
+    await expect(h.ctx.web.search({ query: 'fixed' })).resolves.toMatchObject({ content: '  fixture answer\n', sources: [{ url: 'https://example.org/result', title: 'Fixture source' }] })
+    expect(api.calls[0]).toMatchObject({ path: '/fixed/v1/messages', headers: { 'x-api-key': 'fixed-key' }, body: { model: 'fixed-search', max_tokens: 4096, tools: [{ type: 'web_search_20260318', name: 'web_search', max_uses: 5 }] } })
+    expect(api.calls[0]!.body.thinking).toBeUndefined()
+    const agent = await h.add('follow', { agentOptions: { provider: 'fixture', model: 'session-search' } })
+    await h.set({ connectionId: 'builtin:session-model', expectedRevision: 0 }, agent)
+    agent.session.append('request/context', { provider: 'fixture', model: 'session-search' })
+    await h.request(agent)
+    await h.search(agent)
+    await h.ctx.settings.replace(MODEL_SETTINGS_NS, { routes: { fixture: { api: 'anthropic-messages', baseURL: api.url + '/second', apiKeyEnv: 'SECOND_KEY' } } })
+    await h.search(agent) // same request step, new operational route and matching key
+    expect(api.calls.slice(1)).toMatchObject([
+      { path: '/first/v1/messages', headers: { 'x-api-key': 'first-key' }, body: { model: 'session-search' } },
+      { path: '/second/v1/messages', headers: { 'x-api-key': 'second-key' }, body: { model: 'session-search' } },
+    ])
+    expect(api.calls.every(call => call.headers.authorization === undefined && call.headers['x-dsh-auth-token'] === undefined)).toBe(true)
+  })
+
+  it.each(['anthropic-messages', 'openai-responses'] as const)('takes only %s options at the real session-model Host seam', async protocol => {
+    const api = await modelServer()
+    cleanups.push(api.close)
+    const h = await host({ settings: { defaultConnection: 'builtin:session-model', connections: { 'builtin:session-model': { options: { maxUses: 2, searchContextSize: 'low' } } } }, routes: { fixture: { api: protocol, baseURL: api.url, apiKeyEnv: 'ROUTE_KEY' } }, environment: { ROUTE_KEY: 'key' } })
+    registerRoute(h.ctx)
+    const agent = await h.add('options', { agentOptions: { provider: 'fixture', model: 'search' } })
+    agent.session.append('request/context', { provider: 'fixture', model: 'search' })
+    await h.request(agent)
+    await h.search(agent)
+    const tool = (api.calls[0]!.body.tools as Record<string, unknown>[])[0]!
+    if (protocol === 'anthropic-messages') {
+      expect(tool.max_uses).toBe(2)
+      expect(tool).not.toHaveProperty('search_context_size')
+    } else {
+      expect(tool.search_context_size).toBe('low')
+      expect(tool).not.toHaveProperty('max_uses')
+    }
+  })
+
+  it.each(['builtin:session-model', 'custom:fixed'])('rechecks disabled/enabled %s on every call, not every step', async connectionId => {
+    const h = await host({ settings: { defaultConnection: connectionId, connections: { 'custom:fixed': fixedModel('https://unused.test') } } })
+    await h.request()
+    const document = { connections: { 'custom:fixed': fixedModel('https://unused.test'), [connectionId]: connectionId === 'custom:fixed' ? { ...fixedModel('https://unused.test'), disabled: true } : { disabled: true } } }
+    h.configure(document)
+    expect((await h.get()).connections.find(connection => connection.id === connectionId)).toMatchObject({ access: 'api-key', status: 'disabled', freshness: false })
+    await expect(h.set({ connectionId, expectedRevision: 0 })).rejects.toMatchObject({ code: 'searchConnections/unavailable' })
+    await expect(h.search()).rejects.toMatchObject({ code: 'WEB_PROVIDER_CONFIGURED_UNAVAILABLE' })
+    h.configure({ connections: { 'custom:fixed': fixedModel('https://unused.test') } })
+    expect(await h.set({ connectionId, expectedRevision: 0 })).toMatchObject({ selection: { connectionId } })
+    await expect(h.search()).rejects.toMatchObject({ code: connectionId === 'custom:fixed' ? 'WEB_PROVIDER_CREDENTIAL_MISSING' : 'WEB_PROVIDER_CONFIGURED_UNAVAILABLE' })
+  })
+})
+
 describe('searchConnections real Host', () => {
   it.each([{ version: 1 }, { unknownOption: true }, { connections: [] }])('keeps invalid settings %j active with a Seat repair instruction but does not expose plugin WebError messages through Remote', async rawSettings => {
     const h = await host({ rawSettings })
@@ -137,6 +317,7 @@ describe('searchConnections real Host', () => {
 
   it('rejects unavailable connections and invalid options without incrementing revision', async () => {
     const h = await host()
+    h.configure({ ...INITIAL, connections: { 'builtin:session-model': { disabled: true } } })
     for (const connectionId of ['custom:gone', 'builtin:session-model']) {
       await expect(h.set({ connectionId, expectedRevision: 0 })).rejects.toMatchObject({ code: 'searchConnections/unavailable' })
     }
@@ -145,6 +326,8 @@ describe('searchConnections real Host', () => {
     await expect(h.set({ options: { freshness: 'hourly' }, expectedRevision: 0 })).rejects.toMatchObject({ code: 'gateway/bad-request' })
     await expect(h.set({ options: { extra: true }, expectedRevision: 0 })).rejects.toMatchObject({ code: 'gateway/bad-request' })
     expect((await h.get()).selection.revision).toBe(0)
+    h.configure(INITIAL)
+    expect(await h.set({ connectionId: 'builtin:session-model', expectedRevision: 0 })).toMatchObject({ selection: { connectionId: 'builtin:session-model', revision: 1 } })
   })
 
   it('remembers model choices including off, lists and clears memories, and reports the source', async () => {
@@ -280,9 +463,12 @@ describe('searchConnections real Host', () => {
     expect(accountHeaders).toHaveLength(1)
   })
 
-  it('logs original transport failures without exposing them to the model', async () => {
-    const h = await host()
-    const original = new Error('private transport diagnostic')
+  it('logs a redacted copy of transport failures', async () => {
+    const secret = 'host-private-key'
+    const h = await host({ settings: { defaultConnection: 'builtin:exa', connections: { 'builtin:exa': { access: 'api-key' } } } })
+    await h.ctx.plugin(MemoryCredentials)
+    await h.ctx.credentials.set(credentialRef('EXA_API_KEY'), secret)
+    const original = Object.assign(new Error('private transport diagnostic ' + secret, { cause: new Error(secret) }), { code: 'HOST_TRANSPORT_FAILURE' })
     const diagnostics: unknown[][] = []
     h.ctx.logger.exporter({ levels: { default: 3 }, export: message => { diagnostics.push(message.args) } })
     vi.stubGlobal('fetch', async () => { throw original })
@@ -290,7 +476,13 @@ describe('searchConnections real Host', () => {
     const result = h.search()
     await expect(result).rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR' })
     await expect(result).rejects.not.toThrow('private transport diagnostic')
-    expect(diagnostics.some(args => args.includes(original))).toBe(true)
+    expect(diagnostics.some(args => args.includes(original))).toBe(false)
+    const copies = diagnostics.flat().filter((value): value is Error => value instanceof Error && (value as Error & { code?: unknown }).code === original.code)
+    expect(copies).toHaveLength(1)
+    expect(copies[0]).toMatchObject({ name: original.name, code: original.code, message: "diagnostic message withheld: it contained this request's credential" })
+    expect(copies[0]!.cause).toBeUndefined()
+    expect(copies[0]!.message).not.toContain(secret)
+    expect(copies[0]!.stack).not.toContain(secret)
   })
 
   it('does not assume a route when the public web settings row is absent', async () => {

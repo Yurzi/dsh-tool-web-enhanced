@@ -18,9 +18,9 @@ function latestUserQuestion(ctx: Context): string | undefined {
   return prompt.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('\n')
 }
 
-export function searchApiOptions(ctx: Context, { credentialRef, options }: NativeOverrides): DeepSeekSearchApiOptions {
+export function searchApiOptions(ctx: Context, { credentialRef, options }: NativeOverrides, auth = nativeAuth(ctx, credentialRef)): DeepSeekSearchApiOptions {
   return {
-    ...nativeAuth(ctx, credentialRef),
+    ...auth,
     baseURL: typeof options.baseURL === 'string' ? options.baseURL : DEEPSEEK_WEB_API_BASE_URL,
     count: typeof options.count === 'number' ? options.count : DEEPSEEK_DEFAULT_COUNT,
     ...(options.sendOriginalQuestion === false ? {} : { originalQuestion: () => latestUserQuestion(ctx) }),
@@ -28,5 +28,20 @@ export function searchApiOptions(ctx: Context, { credentialRef, options }: Nativ
 }
 
 export function deepseekSearchApi(ctx: Context, overrides: () => NativeOverrides = () => DEFAULT_NATIVE_OVERRIDES): WebSearchProvider {
-  return nativeBackend(new DeepSeekSearchApiProvider(() => searchApiOptions(ctx, overrides())), cause => { ctx.logger.debug('Native search failed', cause) })
+  const readiness = new DeepSeekSearchApiProvider(() => searchApiOptions(ctx, overrides()))
+  return {
+    id: readiness.id,
+    available: () => readiness.available(),
+    search: (request, signal) => {
+      const secrets = new Set<string>()
+      let auth: ReturnType<typeof nativeAuth> | undefined
+      const upstream = new DeepSeekSearchApiProvider(() => {
+        const settings = overrides()
+        auth = nativeAuth(ctx, settings.credentialRef, secrets)
+        return searchApiOptions(ctx, settings, auth)
+      })
+      const resolverFailed = () => auth !== undefined && auth.resolverFailed()
+      return nativeBackend(upstream, cause => { ctx.logger.debug('Native search failed', cause) }, secrets, resolverFailed).search(request, signal)
+    },
+  }
 }

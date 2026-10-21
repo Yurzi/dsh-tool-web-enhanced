@@ -275,6 +275,19 @@ describe('browser apply composition', () => {
     expect(ui.sections.getSnapshot()).toHaveLength(1)
   })
 
+  it("asks Credentials about a fixed model connection's key and about none for the conversation model", async () => {
+    const h = await fixture()
+    const page = h.page()
+    await page.mutate([{ op: 'set', path: ['connections'], value: { 'custom:claude': {
+      kind: 'model', protocol: 'anthropic-messages', model: 'claude-x', label: 'Claude', credentialRef: 'CLAUDE_KEY', endpoint: 'https://api.anthropic.com', trustedEndpoint: true,
+    } } }], 1)
+    const stop = page.hooks.credentials.subscribe(() => {})
+    await vi.waitFor(() => { expect(page.hooks.credentials.getSnapshot()).toHaveProperty('CLAUDE_KEY', 'missing') })
+    const refs = h.remote.credentials.describe.mock.calls.at(-1)![0]
+    expect(refs.toSorted()).toEqual(['CLAUDE_KEY', 'DEEPSEEK_API_KEY', 'EXA_API_KEY', 'FIRECRAWL_API_KEY', 'OPENALEX_API_KEY', 'SEMANTIC_SCHOLAR_API_KEY', 'TAVILY_API_KEY', 'TINYFISH_API_KEY'])
+    stop()
+  })
+
   it('injects real forms plus lazy credential, route and model-memory sources', async () => {
     const h = await fixture()
     const page = h.page()

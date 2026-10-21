@@ -1,5 +1,5 @@
 import { WebError, type WebFetchProvider } from '@deepseek-ai/dsh-web'
-import { adapterTarget, runAdapter, type OnDiagnostic } from 'dsh-tool-web-enhanced-core/host'
+import { adapterTarget, redactDiagnostic, runAdapter, secretMatcher, type OnDiagnostic } from 'dsh-tool-web-enhanced-core/host'
 import { CATALOG } from '../catalog.ts'
 import type { AdapterConnection } from '../settings/types.ts'
 import { ADAPTER_WIRES } from './adapters/index.ts'
@@ -27,10 +27,10 @@ export function createRemoteBackend(connection: AdapterConnection, deps: RemoteD
           credentialMissing: ref => 'no API key is stored for ' + ref + '; ask the user to add it in fetch connection settings (DSH Credentials) or choose another connection',
           credentialInvalid: ref => 'the API key stored for ' + ref + ' is malformed (it contains a line break or another control character); ask the user to re-enter it in fetch connection settings (DSH Credentials)',
         }, ADAPTER_WIRES[connection.adapter], target, { url: request.url, options: connection.options }, signal)
-        if (outcome.kind === 'failure') throw pageFailure(connection.label, outcome.failure)
+        if (outcome.kind === 'failure') throw pageFailure(connection.label, outcome.failure, outcome.detail)
         return fetchResult(outcome.page, request)
       } catch (error) {
-        if (!(error instanceof WebError) && deps.onDiagnostic !== undefined) deps.onDiagnostic(error)
+        if (!(error instanceof WebError) && deps.onDiagnostic !== undefined) deps.onDiagnostic(redactDiagnostic(error, secretMatcher([])))
         fetchErrors.throwIfAborted(signal)
         if (error instanceof WebError) throw error
         throw fetchError('WEB_PROVIDER_ERROR', 'fetch failed; check the connection settings or choose another connection')
