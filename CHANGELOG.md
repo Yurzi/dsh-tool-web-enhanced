@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.1.0 (2026-10-21)
 
 ### dsh-tool-web-enhanced-profile 0.1.0
 

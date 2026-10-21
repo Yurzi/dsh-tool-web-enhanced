@@ -2,14 +2,15 @@
  * Pack every publishable package and check what a user would install:
  * manifests carry no workspace or catalog ranges, every package targets the
  * same DSH range, plugins ship self-contained host bundles, the profile pins
- * the exact plugin versions it was released with, and every file the Plugins
- * page reads is present. Then publint lints each package.
+ * the exact plugin versions it was released with, every package points at
+ * its directory in this repository (npm provenance checks the URL), and every
+ * file the Plugins page reads is present. Then publint lints each package.
  */
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { isBuiltin } from 'node:module'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 import { type Manifest, pack, publishablePackages, repo } from './workspace.ts'
 
 const problems: string[] = []
@@ -22,6 +23,7 @@ const packages = publishablePackages()
 const versions = new Map(packages.map(pkg => [pkg.manifest.name, pkg.manifest.version]))
 const out = mkdtempSync(join(tmpdir(), 'dsh-web-enhanced-pack-'))
 const dshRanges = new Set<string>()
+const repositoryUrl = (JSON.parse(readFileSync(join(repo, 'package.json'), 'utf8')) as Manifest).repository?.url
 
 try {
   for (const pkg of packages) {
@@ -35,6 +37,11 @@ try {
         if (/^(workspace|catalog):/.test(range)) fail(name, `${field}.${dep} still reads ${range}`)
       }
     }
+    const directory = relative(repo, pkg.dir)
+    if (manifest.repository?.url !== repositoryUrl || manifest.repository?.directory !== directory) {
+      fail(name, `repository must be { url: ${repositoryUrl}, directory: ${directory} } like the workspace root`)
+    }
+
     const dsh = manifest.engines?.dsh
     if (dsh === undefined) fail(name, 'engines.dsh is missing')
     else dshRanges.add(dsh)

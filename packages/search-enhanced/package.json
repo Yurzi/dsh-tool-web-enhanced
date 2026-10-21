@@ -9,6 +9,13 @@
   ],
   "license": "MIT",
   "author": "Yurzi",
+  "homepage": "https://github.com/Yurzi/dsh-tool-web-enhanced/tree/main/packages/search-enhanced#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Yurzi/dsh-tool-web-enhanced.git",
+    "directory": "packages/search-enhanced"
+  },
+  "bugs": "https://github.com/Yurzi/dsh-tool-web-enhanced/issues",
   "type": "module",
   "icon": "./icon.svg",
   "main": "./lib/index.js",

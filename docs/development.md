@@ -204,9 +204,11 @@ export PNPM_HOME=$PWD/.pnpm-home \
 1. 提升要发布的包的版本；profile 的版本决定标签，只要有包要发，profile 也要提升（它精确锁定其余三个包）。
 2. 把 CHANGELOG 的 “Unreleased” 整理成各包的版本小节，同步各包 README。
 3. 本地 `pnpm run check` 与 `pnpm run test:e2e`。
-4. 打 `v<profile 版本>` 标签并推送。
+4. 先推送 main，等 `ci` 通过（`publish` 不跑 e2e），再打 `v<profile 版本>` 标签并推送。
 
-`verify-packages` 用 pnpm 打包每个可发布包并检查：清单里没有残留 `workspace:` / `catalog:`；所有包的 `engines.dsh` 相同，`@deepseek-ai/dsh-*` peer 与之一致；插件没有 `dependencies`，Host 产物只导入 Node 内置与已声明为 peer 的 `@deepseek-ai/*`；profile 依赖的版本等于本次工作区里的版本；导出目标、bundle patch、图标与 `locale/{en,zh}.json` 的 `meta` 都在包里；最后跑 `publint --strict`。
+npm 只能给已经存在的包配置可信发布（trusted publishing），所以**新包的第一个版本手动发布**：在要打标签的提交上 `pnpm run build`，进包目录 `pnpm pack`（只有 pnpm 会改写 `workspace:` / `catalog:` 范围），再用 `npm publish <tarball> --access public` 发布；然后在该包的 npm 设置里添加 trusted publisher：GitHub Actions，仓库 `Yurzi/dsh-tool-web-enhanced`，工作流 `publish.yml`，不设 environment。之后再推标签，`publish` 会跳过已在 registry 上的版本。手动发布的版本没有 provenance。
+
+`verify-packages` 用 pnpm 打包每个可发布包并检查：清单里没有残留 `workspace:` / `catalog:`；所有包的 `engines.dsh` 相同，`@deepseek-ai/dsh-*` peer 与之一致；插件没有 `dependencies`，Host 产物只导入 Node 内置与已声明为 peer 的 `@deepseek-ai/*`；profile 依赖的版本等于本次工作区里的版本；`repository.url` 与根 `package.json` 相同、`repository.directory` 是包所在目录（provenance 发布时 npm 会比对这个地址）；导出目标、bundle patch、图标与 `locale/{en,zh}.json` 的 `meta` 都在包里；最后跑 `publint --strict`。
 
 | 工作流 | 触发 | 内容 |
 | --- | --- | --- |

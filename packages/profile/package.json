@@ -11,6 +11,13 @@
   ],
   "license": "MIT",
   "author": "Yurzi",
+  "homepage": "https://github.com/Yurzi/dsh-tool-web-enhanced#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Yurzi/dsh-tool-web-enhanced.git",
+    "directory": "packages/profile"
+  },
+  "bugs": "https://github.com/Yurzi/dsh-tool-web-enhanced/issues",
   "type": "module",
   "icon": "./icon.svg",
   "exports": {

@@ -10,6 +10,13 @@
   ],
   "license": "MIT",
   "author": "Yurzi",
+  "homepage": "https://github.com/Yurzi/dsh-tool-web-enhanced/tree/main/packages/ui#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Yurzi/dsh-tool-web-enhanced.git",
+    "directory": "packages/ui"
+  },
+  "bugs": "https://github.com/Yurzi/dsh-tool-web-enhanced/issues",
   "type": "module",
   "icon": "./icon.svg",
   "main": "./lib/index.js",

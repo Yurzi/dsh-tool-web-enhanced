@@ -16,6 +16,7 @@ export interface Manifest {
   readonly private?: boolean
   readonly main?: string
   readonly icon?: string
+  readonly repository?: { readonly type: string; readonly url: string; readonly directory?: string }
   readonly files?: readonly string[]
   readonly exports?: Readonly<Record<string, string>>
   readonly engines?: Readonly<Record<string, string>>
