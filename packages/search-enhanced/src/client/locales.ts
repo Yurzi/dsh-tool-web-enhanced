@@ -91,6 +91,10 @@ export const en = {
   'defaults.freshnessKeyOnly': '{name} (personal key)',
 
   'services.title': 'Search connections',
+  'services.optInNotice': 'Remote services are off by default.',
+  'enhanced.title': 'Enhanced tools',
+  'enhanced.description': 'Lets the Agent pick which enabled service runs a search with web_search_enhanced, and see the choices with list_web_search_providers. Applies to conversations started afterwards.',
+  'enhanced.consent': 'Turning this on means you agree that when the Agent picks a service, the query is sent to that service.',
   'services.enable': 'Enable {name}',
   'services.configure': 'Configure',
   'services.configureLabel': 'Configure {name}',
@@ -328,7 +332,7 @@ export const zh: Record<LocaleKey, string> = {
   'freshness.fresh': '24 小时内',
   'freshness.realtime': '实时',
 
-  'status.disabled': '{name} 已在设置中停用。',
+  'status.disabled': '{name} 未在设置中启用。',
   'status.needsCredential': '需要 API Key',
   'status.needsAccount': '需要 DeepSeek 账号或 API Key',
   'status.unsupported': '本版本不支持 {name}。',
@@ -343,7 +347,7 @@ export const zh: Record<LocaleKey, string> = {
   'selector.offRow': '关闭',
 
   'write.conflict': '搜索设置已在别处更改，菜单已显示最新选择。',
-  'write.unavailable': '该连接已停用或已移除。',
+  'write.unavailable': '该连接未启用或已移除。',
   'write.failed': '保存失败，请重试。',
 
   'command.label': '搜索连接',
@@ -378,10 +382,14 @@ export const zh: Record<LocaleKey, string> = {
   'defaults.freshnessKeyOnly': '{name}（个人密钥）',
 
   'services.title': '搜索连接',
+  'services.optInNotice': '远程服务默认关闭。',
+  'enhanced.title': '增强工具',
+  'enhanced.description': '让 Agent 用 web_search_enhanced 在已启用的服务中自行选择本次搜索用哪个，并用 list_web_search_providers 查看可选项。只影响之后新建的会话。',
+  'enhanced.consent': '打开即表示同意：Agent 选用某个服务时，查询会发送给该服务。',
   'services.enable': '启用 {name}',
   'services.configure': '配置',
   'services.configureLabel': '配置 {name}',
-  'services.off': '已停用',
+  'services.off': '未启用',
   'services.keyless': '无需密钥',
   'services.personalKey': '个人密钥 {ref}',
   'services.account': 'DeepSeek 账号或 {ref}',

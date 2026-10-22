@@ -2,3 +2,6 @@
 - id: web-search-enhanced
   config:
     defaultConnection: builtin:openalex
+    connections:
+      builtin:openalex:
+        disabled: false

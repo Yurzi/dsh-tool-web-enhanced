@@ -18,6 +18,12 @@ dsh plugin --profile <profile> add dsh-tool-web-enhanced-profile
 | `web-fetch-enhanced` (inserted) | [dsh-web-fetch-enhanced](../fetch-enhanced/README.md) | `fetch-enhanced` |
 | `tool-web-enhanced-ui` (inserted) | [dsh-tool-web-enhanced-ui](../ui/README.md) | — (browser-only composer menu) |
 
+Remote search and fetch services start off; turn them on in each plugin row's
+settings page. Each row also has an Enhanced tools switch (off by default) that
+lets the Agent pick a connection per call with `web_search_enhanced` /
+`web_fetch_enhanced` in conversations started afterwards; see the plugin
+READMEs.
+
 Remove dsh-web-search-enhanced 0.1.x and dsh-web-fetch-enhanced 0.1.x (the old
 standalone bundles) before installing: they insert the same row ids. Their
 settings are not migrated; see the upgrade notes in each plugin's README.

@@ -1,10 +1,11 @@
+import { join } from 'node:path'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { FETCH, SEARCH } from 'dsh-tool-web-enhanced-core/shared'
 import { en as searchText } from '../packages/search-enhanced/src/client/locales.ts'
 import { en as fetchText } from '../packages/fetch-enhanced/src/client/locales.ts'
 import { afterAll, afterEach, beforeAll, describe, expect, inject, it } from 'vitest'
 import { type App, browserRequired, chromiumPath, openApp, recordBrowserFailure } from './harness/browser.ts'
-import { composedRows, profilePatchPath } from './harness/environment.ts'
+import { composedRows, installUserFixture, profilePatchPath } from './harness/environment.ts'
 import { openFetchSettings, openSearchSettings } from './harness/navigation.ts'
 import { type WebServer, startWeb } from './harness/web.ts'
 
@@ -17,6 +18,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Plugin row sett
   beforeAll(async () => {
     const path = profilePatchPath(e2e)
     savedPatch = { path, content: existsSync(path) ? readFileSync(path, 'utf8') : '' }
+    installUserFixture(e2e, join(import.meta.dirname, 'fixtures/search-exa-enabled.yml'))
     server = await startWeb(e2e)
     app = await openApp(server.url)
   })

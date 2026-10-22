@@ -1,0 +1,13 @@
+# Existing remote-readiness scenarios opt in explicitly; no remote request is made.
+- id: web-search-enhanced
+  config:
+    connections:
+      builtin:exa: { disabled: false }
+- id: web-fetch-enhanced
+  config:
+    connections:
+      builtin:exa: { disabled: false }
+      builtin:firecrawl: { disabled: false }
+      builtin:tavily: { disabled: false }
+      builtin:tinyfish: { disabled: false }
+      builtin:deepseek-fetch-api: { disabled: false }

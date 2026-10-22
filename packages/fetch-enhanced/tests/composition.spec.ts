@@ -81,7 +81,7 @@ describe('fetch remote/local composition', () => {
         json(response, adapter === 'firecrawl' ? { success: true, data: { markdown: 'anonymous page' } } : { results: [{ raw_content: 'anonymous page' }], failed_results: [] })
       })
     })
-    const h = await composeFetch({ connections: local })
+    const h = await composeFetch({ connections: { ...local, ['builtin:' + adapter]: { disabled: false } } })
     const ref = credentialRef(CATALOG[adapter].access.apiKey.credentialRef)
     await h.credentials.set(ref, 'keyless-must-not-send-this')
     const nativeFetch = globalThis.fetch

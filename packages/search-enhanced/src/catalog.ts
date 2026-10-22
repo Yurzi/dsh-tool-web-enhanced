@@ -43,17 +43,17 @@ const location = { userCity, userRegion, userCountry, userTimezone } as const
 /** Wire protocols of `model` connections, in display order; custom model connections name one of these keys. */
 export const MODEL_PROTOCOLS = {
   'anthropic-messages': {
-    label: 'Anthropic Messages',
+    label: 'Anthropic Messages', use: 'the model searches and answers',
     options: { maxTokens, anthropicTool, maxUses, allowedCallers, responseInclusion, allowedDomains, blockedDomains, ...location },
     /** Anthropic takes one domain policy; Responses takes both. */
     exclusive: [['allowedDomains', 'blockedDomains']],
   },
   'openai-responses': {
-    label: 'OpenAI Responses',
+    label: 'OpenAI Responses', use: 'the model searches and answers',
     options: { maxTokens, responsesTool, searchContextSize, externalWebAccess, returnTokenBudget, allowedDomains, blockedDomains, ...location },
   },
   'openai-chat-completions': {
-    label: 'OpenAI Chat Completions',
+    label: 'OpenAI Chat Completions', use: 'the model searches and answers',
     options: { maxTokens, searchContextSize, ...location },
   },
 } as const satisfies Record<string, ProtocolDescriptor>
@@ -82,7 +82,7 @@ export const MODEL_DEFAULTS = {
 /** Display order and secret-free facts shared by settings, Host and browser. */
 export const CATALOG = {
   'deepseek-messages': {
-    label: 'DeepSeek Messages', kind: 'native', remote: true,
+    label: 'DeepSeek Messages', kind: 'native', remote: true, optIn: false, use: 'answers with a summary and sources',
     endpoint: 'https://api.deepseek.com/anthropic/v1', homepage: 'https://platform.deepseek.com',
     access: nativeAccess, freshness: [],
     options: {
@@ -94,7 +94,7 @@ export const CATALOG = {
     },
   },
   'deepseek-search-api': {
-    label: 'DeepSeek Search API', kind: 'native', remote: true,
+    label: 'DeepSeek Search API', kind: 'native', remote: true, optIn: true,
     endpoint: 'https://api.deepseek.com/v1/tools', homepage: 'https://platform.deepseek.com',
     access: nativeAccess, freshness: [],
     options: {
@@ -104,24 +104,24 @@ export const CATALOG = {
     },
   },
   'session-model': {
-    label: 'Session model', kind: 'model', remote: true,
+    label: 'Session model', kind: 'model', remote: true, optIn: false, use: 'the session model searches and answers',
     access: { keyless: false, apiKey: false, account: false }, freshness: [], options: MODEL_OPTIONS,
     // It mostly follows Messages routes, so it keeps the stricter Anthropic rule.
     exclusive: MODEL_PROTOCOLS['anthropic-messages'].exclusive,
   },
   exa: {
     label: 'Exa', endpoint: 'https://api.exa.ai/search', access: { keyless: true, apiKey: { credentialRef: 'EXA_API_KEY' }, account: false },
-    kind: 'adapter', remote: true, freshness: ['api-key'], homepage: 'https://exa.ai',
+    kind: 'adapter', remote: true, optIn: true, freshness: ['api-key'], homepage: 'https://exa.ai',
     options: { type: { kind: 'enum', values: ['auto', 'fast', 'instant'], keyless: false } },
   },
   firecrawl: {
     label: 'Firecrawl', endpoint: 'https://api.firecrawl.dev/v2/search', access: { keyless: true, apiKey: { credentialRef: 'FIRECRAWL_API_KEY' }, account: false },
-    kind: 'adapter', remote: true, freshness: ['keyless', 'api-key'], homepage: 'https://www.firecrawl.dev',
+    kind: 'adapter', remote: true, optIn: true, freshness: ['keyless', 'api-key'], homepage: 'https://www.firecrawl.dev',
     options: { country: { kind: 'text', pattern: /^[A-Za-z]{2}$/u }, location: { kind: 'text', pattern: noControl, maxLength: 200 }, safe: { kind: 'boolean' } },
   },
   tavily: {
     label: 'Tavily', endpoint: 'https://api.tavily.com/search', access: { keyless: true, apiKey: { credentialRef: 'TAVILY_API_KEY' }, account: false },
-    kind: 'adapter', remote: true, freshness: [], homepage: 'https://www.tavily.com',
+    kind: 'adapter', remote: true, optIn: true, freshness: [], homepage: 'https://www.tavily.com',
     options: {
       search_depth: { kind: 'enum', values: ['basic', 'advanced', 'fast', 'ultra-fast'] },
       topic: { kind: 'enum', values: ['general', 'news', 'finance'] },
@@ -129,7 +129,7 @@ export const CATALOG = {
   },
   tinyfish: {
     label: 'Tinyfish', endpoint: 'https://api.search.tinyfish.ai', access: { keyless: true, apiKey: { credentialRef: 'TINYFISH_API_KEY' }, account: false },
-    kind: 'adapter', remote: true, freshness: [], homepage: 'https://www.tinyfish.ai',
+    kind: 'adapter', remote: true, optIn: true, freshness: [], homepage: 'https://www.tinyfish.ai',
     options: {
       location: { kind: 'text', pattern: /^[A-Za-z]{2}$/u },
       language: { kind: 'text', pattern: /^[A-Za-z]{2,3}(?:-[A-Za-z]{2,4})?$/u },
@@ -139,7 +139,8 @@ export const CATALOG = {
   },
   openalex: {
     label: 'OpenAlex', endpoint: 'https://api.openalex.org/works', access: { keyless: true, apiKey: { credentialRef: 'OPENALEX_API_KEY' }, account: false },
-    kind: 'adapter', remote: true, freshness: [], homepage: 'https://openalex.org',
+    kind: 'adapter', remote: true, optIn: true, freshness: [], homepage: 'https://openalex.org',
+    use: 'scholarly works (papers, citations); keyword queries',
     options: {
       sort: { kind: 'text', pattern: /^[a-z_]+:(?:asc|desc)(?:,[a-z_]+:(?:asc|desc))*$/u },
       filter: { kind: 'text', pattern: /^[\u0020-\u{10ffff}]+$/u, maxLength: 500 },
@@ -150,7 +151,8 @@ export const CATALOG = {
   },
   semanticscholar: {
     label: 'Semantic Scholar', endpoint: 'https://api.semanticscholar.org/graph/v1/paper/search', access: { keyless: false, apiKey: { credentialRef: 'SEMANTIC_SCHOLAR_API_KEY' }, account: false },
-    kind: 'adapter', remote: true, freshness: [], homepage: 'https://www.semanticscholar.org/product/api',
+    kind: 'adapter', remote: true, optIn: true, freshness: [], homepage: 'https://www.semanticscholar.org/product/api',
+    use: 'academic papers (citations, TL;DR); keyword queries',
     options: {
       year: { kind: 'text', pattern: /^\d{4}(?:-\d{4})?$/u },
       fieldsOfStudy: { kind: 'text', pattern: /^[A-Za-z ,]+$/u, maxLength: 100 },

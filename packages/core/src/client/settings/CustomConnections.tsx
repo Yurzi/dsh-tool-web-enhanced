@@ -151,7 +151,7 @@ export function createCustomConnectionsSection<S extends CatalogSettings, T exte
     const removable = userConnections !== undefined && Object.hasOwn(userConnections, id)
 
     const save = (path: string[], target: unknown, fallback?: unknown) =>
-      action.run(() => write(sparse.sparseSettingOperations(doc.layers, ['connections', id, ...path], target, fallback)))
+      action.run(() => write(layers => sparse.sparseSettingOperations(layers, ['connections', id, ...path], target, fallback)))
 
     /** Removing the default connection puts the catalog default back in the same write. */
     const remove = () => {

@@ -20,14 +20,12 @@ export class SelectionConflict extends Error {
 type Table = KvTable<string, StoredSelection>
 
 export class Sessions<O extends Record<string, unknown>, S extends CapabilitySettings, V extends ConnectionView = ConnectionView> {
-  private readonly queues = new Map<string, Promise<void>>()
-
   constructor(
     private readonly ctx: Context,
     readonly settings: () => S,
     private readonly storage: SessionStorage<O, S>,
     private readonly pairings: Pairings,
-    private readonly restriction: ToolRestriction,
+    private readonly restriction: Pick<ToolRestriction, 'sync'>,
     private readonly describe: (settings: S, agent: Agent) => Promise<V[]> = async () => [],
   ) {}
 
@@ -74,13 +72,7 @@ export class Sessions<O extends Record<string, unknown>, S extends CapabilitySet
   private async table(): Promise<Table> { return (await this.storage.domain()).table('selections') }
 
   private exclusive<T>(id: string, work: () => Promise<T>): Promise<T> {
-    const previous = this.queues.get(id)
-    const run = previous === undefined ? work() : previous.then(work)
-    // The caller receives run's rejection; only the queue tail settles to admit subsequent work.
-    const tail = run.then(() => {}, () => {})
-    this.queues.set(id, tail)
-    void tail.then(() => { if (this.queues.get(id) === tail) this.queues.delete(id) })
-    return run
+    return this.storage.exclusive(id, work)
   }
 
   private async read(agent: Agent, table: Table, persist = true): Promise<CurrentSelection<O>> {
@@ -94,7 +86,7 @@ export class Sessions<O extends Record<string, unknown>, S extends CapabilitySet
     if (stored === undefined && seeded) {
       const parentAgent = this.ctx.get('agents')?.get(parentSession)
       if (parentAgent !== undefined && persist) await this.current(parentAgent)
-      else await this.queues.get(parentSession)
+      else await this.storage.settled(parentSession)
       const parent = table.get(parentSession)
       if (parent !== undefined) {
         stored = { ...parent, revision: 0, inherited: true }

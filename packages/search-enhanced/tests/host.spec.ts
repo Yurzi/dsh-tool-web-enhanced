@@ -35,7 +35,7 @@ afterEach(async () => {
   vi.unstubAllGlobals()
   vi.unstubAllEnvs()
 })
-const INITIAL: SearchSettings = { version: 2, defaultConnection: 'builtin:openalex' }
+const INITIAL: SearchSettings = { version: 2, defaultConnection: 'builtin:openalex', connections: { 'builtin:openalex': { disabled: false }, 'builtin:firecrawl': { disabled: false } } }
 
 async function host(options: { storage?: boolean; root?: string; rawSettings?: Record<string, unknown>; settings?: SearchSettings; environment?: Record<string, string>; routes?: Record<string, unknown> } = {}) {
   const root = options.root ?? await mkdtemp(join(tmpdir(), 'search-host-'))
@@ -420,7 +420,7 @@ describe('searchConnections real Host', () => {
   })
 
   it.each(['deepseek-messages', 'deepseek-search-api'])('%s advertises account access but only requests tokens for the account request route', async native => {
-    const h = await host({ settings: { defaultConnection: 'builtin:' + native } })
+    const h = await host({ settings: { defaultConnection: 'builtin:' + native, connections: { 'builtin:deepseek-search-api': { disabled: false } } } })
     const tokenEndpoints: string[] = []
     // The installed account package is an abstract external credential boundary, not an account provider.
     // Only that public boundary is a fixture; Agents, request context, WebRuntime and native backends are real.
@@ -465,7 +465,7 @@ describe('searchConnections real Host', () => {
 
   it('logs a redacted copy of transport failures', async () => {
     const secret = 'host-private-key'
-    const h = await host({ settings: { defaultConnection: 'builtin:exa', connections: { 'builtin:exa': { access: 'api-key' } } } })
+    const h = await host({ settings: { defaultConnection: 'builtin:exa', connections: { 'builtin:exa': { disabled: false, access: 'api-key' } } } })
     await h.ctx.plugin(MemoryCredentials)
     await h.ctx.credentials.set(credentialRef('EXA_API_KEY'), secret)
     const original = Object.assign(new Error('private transport diagnostic ' + secret, { cause: new Error(secret) }), { code: 'HOST_TRANSPORT_FAILURE' })

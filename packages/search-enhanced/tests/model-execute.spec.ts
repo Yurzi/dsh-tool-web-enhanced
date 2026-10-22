@@ -267,11 +267,13 @@ describe('model search execution', () => {
     } finally { await server.close() }
   })
 
-  it('passes WebErrors through without diagnosis', async () => {
+  it('does not trust credential-service WebErrors even when their code looks legitimate', async () => {
     const error = new WebError('fixed credential-service error', 'WEB_PROVIDER_CREDENTIAL_MISSING')
     const onDiagnostic = vi.fn()
-    await expect(executeModelSearch(target('http://127.0.0.1:1'), request, { ...dependencies(), apiKey: async () => { throw error }, onDiagnostic })).rejects.toBe(error)
-    expect(onDiagnostic).not.toHaveBeenCalled()
+    await expect(executeModelSearch(target('http://127.0.0.1:1'), request, { ...dependencies(), apiKey: async () => { throw error }, onDiagnostic })).rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR', message: prefix + 'search failed; check the connection settings or choose another connection' })
+    expect(onDiagnostic).toHaveBeenCalledOnce()
+    expect(onDiagnostic.mock.calls[0]![0]).not.toBe(error)
+    expect(onDiagnostic.mock.calls[0]![0]).toMatchObject({ name: 'Error', message: 'Model credential resolution failed' })
   })
 
   it('deduplicates citations after result blocks, preserving page_age and untrimmed answer content', async () => {
@@ -356,4 +358,31 @@ describe('model search execution', () => {
     await pending
     expect(vi.getTimerCount()).toBe(0)
   })
+})
+
+it.each(['api-key', 'account'] as const)('fixes every dependency exception before the %s model credential is known', async access => {
+  for (const kind of ['error', 'web-error', 'fake-abort'] as const) {
+    const secret = 'model-resolver-secret-0123456789'
+    const failure = kind === 'error' ? new Error(secret) : new WebError(secret, kind === 'fake-abort' ? 'WEB_ABORTED' : 'WEB_PROVIDER_ERROR')
+    Object.assign(failure, { cause: new Error(secret) })
+    failure.stack = 'original stack ' + secret
+    const onDiagnostic = vi.fn()
+    const resolve = vi.fn(async () => { throw failure })
+    const selected: ModelSearchTarget = access === 'api-key' ? target('https://fixture.test') : {
+      ...target('https://fixture.test'), route: { kind: 'route', route: { protocol: 'anthropic-messages', dialect: 'deepseek', model: 'm', baseURL: 'https://fixture.test', auth: { kind: 'account' } } },
+    }
+    const deps = { ...dependencies(), ...(access === 'api-key' ? { apiKey: resolve } : { accountToken: resolve }), onDiagnostic }
+    const pending = executeModelSearch(selected, request, deps)
+    const message = 'search failed; check the connection settings or choose another connection'
+    await expect(pending).rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR', message: prefix + message })
+    await expect(pending).rejects.not.toBe(failure)
+    await expect(pending).rejects.not.toHaveProperty('cause')
+    await expect(pending).rejects.not.toHaveProperty('stack', expect.stringContaining(secret))
+    expect(resolve).toHaveBeenCalledOnce()
+    expect(onDiagnostic).toHaveBeenCalledOnce()
+    const diagnostic = onDiagnostic.mock.calls[0]![0] as Error
+    expect(diagnostic.message).toBe('Model credential resolution failed')
+    expect(diagnostic.stack).not.toContain(secret)
+    expect(diagnostic).not.toHaveProperty('cause')
+  }
 })

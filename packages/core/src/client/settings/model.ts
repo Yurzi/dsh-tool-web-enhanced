@@ -4,7 +4,7 @@
  * entry appears on the page without page code naming it.
  */
 import { builtinId, builtinKey, CUSTOM_CONNECTION_ID, type AccessMode, type Descriptor, type ExclusiveOptions, type OptionRule, type ProtocolDescriptor } from '../../shared/connections.ts'
-import type { BuiltinOverride, CustomConnection, SettingsDescriptor } from '../../shared/settings.ts'
+import { singleLine, type BuiltinOverride, type CustomConnection, type SettingsDescriptor } from '../../shared/settings.ts'
 export type { CustomConnection, CustomAdapterConnection, CustomModelConnection } from '../../shared/settings.ts'
 import type { OptionField, OptionGroup } from './fields.ts'
 
@@ -43,17 +43,22 @@ export function adapterKeys<T extends SettingsCatalog>(catalog: T): AdapterKeyOf
   return Object.entries(catalog).filter(([, info]) => info.kind === 'adapter').map(([key]) => key as AdapterKeyOf<T>)
 }
 
+/** A built-in entry's override as stored, its label on one line as the grammar reads it. */
 export function builtinOverride(config: CatalogSettings, key: string): BuiltinOverride {
-  const stored = config.connections === undefined ? undefined : config.connections[builtinId(key)]
-  return stored === undefined ? {} : stored as BuiltinOverride
+  const stored = config.connections === undefined ? undefined : config.connections[builtinId(key)] as BuiltinOverride | undefined
+  if (stored === undefined) return {}
+  return stored.label === undefined ? stored : { ...stored, label: singleLine(stored.label) }
 }
 
-/** Custom connections in document order; the document has passed the capability's validation. */
+/** Custom connections in document order, labels on one line; the document has passed the capability's validation. */
 export function customConnections<A extends string = string, P extends string = string>(config: CatalogSettings): [string, CustomConnection<A, P>][] {
   if (config.connections === undefined) return []
   return Object.entries(config.connections)
     .filter(([id]) => CUSTOM_CONNECTION_ID.test(id))
-    .map(([id, connection]) => [id, connection as CustomConnection<A, P>])
+    .map(([id, stored]) => {
+      const connection = stored as CustomConnection<A, P>
+      return [id, { ...connection, label: singleLine(connection.label) }]
+    })
 }
 
 /**

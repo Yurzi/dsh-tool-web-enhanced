@@ -1,0 +1,15 @@
+# --patch replaces the entire row config, not only the options object.
+- id: web-fetch-enhanced
+  config:
+    version: 2
+    defaultConnection: builtin:local
+    connections:
+      builtin:exa: { disabled: false }
+      builtin:firecrawl: { disabled: false }
+      builtin:tavily: { disabled: false }
+      builtin:tinyfish: { disabled: false }
+      builtin:deepseek-fetch-api: { disabled: false }
+      builtin:local:
+        options:
+          allowCidrs: ['127.0.0.1/32']
+          userAgent: wfe-e2e/1.0

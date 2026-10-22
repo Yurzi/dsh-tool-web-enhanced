@@ -134,6 +134,15 @@
   font-weight: 500;
 }
 
+/* A row whose section title names it leads with a sentence in the title's place. */
+.settingLead {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 400;
+  color: var(--dsw-alias-label-primary);
+}
+
 .settingControl {
   display: flex;
   flex: 0 1 auto;

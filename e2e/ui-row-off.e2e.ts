@@ -6,13 +6,12 @@ import { afterAll, afterEach, beforeAll, describe, expect, inject, it } from 'vi
 import { en as searchText } from '../packages/search-enhanced/src/client/locales.ts'
 import { en as fetchText } from '../packages/fetch-enhanced/src/client/locales.ts'
 import { type App, browserRequired, chromiumPath, openApp, recordBrowserFailure } from './harness/browser.ts'
-import { addPlugins, enterIsolatedEnvironment } from './harness/environment.ts'
+import { isolatedContext, addPlugins, enterIsolatedEnvironment } from './harness/environment.ts'
 import { bootHost } from './harness/host.ts'
 import { connectionButton, newSession, openFetchSettings, openSearchSettings } from './harness/navigation.ts'
-import { upgradeEnvironment } from './harness/upgrade.ts'
 import { type WebServer, startWeb } from './harness/web.ts'
 
-const e2e = upgradeEnvironment(inject('e2e'))
+const e2e = isolatedContext(inject('e2e'))
 const overlays = ['disable-ui.yml', 'command-defaults.yml'].map(file => join(import.meta.dirname, 'fixtures', file))
 
 describe.skipIf(chromiumPath === undefined && !browserRequired)('Capability UI without the shared UI row', () => {

@@ -119,10 +119,9 @@ export function runAdapter<I, O>(io: AdapterIO, wire: AdapterWire<I, O>, target:
 async function adapterCredential(io: AdapterIO, ref: string, signal: AbortSignal): Promise<string | undefined> {
   try {
     return await io.errors.abortable(io.credential(ref), signal)
-  } catch (error) {
-    if (error instanceof WebError) throw error
-    // A resolver can fail before returning any value we could safely recognize.
-    // oxlint-disable-next-line preserve-caught-error -- The original cause can contain unknown credentials.
+  } catch {
+    io.errors.throwIfAborted(signal)
+    // Dependency errors may contain a secret before there is any value to redact.
     throw new Error('Adapter credential resolution failed')
   }
 }

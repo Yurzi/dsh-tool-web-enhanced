@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { documentVersion, migrateDocument, resolveDocument, type SettingsMigrations } from '../src/shared/settings.ts'
 
-const catalog = { local: { kind: 'local', label: 'Local', remote: false, access: { keyless: true, apiKey: false, account: false }, options: {} } } as const
+const catalog = { local: { kind: 'local', label: 'Local', remote: false, optIn: false, access: { keyless: true, apiKey: false, account: false }, options: {} } } as const
 const future: SettingsMigrations = { currentVersion: 3, steps: new Map([[2, document => ({ ...document, showSelector: false })]]) }
 const resolve = (document: unknown, migrations = future) => resolveDocument({ catalog, document, defaults: { schema: z.strictObject({}), defaultConnection: 'builtin:local' }, capabilityLabel: 'test', migrations })
 

@@ -9,14 +9,13 @@ import { en as uiText } from '../packages/ui/src/client/locales.ts'
 import { afterAll, afterEach, beforeAll, describe, expect, inject, it } from 'vitest'
 import { PROFILE_PACKAGE } from 'dsh-tool-web-enhanced-core/shared'
 import { type App, browserRequired, chromiumPath, openApp, recordBrowserFailure } from './harness/browser.ts'
-import { addPlugins, enterIsolatedEnvironment } from './harness/environment.ts'
-import { upgradeEnvironment } from './harness/upgrade.ts'
+import { isolatedContext, addPlugins, enterIsolatedEnvironment } from './harness/environment.ts'
 import { bootHost, type Host } from './harness/host.ts'
 import { connectionButton, connectionTabs, openConnectionTab, newSession, openConnections } from './harness/navigation.ts'
 import { type WebServer, startWeb } from './harness/web.ts'
 
 // A dedicated home keeps this multi-restart GUI flow independent of other specs' draft layouts.
-const e2e = upgradeEnvironment(inject('e2e'))
+const e2e = isolatedContext(inject('e2e'))
 const require = createRequire(join(e2e.install, 'node_modules/@deepseek-ai/dsh/package.json'))
 const key = (require('@deepseek-ai/dsh-credentials') as { credentialRef: typeof credentialRef }).credentialRef('DEEPSEEK_API_KEY')
 
@@ -53,7 +52,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Composer fetch 
       await closeGui()
     } finally {
       // A fake key must not change the original search suite's missing-key path.
-      host ??= await bootHost(e2e)
+      host ??= await bootHost(e2e, [join(import.meta.dirname, 'fixtures/remote-enabled.yml')])
       try {
         await host.ctx.credentials.unset(key)
         for (const memory of (await host.ctx.fetchConnections.pairings({})).pairings) {
@@ -67,13 +66,13 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Composer fetch 
 
   it('selects DeepSeek Fetch API from the second section and persists it as a session choice', async () => {
     enterIsolatedEnvironment(e2e.env)
-    host = await bootHost(e2e)
+    host = await bootHost(e2e, [join(import.meta.dirname, 'fixtures/remote-enabled.yml')])
     // Configure via the public Credentials seam, never an environment key or settings secret.
     await host.ctx.credentials.set(key, 'wfe-e2e-fake-key-never-sent')
     await host.dispose()
     host = undefined
 
-    server = await startWeb(e2e)
+    server = await startWeb(e2e, [join(import.meta.dirname, 'fixtures/remote-enabled.yml')])
     app = await openApp(server.url)
     const { page } = app
     const sessionId = await newSession(page)
@@ -94,7 +93,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Composer fetch 
     expect(app.errors).toEqual([])
     await closeGui()
 
-    host = await bootHost(e2e)
+    host = await bootHost(e2e, [join(import.meta.dirname, 'fixtures/remote-enabled.yml')])
     const view = await host.ctx.fetchConnections.get({ sessionId })
     expect(view).toMatchObject({ selection: { connectionId: 'builtin:deepseek-fetch-api', revision: 1 }, source: 'session' })
     // No fetch call is made with the fake credential.
@@ -103,7 +102,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Composer fetch 
   })
 
   it('turns fetch Off in the GUI without hiding search, then restores Local HTTP', async () => {
-    server = await startWeb(e2e)
+    server = await startWeb(e2e, [join(import.meta.dirname, 'fixtures/remote-enabled.yml')])
     app = await openApp(server.url)
     const sessionId = selectedSession
     await app.page.locator('[data-conversation-session="' + sessionId + '"]').waitFor()
@@ -125,7 +124,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Composer fetch 
     expect(app.errors).toEqual([])
     await closeGui()
 
-    host = await bootHost(e2e)
+    host = await bootHost(e2e, [join(import.meta.dirname, 'fixtures/remote-enabled.yml')])
     const { ctx } = host
     const off = await ctx.fetchConnections.get({ sessionId })
     expect(off).toMatchObject({ selection: { connectionId: null }, source: 'session' })
@@ -142,7 +141,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Composer fetch 
 
     await host.dispose()
     host = undefined
-    server = await startWeb(e2e)
+    server = await startWeb(e2e, [join(import.meta.dirname, 'fixtures/remote-enabled.yml')])
     app = await openApp(server.url)
     await app.page.locator('[data-conversation-session="' + sessionId + '"]').waitFor()
     const restoredMenu = await openConnections(app.page)
@@ -157,7 +156,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Composer fetch 
     expect(app.errors).toEqual([])
     await closeGui()
 
-    host = await bootHost(e2e)
+    host = await bootHost(e2e, [join(import.meta.dirname, 'fixtures/remote-enabled.yml')])
     const restored = await host.ctx.fetchConnections.get({ sessionId })
     expect(restored).toMatchObject({ selection: { connectionId: 'builtin:local', revision: off.selection.revision + 1 }, source: 'session' })
     const resumed = await host.ctx.sessionController.resolveAgent(sessionId as Parameters<typeof host.ctx.sessionController.resolveAgent>[0])

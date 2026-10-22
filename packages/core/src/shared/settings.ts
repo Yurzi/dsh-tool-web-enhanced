@@ -6,7 +6,7 @@ import { isEndpoint } from './url.ts'
 export const UNVERSIONED_SETTINGS_VERSION = 2 as const
 export const CURRENT_SETTINGS_VERSION = 2 as const
 export const SETTINGS_RESET_HINT = 'this release does not read 0.1.x settings; remove the field or use Reset on the settings page'
-export const SETTINGS_FIELDS = ['version', 'defaultConnection', 'showSelector', 'defaults', 'connections'] as const
+export const SETTINGS_FIELDS = ['version', 'defaultConnection', 'showSelector', 'enhancedTools', 'defaults', 'connections'] as const
 
 export type DocumentVersion =
   | { readonly kind: 'current' }
@@ -49,8 +49,17 @@ export function migrateDocument(document: unknown, migrations: SettingsMigration
   return result
 }
 
+/**
+ * Operator text shown as one line (a label in menus, error messages and the
+ * Agent's provider list): control characters and line or paragraph separators
+ * become spaces, runs of whitespace one space, the ends trimmed.
+ */
+export function singleLine(value: string): string {
+  return value.replaceAll(/[\p{Cc}\p{Zl}\p{Zp}]/gu, ' ').replaceAll(/\s+/gu, ' ').trim()
+}
+
 const text = z.string().trim().min(1).max(TEXT_MAX_LENGTH)
-const label = z.string().trim().min(1).max(200)
+const label = z.string().transform(singleLine).pipe(z.string().min(1).max(200))
 const credentialRef = text.regex(CREDENTIAL_REF, 'must be a credential reference such as EXA_API_KEY')
 const endpoint = text.refine(isEndpoint, 'must be an absolute http(s) URL without credentials, query or fragment')
 const options = z.record(z.string(), z.unknown())
@@ -60,6 +69,7 @@ export function documentSchema<S extends z.ZodRawShape>(defaults: z.ZodObject<S>
     version: z.literal(currentVersion).optional(),
     defaultConnection: z.string().min(1).max(200).optional(),
     showSelector: z.boolean().optional(),
+    enhancedTools: z.boolean().optional(),
     defaults: defaults.optional(),
     connections: z.record(z.string().max(200), z.unknown()).refine(value => Object.keys(value).length <= 200, 'must contain at most 200 connections').optional(),
   })
@@ -143,10 +153,21 @@ export interface ResolvedDocument<D, C = ResolvedBase> {
   readonly version: number
   readonly defaultConnection: string
   readonly showSelector: boolean
+  /** Whether the operator turned on this capability's two enhanced model tools (docs/design.md, "增强工具"). */
+  readonly enhancedTools: boolean
   readonly defaults: D
   readonly connections: ReadonlyMap<string, C>
 }
 export type SettingsDescriptor = Descriptor & { readonly endpoint?: string }
+
+/**
+ * Where a resolved connection comes from. A built-in connection without a
+ * `disabled` override takes the catalog's `optIn` (remote services start off);
+ * an operator-defined one starts enabled (docs/design.md, "远程服务缺省停用").
+ */
+type ConnectionOrigin =
+  | { readonly kind: 'builtin' }
+  | { readonly kind: 'custom'; readonly endpoint: string | undefined }
 
 /** Resolve the identical document and connection grammar for Host and browser. */
 export function resolveDocument<S extends z.ZodRawShape, P extends string = never>({ catalog, document, defaults, capabilityLabel, protocols, retiredFields = [], migrations = SETTINGS_MIGRATIONS }: {
@@ -178,7 +199,7 @@ export function resolveDocument<S extends z.ZodRawShape, P extends string = neve
   const customSchema = customConnectionSchema(adapterKeys, protocolKeys)
   const connections = new Map<string, ResolvedBase<P>>()
   const rejectId = (id: string, path: string): never => fail(path, 'unknown connection id "' + id + '"; ' + SETTINGS_RESET_HINT)
-  const resolve = (id: string, key: string, override: z.infer<typeof builtinOverrideSchema>, customEndpoint?: string): ResolvedBase<P> => {
+  const resolve = (id: string, key: string, override: z.infer<typeof builtinOverrideSchema>, origin: ConnectionOrigin): ResolvedBase<P> => {
     const info = catalog[key]!
     const path = 'connections.' + id
     const access = info.kind === 'model' ? 'api-key' : override.access ?? defaultAccess(info.access)
@@ -194,12 +215,13 @@ export function resolveDocument<S extends z.ZodRawShape, P extends string = neve
         fail(path + '.trustedEndpoint', 'a non-official ' + name + ' needs trustedEndpoint: true')
       }
     }
-    const base = { id, catalogKey: key, label: override.label ?? info.label, disabled: override.disabled ?? false, remote: info.remote, trustedEndpoint, options: values }
+    const disabled = override.disabled ?? (origin.kind === 'builtin' ? info.optIn : false)
+    const base = { id, catalogKey: key, label: override.label ?? info.label, disabled, remote: info.remote, trustedEndpoint, options: values }
     if (info.kind === 'model') return { ...base, kind: 'model', route: { kind: 'session' } }
     if (info.kind === 'local') return { ...base, kind: 'local', access: 'keyless' }
     if (info.kind !== 'native' && info.kind !== 'adapter') return fail(path + '.kind', 'unsupported catalog kind')
     if (!info.access.apiKey || info.endpoint === undefined) return fail(path, 'remote catalog entry needs credentials and an endpoint')
-    const url = customEndpoint ?? info.endpoint
+    const url = origin.kind === 'custom' && origin.endpoint !== undefined ? origin.endpoint : info.endpoint
     if (url !== info.endpoint && !trustedEndpoint) fail(path + '.trustedEndpoint', 'a custom endpoint needs trustedEndpoint: true')
     return { ...base, kind: info.kind, access, credentialRef: override.credentialRef ?? info.access.apiKey.credentialRef, endpoint: url }
   }
@@ -212,7 +234,7 @@ export function resolveDocument<S extends z.ZodRawShape, P extends string = neve
       }
     }
     const override = raw === undefined ? {} : parse(builtinOverrideSchema, raw, 'connections.' + id)
-    connections.set(id, resolve(id, key, override))
+    connections.set(id, resolve(id, key, override, { kind: 'builtin' }))
   }
   for (const [id, raw] of Object.entries(overrides)) {
     if (connections.has(id)) continue
@@ -220,7 +242,7 @@ export function resolveDocument<S extends z.ZodRawShape, P extends string = neve
     const path = 'connections.' + id
     const custom = parse(customSchema, raw, path)
     if (custom.kind === 'adapter') {
-      connections.set(id, resolve(id, custom.adapter, { ...custom, access: 'api-key' }, custom.endpoint))
+      connections.set(id, resolve(id, custom.adapter, { ...custom, access: 'api-key' }, { kind: 'custom', endpoint: custom.endpoint }))
     } else {
       const info = protocols![custom.protocol]
       const values = custom.options ?? {}
@@ -235,7 +257,7 @@ export function resolveDocument<S extends z.ZodRawShape, P extends string = neve
   }
   const defaultConnection = settings.defaultConnection ?? defaults.defaultConnection
   if (!connections.has(defaultConnection)) rejectId(defaultConnection, 'defaultConnection')
-  return { version: migrations.currentVersion, defaultConnection, showSelector: settings.showSelector ?? true, defaults: settings.defaults ?? parse(defaults.schema, {}, 'defaults'), connections }
+  return { version: migrations.currentVersion, defaultConnection, showSelector: settings.showSelector ?? true, enhancedTools: settings.enhancedTools ?? false, defaults: settings.defaults ?? parse(defaults.schema, {}, 'defaults'), connections }
 }
 
 /** Bound traversal and cloning before parsing even unknown fields. */

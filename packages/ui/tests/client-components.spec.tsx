@@ -55,6 +55,7 @@ vi.mock('@deepseek-ai/dsh-client-ui-primitives', async importOriginal => {
     useDismissOnOutsidePointer: () => {},
     IconGlobeOutlineRegular: (props: any) => <svg data-testid="icon-globe" {...props} />,
     IconChevronDownOutlineRegular: (props: any) => <svg data-testid="icon-chevron" {...props} />,
+    IconChevronRightOutlineRegular: (props: any) => <svg data-testid="icon-chevron-right" {...props} />,
     IconCheckOutlineRegular: (props: any) => <svg data-testid="icon-check" {...props} />,
     IconSettingsOutlineRegular: (props: any) => <svg data-testid="icon-settings" {...props} />,
     IconWarningOutlineRegular: (props: any) => <svg data-testid="icon-warning" {...props} />,
@@ -108,6 +109,7 @@ function createMockSection(params: {
   readFailure?: 'invalid-settings' | 'failed'
   connections?: ConnectionView[]
   openSettings?: () => void
+  remoteServicesOff?: boolean
   setFn?: (update: { connectionId?: string | null }) => Promise<{ ok: boolean; error?: { message: string } }>
 }): MockSectionResult {
   const view =
@@ -153,6 +155,7 @@ function createMockSection(params: {
     sourceText: () => 'Chosen for this conversation',
     writeFailureText: err => `Failed: ${err.message}`,
     settings: settingsStore,
+    remoteServicesOff: createSnapshotStore(params.remoteServicesOff ?? false),
   }
 
   return { section, loadMock, setMock }
@@ -745,6 +748,81 @@ describe('ComposerConnectionMenu', () => {
     expect(loadMock).not.toHaveBeenCalled()
   })
 
+  it('lists only connections that are turned on, keeping a selected one that was turned off', () => {
+    const webConnections = createWebConnectionsService()
+    webConnections.register(createMockSection({
+      capability: 'search', order: 10, selectedId: 'conn-off',
+      connections: [mockConnection('conn-1', 'Connection 1'), mockConnection('conn-off', 'Chosen but off', 'disabled'), mockConnection('conn-other', 'Other off', 'disabled')],
+    }).section)
+    webConnections.register(createMockSection({
+      capability: 'fetch', order: 20, selectedId: null,
+      connections: [mockConnection('conn-gone', 'Off service', 'disabled')],
+    }).section)
+    render(<ComposerConnectionMenu sessionId="sess-1" webConnections={webConnections} searchServed fetchServed t={t} />)
+
+    fireEvent.click(trigger())
+    const search = within(panel('Web Search'))
+    expect(search.getAllByRole('menuitemradio').map(row => row.textContent)).toEqual([t('menu.offRow'), 'Connection 1Ready', 'Chosen but offAPI Key needed'])
+    expect(search.getByRole('menuitemradio', { name: /Chosen but off/u }).getAttribute('aria-checked')).toBe('true')
+    expect(search.queryByText('Other off')).toBeNull()
+    fireEvent.click(tab('Web Fetch'))
+    const fetch = within(panel('Web Fetch'))
+    expect(fetch.queryByText('Off service')).toBeNull()
+    expect(fetch.getByText(t('menu.empty'))).toBeDefined()
+  })
+
+  it('says at the foot of a panel whose remote services are all off where to turn more on, and opens settings from it', () => {
+    const openSettings = vi.fn()
+    const webConnections = createWebConnectionsService()
+    webConnections.register(createMockSection({ capability: 'search', order: 10, selectedId: 'conn-1', remoteServicesOff: true, openSettings }).section)
+    webConnections.register(createMockSection({ capability: 'fetch', order: 20, selectedId: 'conn-2', remoteServicesOff: false, openSettings }).section)
+    render(<ComposerConnectionMenu sessionId="sess-1" webConnections={webConnections} searchServed fetchServed t={t} />)
+
+    fireEvent.click(trigger())
+    const hint = within(panel('Web Search')).getByRole('button', { name: t('menu.moreServices') })
+    // A row-wide action that reads as one: the link colour and a trailing chevron (styles in the appearance spec).
+    expect(hint.className).toBe(menuCss.footerAction)
+    expect(within(hint).getByTestId('icon-chevron-right').getAttribute('aria-hidden')).toBe('true')
+    // Below the list and its options, outside the part that scrolls.
+    expect(hint.closest('.' + menuCss.panelBody)).toBeNull()
+    expect(within(panel('Web Search')).getByRole('menu').compareDocumentPosition(hint) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    fireEvent.click(tab('Web Fetch'))
+    expect(within(panel('Web Fetch')).queryByText(t('menu.moreServices'))).toBeNull()
+
+    fireEvent.click(tab('Web Search'))
+    fireEvent.click(within(panel('Web Search')).getByRole('button', { name: t('menu.moreServices') }))
+    expect(openSettings).toHaveBeenCalledOnce()
+    // The same action as the settings button: the menu closes and the button gets focus back.
+    expect(trigger().getAttribute('aria-expanded')).toBe('false')
+    expect(document.activeElement).toBe(trigger())
+  })
+
+  it('shows the more-services hint for a lone fetch section, as text while settings cannot be opened', () => {
+    const webConnections = createWebConnectionsService()
+    webConnections.register(createMockSection({ capability: 'fetch', order: 20, selectedId: 'conn-2', remoteServicesOff: true }).section)
+    render(<ComposerConnectionMenu sessionId="sess-1" webConnections={webConnections} searchServed={false} fetchServed t={t} />)
+
+    fireEvent.click(trigger())
+    const group = panel('Web Fetch')
+    expect(within(group).getByText(t('menu.moreServices')).tagName).toBe('SPAN')
+    expect(within(group).queryByRole('button', { name: t('menu.moreServices') })).toBeNull()
+  })
+
+  it('follows the remote services fact while the menu is open', () => {
+    const webConnections = createWebConnectionsService()
+    const { section } = createMockSection({ capability: 'search', order: 10, selectedId: 'conn-1', openSettings: vi.fn() })
+    const fact = createSnapshotStore(false)
+    webConnections.register({ ...section, remoteServicesOff: fact })
+    render(<ComposerConnectionMenu sessionId="sess-1" webConnections={webConnections} searchServed fetchServed t={t} />)
+
+    fireEvent.click(trigger())
+    expect(screen.queryByText(t('menu.moreServices'))).toBeNull()
+    act(() => { fact.set(true) })
+    expect(within(panel('Web Search')).getByRole('button', { name: t('menu.moreServices') })).toBeDefined()
+    act(() => { fact.set(false) })
+    expect(screen.queryByText(t('menu.moreServices'))).toBeNull()
+  })
+
   it('hides a list read before the settings became invalid', () => {
     const webConnections = createWebConnectionsService()
     webConnections.register(createMockSection({
@@ -946,12 +1024,29 @@ describe('ActivationPrompt', () => {
 
     expect(screen.getByText(t('activation.title'))).toBeDefined()
     expect(screen.getByText(t('activation.body'))).toBeDefined()
+    expect(screen.getByText(t('activation.remoteOff'))).toBeDefined()
 
     fireEvent.click(screen.getByRole('button', { name: t('activation.later') }))
     expect(onDismiss).toHaveBeenCalled()
 
     fireEvent.click(screen.getByRole('button', { name: t('activation.open') }))
     expect(onOpenDetails).toHaveBeenCalled()
+  })
+
+  it('replaces the guidance, remote services sentence included, when the upgrade check finds a problem', () => {
+    render(
+      <ActivationPrompt
+        packageName={PROFILE_PACKAGE}
+        webConfigForm={mockConfigForm({ searchProvider: 'web-search-deepseek' }).form}
+        nativeSearchServed={false}
+        onDismiss={vi.fn()}
+        onOpenDetails={vi.fn()}
+        t={t}
+      />,
+    )
+    expect(screen.getByText(t('activation.preflight'))).toBeDefined()
+    expect(screen.queryByText(t('activation.body'))).toBeNull()
+    expect(screen.queryByText(t('activation.remoteOff'))).toBeNull()
   })
 })
 

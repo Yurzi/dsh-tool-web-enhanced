@@ -1,0 +1,6 @@
+# A ready remote choice for the default-connection settings editor.
+- id: web-search-enhanced
+  config:
+    connections:
+      builtin:exa:
+        disabled: false

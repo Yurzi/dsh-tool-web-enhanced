@@ -4,6 +4,7 @@ import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { Route } from '../../shared/route.ts'
 import type { CredentialStatusMap } from '../credentials.ts'
 import type { PairingsState } from '../pairings.ts'
+import type { SettingsDocumentSnapshot } from './secret-diagnostics.ts'
 
 /** Shared with the settings UI; the browser never reads credential values. */
 export interface SettingsPageInjected<S> {
@@ -13,6 +14,8 @@ export interface SettingsPageInjected<S> {
     readonly route: ObservableSnapshot<Route>
     readonly pairings: ObservableSnapshot<PairingsState>
   }
+  /** The row settings now; a write the form accepted has already updated them. */
+  readSettings(): SettingsDocumentSnapshot<S>
   mutate(ops: SettingsPathOpView[], revision: number): Promise<boolean>
   saveCredential(ref: string, value: string): Promise<void>
   refreshPairings(): Promise<void>

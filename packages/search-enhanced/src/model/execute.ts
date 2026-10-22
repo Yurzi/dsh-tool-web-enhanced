@@ -1,6 +1,5 @@
 import { WebError, type WebSearchRequest, type WebSearchResult } from '@deepseek-ai/dsh-web'
-import { redactDiagnostic, secretMatcher, storedApiKey, type SecretMatcher } from 'dsh-tool-web-enhanced-core/host'
-import type { UnsupportedReason } from 'dsh-tool-web-enhanced-core/shared'
+import { UNSUPPORTED_REASON_TEXT, redactDiagnostic, secretMatcher, storedApiKey, type SecretMatcher } from 'dsh-tool-web-enhanced-core/host'
 import { credentialMissing, credentialInvalid, abortable, searchError, throwIfAborted, type OnDiagnostic } from '../search/errors.ts'
 import { requestJson, withDeadline } from '../search/http.ts'
 import { SourceList } from '../search/sources.ts'
@@ -20,19 +19,10 @@ export interface ModelSearchTarget {
   readonly options: ModelOptions
 }
 
-const UNSUPPORTED: Readonly<Record<UnsupportedReason, string>> = {
-  'no-model': 'no session model is available',
-  'unknown-route': 'the model route is unknown',
-  protocol: 'the route does not declare a supported protocol',
-  endpoint: 'the route has no supported endpoint',
-  headers: 'the route uses custom request headers',
-  credential: 'the route has no supported credential reference',
-}
-
 export async function executeModelSearch(target: ModelSearchTarget, request: WebSearchRequest, deps: ModelSearchDeps, signal?: AbortSignal): Promise<WebSearchResult> {
   throwIfAborted(signal)
   if (target.route.kind === 'unsupported') {
-    throw searchError('WEB_PROVIDER_CONFIGURED_UNAVAILABLE', 'the session model cannot run web search: ' + UNSUPPORTED[target.route.reason] + '; choose another search connection')
+    throw searchError('WEB_PROVIDER_CONFIGURED_UNAVAILABLE', 'the session model cannot run web search: ' + UNSUPPORTED_REASON_TEXT[target.route.reason] + '; choose another search connection')
   }
   const route = target.route.route
   let matcher: SecretMatcher | undefined
@@ -65,14 +55,15 @@ export async function executeModelSearch(target: ModelSearchTarget, request: Web
 async function credential(route: ModelRoute, deps: ModelSearchDeps, signal: AbortSignal): Promise<string> {
   const { auth } = route
   if (auth.kind === 'account') {
-    const token = await abortable(deps.accountToken(modelUrl(route.protocol, route.baseURL)), signal)
+    const endpoint = modelUrl(route.protocol, route.baseURL)
+    const token = await readCredential(() => deps.accountToken(endpoint), signal)
     // Account tokens are opaque service output, not operator input: never trim.
     if (token === undefined || !/^[\x20-\x7e]+$/u.test(token)) {
       throw searchError('WEB_PROVIDER_CREDENTIAL_MISSING', 'the DeepSeek account sign-in is unavailable for this search; ask the user to sign in again or choose another search connection')
     }
     return token
   }
-  const stored = storedApiKey(await abortable(deps.apiKey(auth.credentialRef, auth.source), signal))
+  const stored = storedApiKey(await readCredential(() => deps.apiKey(auth.credentialRef, auth.source), signal))
   if (stored.kind === 'missing') {
     throw searchError('WEB_PROVIDER_CREDENTIAL_MISSING', credentialMissing(auth.credentialRef, auth.source))
   }
@@ -80,4 +71,14 @@ async function credential(route: ModelRoute, deps: ModelSearchDeps, signal: Abor
     throw searchError('WEB_PROVIDER_CREDENTIAL_MISSING', credentialInvalid(auth.credentialRef, auth.source))
   }
   return stored.key
+}
+
+async function readCredential(resolve: () => Promise<string | undefined>, signal: AbortSignal): Promise<string | undefined> {
+  try {
+    return await abortable(resolve(), signal)
+  } catch {
+    throwIfAborted(signal)
+    // An exception from the resolver is untrusted, even when it is a WebError.
+    throw new Error('Model credential resolution failed')
+  }
 }

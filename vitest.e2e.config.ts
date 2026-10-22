@@ -12,7 +12,7 @@ export default defineConfig({
     fileParallelism: false,
     // pnpm's vitest shim puts the workspace's .pnpm/node_modules on NODE_PATH; the
     // in-process host boot would then resolve this workspace's packages instead of
-    // the profile's installed ones (the upgrade scenario installs older versions).
+    // the profile's packed installation under test.
     execArgv: ['--no-global-search-paths'],
     testTimeout: 120_000,
     hookTimeout: 600_000,

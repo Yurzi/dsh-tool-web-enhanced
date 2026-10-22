@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url'
 import { Context, type Plugin } from '@deepseek-ai/cordis'
 import { assembleContextFor } from '@deepseek-ai/dsh-agent'
 import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
-import Settings from '@deepseek-ai/dsh-settings'
+import Settings, { type SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
@@ -23,13 +23,16 @@ import * as StorageJson from '@deepseek-ai/dsh-storage-json'
 import * as ToolWeb from '@deepseek-ai/dsh-tool-web'
 import WebRuntime from '@deepseek-ai/dsh-web'
 import { scopeOf, scopeParentOf } from '@deepseek-ai/dsh-scope'
-import { FETCH } from 'dsh-tool-web-enhanced-core/shared'
+import { FETCH, SEARCH } from 'dsh-tool-web-enhanced-core/shared'
+import { installSearch as installOtherCapability } from '../../search-enhanced/src/host/runtime.ts'
+import { resolveSettings as resolveOtherSettings } from '../../search-enhanced/src/settings/resolve.ts'
 import { afterEach, expect, it, vi } from 'vitest'
 import { Pairings, Sessions, SessionStorage, ToolRestriction, routeFacts } from 'dsh-tool-web-enhanced-core/host'
 import { installFetch } from '../src/host/runtime.ts'
 import { optionsCodec, type FetchOptions } from '../src/host/options.ts'
 import type { FetchSettings, ResolvedSettings } from '../src/settings/types.ts'
 import { resolveSettings } from '../src/settings/resolve.ts'
+import { shippedWebPreset, mountPtcRuntime } from '../../core/tests/fixtures/shipped-preset.ts'
 
 const cleanups: Array<() => Promise<unknown>> = []
 afterEach(async () => {
@@ -37,7 +40,7 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0).toReversed()) await cleanup()
 })
 
-async function presetHost(initial: FetchSettings = {}) {
+async function presetHost(initial: FetchSettings = {}, preset: 'standard' | 'minimal' | 'ptc' = 'standard', shipped = false) {
   let settings = resolveSettings(initial)
   const configure = (value: FetchSettings) => { settings = resolveSettings(value) }
   const root = await mkdtemp(join(tmpdir(), 'fetch-agent-'))
@@ -59,18 +62,24 @@ async function presetHost(initial: FetchSettings = {}) {
   await domain.table('selections').put('off', { connectionId: null, revision: 1 })
   await domain.table('selections').put('off-other', { connectionId: null, revision: 1 })
   await domain.close()
-  await ctx.plugin(AgentPresets, { default: 'standard' })
+  if (preset === 'ptc') await mountPtcRuntime(ctx, root)
+  await ctx.plugin(AgentPresets, { default: preset })
   // The same tool-web contribution as Web's standard preset, mounted by the real registry/Loader.
   ctx.loader.builtins.webForTest = ToolWeb
-  await ctx.agentPresets.register({ id: 'standard', plugins: [{ id: 'tool-web', name: 'cordis:webForTest' }] })
-  expect(await ctx.agentPresets.resolve()).toEqual({ id: 'standard' })
+  if (shipped) await shippedWebPreset(ctx, preset)
+  else await ctx.agentPresets.register({ id: 'standard', plugins: [{ id: 'tool-web', name: 'cordis:webForTest' }] })
+  expect(await ctx.agentPresets.resolve()).toEqual({ id: preset })
   const plugin = await ctx.plugin({ inject: ['web'], apply: (scope: Context) => { installFetch(scope, () => settings) } })
   const create = (id: string, parent?: string) => ctx.agents.create({
     sessionId: SessionId(id), agentOptions: { provider: 'fixture', model: 'fixture' },
     ...(parent === undefined ? {} : { meta: { parentSession: SessionId(parent), isSeeded: true }, inheritedEventCount: SessionLogOffset(0), seed: [] }),
     setup: async agentCtx => { await ctx.agentPresets.mount(agentCtx) },
   })
-  return { ctx, plugin, create, configure }
+  const update = async (value: FetchSettings) => {
+    configure(value)
+    await ctx.parallel('settings/document-updated', FETCH.rowId as SettingsNamespace, 1)
+  }
+  return { ctx, plugin, create, configure, update }
 }
 
 it('hides an ancestor Web preset tool from only the off Agent, never relying on the root view', async () => {
@@ -273,7 +282,7 @@ function currentContext(request: GenerateOptions): string {
 }
 
 it('the real loop refreshes the allowlist notice for this step, current local settings, and route', async () => {
-  const allowed = (cidr: string): FetchSettings => ({ version: 2, connections: { 'builtin:local': { options: { allowCidrs: [cidr], allowHostnames: ['internal.example'] } } } })
+  const allowed = (cidr: string): FetchSettings => ({ version: 2, connections: { 'builtin:deepseek-fetch-api': { disabled: false }, 'builtin:local': { options: { allowCidrs: [cidr], allowHostnames: ['internal.example'] } } } })
   const { ctx, create, configure } = await presetHost(allowed('198.18.0.0/15'))
   await mountRemote(ctx)
   // Keep a real snapshot present when the optional allowlist contribution disappears.
@@ -331,4 +340,104 @@ it('uses the public assembly Agent when no initiating Agent exists, not the glob
   expect(scoped.contexts.find(context => context.name === 'web-fetch-enhanced:allowlist')!.text).toContain('198.18.0.0/15')
   const global = await ctx.systemPrompt.assemble()
   expect(global.contexts.find(context => context.name === 'web-fetch-enhanced:allowlist')!.text).toBe('')
+})
+
+const enhancedNames = [FETCH.tools.action, FETCH.tools.list]
+
+it.each(['standard', 'minimal'] as const)('offers real enhanced definitions through the shipped %s Web preset seam', async preset => {
+  const { ctx, create } = await presetHost({ enhancedTools: true }, preset, true)
+  const handle = await create('enhanced-' + preset)
+  cleanups.push(() => handle.dispose())
+  const assembly = await ctx.systemPrompt.assemble(assembleContextFor(handle.agent, new AbortController().signal))
+  for (const name of enhancedNames) expect(assembly.tools.map(tool => tool.name)).toContain(name)
+  expect(assembly.tools.some(tool => tool.name === 'web_fetch')).toBe(preset === 'standard')
+})
+
+it.each(['elsewhere', 'auto', ''])('removes enhanced tools on an unconfirmed route (%s) and restores authorized conversations', async route => {
+  const { ctx, create } = await presetHost({ enhancedTools: true })
+  const handle = await create('route-enhanced')
+  cleanups.push(() => handle.dispose())
+  const scope = scopeOf(handle.agent.ctx)!
+  for (const name of enhancedNames) expect(ctx.tools.get(name, scope)).toBeDefined()
+  await ctx.settings.update('web', { fetchProvider: route })
+  for (const name of enhancedNames) expect(ctx.tools.get(name, scope)).toBeUndefined()
+  await ctx.settings.update('web', { fetchProvider: FETCH.providerId })
+  for (const name of enhancedNames) expect(ctx.tools.get(name, scope)).toBeDefined()
+})
+
+it('does not backfill old conversations when enhanced tools are enabled later', async () => {
+  const { ctx, create, update } = await presetHost()
+  const old = await create('before-enhanced')
+  cleanups.push(() => old.dispose())
+  await update({ enhancedTools: true })
+  for (const name of enhancedNames) expect(ctx.tools.get(name, scopeOf(old.agent.ctx))).toBeUndefined()
+  const fresh = await create('after-enhanced')
+  cleanups.push(() => fresh.dispose())
+  for (const name of enhancedNames) expect(ctx.tools.get(name, scopeOf(fresh.agent.ctx))).toBeDefined()
+})
+
+it('the real loop removes enhanced tools from the next request after switch-off and Session off', async () => {
+  const { ctx, create, update } = await presetHost({ enhancedTools: true })
+  await mountRemote(ctx)
+  const adapter = new TextAdapter()
+  ctx.llm.registerAdapter(['fixture'], adapter)
+  const handle = await create('enhanced-loop')
+  cleanups.push(() => handle.dispose())
+  const send = async () => {
+    handle.agent.followup(createUserMessage({ content: [{ type: 'text', text: 'continue' }], source: { kind: 'user' } }))
+    await handle.agent.whenIdle()
+    return (adapter.requests.at(-1)!.tools ?? []).map(tool => tool.name)
+  }
+  for (const name of enhancedNames) expect(await send()).toContain(name)
+  await update({ enhancedTools: false })
+  for (const name of enhancedNames) expect(await send()).not.toContain(name)
+  await update({ enhancedTools: true })
+  for (const name of enhancedNames) expect(await send()).toContain(name)
+  await ctx.fetchConnections.set({ sessionId: handle.agent.id, connectionId: null, expectedRevision: 0 })
+  const off = await send()
+  for (const name of enhancedNames) expect(off).not.toContain(name)
+  expect(off).not.toContain('web_fetch')
+})
+
+it.each([false, true])('inherits the provider list into a child before its first model assembly (fork=%s)', async fork => {
+  const { ctx, create } = await presetHost({ enhancedTools: true })
+  const parent = await create('enhanced-parent')
+  cleanups.push(() => parent.dispose())
+  const child = await ctx.agents.create({
+    sessionId: SessionId('enhanced-child'), parentAgent: parent.agent,
+    meta: { parentSession: parent.agent.id, origin: 'subagent', isSeeded: fork },
+    ...(fork ? { seed: [], inheritedEventCount: SessionLogOffset(0) } : {}),
+    setup: scope => { ctx.agentPresets.composeFrom(scope, parent.agent.ctx) },
+  })
+  cleanups.push(() => child.dispose())
+  const assembly = await ctx.systemPrompt.assemble(assembleContextFor(child.agent, new AbortController().signal))
+  for (const name of enhancedNames) expect(assembly.tools.map(tool => tool.name)).toContain(name)
+})
+
+it('includes both enhanced definitions in the shipped PTC SDK, never as direct model functions', async () => {
+  const preset = 'ptc'
+  const { ctx, create } = await presetHost({ enhancedTools: true }, preset, true)
+  const handle = await create('enhanced-ptc')
+  cleanups.push(() => handle.dispose())
+  const assembly = await ctx.systemPrompt.assemble(assembleContextFor(handle.agent, new AbortController().signal))
+  expect(assembly.tools.map(tool => tool.name)).toEqual(['run_code'])
+  const sdk = assembly.sections.find(section => section.name === 'tools:sdk')!.text
+  for (const name of enhancedNames) expect(sdk).toContain(name)
+  const outputMap = sdk.slice(sdk.indexOf('interface ToolOutputMap'))
+  const outputType = (name: string) => outputMap.match(new RegExp('^  ' + name + ': ([\\s\\S]*?)(?=^  [A-Za-z_]|^\\})', 'mu'))![1]!
+  expect(outputType(FETCH.tools.action)).toContain('provider: string;')
+  expect(outputType(FETCH.tools.list)).toContain('sessionProviderTurnedOff: boolean;')
+})
+
+it('unloading this plugin removes only its enhanced pair, not the other capability', async () => {
+  const { ctx, plugin, create } = await presetHost({ enhancedTools: true })
+  await ctx.settings.update('web', { searchProvider: SEARCH.providerId })
+  await ctx.plugin({ inject: ['web'], apply(scope: Context) { installOtherCapability(scope, () => resolveOtherSettings({ enhancedTools: true })) } })
+  const handle = await create('both-capabilities')
+  cleanups.push(() => handle.dispose())
+  const scope = scopeOf(handle.agent.ctx)!
+  for (const name of [...enhancedNames, SEARCH.tools.action, SEARCH.tools.list]) expect(ctx.tools.get(name, scope)).toBeDefined()
+  await plugin.dispose()
+  for (const name of enhancedNames) expect(ctx.tools.get(name, scope)).toBeUndefined()
+  for (const name of [SEARCH.tools.action, SEARCH.tools.list]) expect(ctx.tools.get(name, scope)).toBeDefined()
 })

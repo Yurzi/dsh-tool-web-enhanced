@@ -11,13 +11,12 @@ import { en as text, zh, type LocaleKey } from '../packages/search-enhanced/src/
 import { zh as uiZh } from '../packages/ui/src/client/locales.ts'
 import { messagesAnswer, modelDocument, modelFixture, piAiFixture, piAiRows } from './fixtures/search-model.ts'
 import { type App, browserRequired, chromiumPath, openApp, recordBrowserFailure } from './harness/browser.ts'
-import { addPlugins, artifacts, composedRows, enterIsolatedEnvironment, profilePatchPath, type E2EContext } from './harness/environment.ts'
+import { isolatedContext, addPlugins, artifacts, composedRows, enterIsolatedEnvironment, profilePatchPath, type E2EContext } from './harness/environment.ts'
 import { bootHost } from './harness/host.ts'
 import { startModelApi } from './harness/model-api.ts'
 import { modelViewport } from './harness/model-visuals.ts'
 import { openConnectionTab, newSession, openConnections, openSearchSettings } from './harness/navigation.ts'
 import { setTheme } from './harness/theme.ts'
-import { upgradeEnvironment } from './harness/upgrade.ts'
 import { type WebServer, startWeb } from './harness/web.ts'
 
 const base = inject('e2e')
@@ -36,7 +35,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Model UI review
   let evidence = 0
 
   async function world(extraRows: object[] = []) {
-    e2e = upgradeEnvironment(base)
+    e2e = isolatedContext(base)
     const { [PROFILE_PACKAGE]: profile, ...plugins } = e2e.tarballs
     if (profile === undefined) throw new Error('the global setup did not pack the profile bundle')
     addPlugins(e2e, [profile], plugins)
@@ -222,7 +221,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Model UI review
     const profile = reason === 'protocol'
       ? { provider: 'openai', model: 'gpt-4o' }
       : reason === 'headers' ? piAiFixture : { provider: 'deepseek-account', model: 'deepseek-flash' }
-    const isolated = upgradeEnvironment(base)
+    const isolated = isolatedContext(base)
     const { [PROFILE_PACKAGE]: bundle, ...plugins } = isolated.tarballs
     if (bundle === undefined) throw new Error('the global setup did not pack the profile bundle')
     addPlugins(isolated, [bundle], plugins)

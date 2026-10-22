@@ -1,5 +1,47 @@
 # Changelog
 
+## v0.1.1 (2026-10-23)
+
+### dsh-tool-web-enhanced-profile 0.1.1
+
+- Mounts dsh-web-search-enhanced 0.2.1, dsh-web-fetch-enhanced 0.2.1 and dsh-tool-web-enhanced-ui 0.1.1; the patch itself is unchanged.
+
+### dsh-tool-web-enhanced-ui 0.1.1
+
+- The composer menu lists only connections that are turned on; the conversation's own choice stays listed (with its warning dot) if it was turned off since.
+- When all of a capability's remote services (built-in catalog entries that start off) are off, its panel ends with "More services can be turned on in settings", outside the scrolling list; it opens the plugin settings. Custom connections do not count, and the hint is not shown while the settings are unread or invalid.
+- The activation prompt adds "Remote services are off by default; turn them on there when you need them." when the upgrade check finds no problem.
+- The menu shows only the conversation's own choice; the Agent's enhanced-tool calls never appear in it.
+
+### dsh-web-search-enhanced 0.2.1
+
+- **Breaking:** remote services are off by default: `builtin:deepseek-search-api` and the six adapters `builtin:exa`, `builtin:firecrawl`, `builtin:tavily`, `builtin:tinyfish`, `builtin:openalex` and `builtin:semanticscholar`. A built-in connection without a `disabled` override now takes its catalog default; `builtin:deepseek-messages`, `builtin:session-model` and custom connections stay on. Documents that already say `disabled: false` are unaffected, and the Host never rewrites a document. A conversation choice or `defaultConnection` that names one of these services fails with `WEB_PROVIDER_CONFIGURED_UNAVAILABLE` until the operator turns the service on in the settings page, which restores it; a model memory that names one falls back to the default connection until then.
+- Enhanced tools: with the new row setting `enhancedTools: true` (the "Enhanced tools" switch, off by default), the plugin registers `web_search_enhanced` (`queries`, then a required `provider`: a connection id) and `list_web_search_providers` to DSH's global tool layer, so every agent preset (minimal included) and the base profile get them. They are registered only while the `web` row is confirmed to route search to this plugin and the settings are valid, and are hidden from an Agent whose conversation has no provider list, turned search Off, or whose choice has not been read.
+- Each new top-level conversation records its provider list once: the connections enabled at that moment, or an empty list while the tools are not offered, so conversations started earlier never gain the tools mid-way. Child and forked conversations copy their parent's list; resumed conversations read it. Connections turned off later stay usable in that conversation; removed ones fail with "was removed by the user".
+- An explicit call runs once per distinct query on the named provider, as the calling Agent, through the same checks and execution layer as `web_search` (current settings, credentials, keyless, endpoint trust, deadlines, redaction, upstream explanations, cancellation). It never changes the conversation's choice or model memory, and is refused when the conversation turned search Off. Output is `Provider: <id>` followed by tool-web's own format; the canonical value adds `provider`.
+- Refusals and argument errors have short fixed wording that names the ready providers ("ready providers: …", "no other provider is ready", or "list_web_search_providers shows the ready providers" when readiness cannot be read); argument errors repeat tool-web's own message after `invalid arguments: `. An unknown provider also gets "Providers added or turned on after this conversation started are available only in new conversations." A backend failure keeps its code and message and gets ` Provider "<id>" failed; list_web_search_providers shows the others.` at the end of its first paragraph (after a full stop if the paragraph lacks one), before any untrusted explanation.
+- `list_web_search_providers` lists the conversation's providers with their name, readiness, use, who receives the query and whether they apply the conversation's freshness; it ends with a note when the conversation's own connection is turned off. Readiness that cannot be read gives a fixed `WEB_PROVIDER_ERROR`.
+- Timeouts: `web_search_enhanced` 100 s, slightly longer than the remote deadline; the list tool has none.
+- Settings page: an "Enhanced tools" section after the defaults, with its consent ("Turning this on means you agree that when the Agent picks a service, the query is sent to that service."); the services list says "Remote services are off by default." and marks services that are off with "Off"; enabling writes `disabled: false` sparsely over the inherited value.
+- Fix: switches flipped in quick succession on the settings page are no longer refused; writes on one page now run one at a time, and switch-type writes are computed on the document the previous write left. A change made elsewhere that the page has not received is still refused.
+- Connection labels are read as one line (line breaks and control characters become spaces); documents are neither refused nor rewritten.
+- Security: an exception thrown while resolving a credential (DSH Credentials or the DeepSeek account service), even a `WebError` with a plausible code, no longer reaches the model or the log; it becomes the fixed "search failed; check the connection settings or choose another connection" error, and only real cancellation is `WEB_ABORTED`.
+- New peer dependency `@deepseek-ai/dsh-tool-web` (already installed with DSH), whose formatters the enhanced tools reuse.
+
+### dsh-web-fetch-enhanced 0.2.1
+
+- **Breaking:** remote services are off by default: `builtin:deepseek-fetch-api` and the four adapters `builtin:exa`, `builtin:firecrawl`, `builtin:tavily` and `builtin:tinyfish`. `builtin:local` and custom connections stay on. Documents that already say `disabled: false` are unaffected, and the Host never rewrites a document. A conversation choice or `defaultConnection` that names one of these services fails with `WEB_PROVIDER_CONFIGURED_UNAVAILABLE` until the operator turns the service on in the settings page; a model memory that names one falls back to the default connection until then.
+- Enhanced tools, as for search: `enhancedTools: true` registers `web_fetch_enhanced` (`url`, then a required `provider`) and `list_web_fetch_providers` under the same conditions, with the same per-conversation provider list, refusals and switch-provider hint (not added to cancellation or to local's `WEB_INVALID_URL` and `WEB_BLOCKED_URL`, so the Agent is not steered around the operator allowlist). The list says who receives the URL and, for `builtin:local`, the operator allowlist worded for "this provider". `web_fetch_enhanced` times out after 130 s.
+- Settings page: the "Enhanced tools" section ("…the URL is sent to that service."), the remote-services notice and "Off" marks, and the same write fix and one-line labels as search.
+- Security: the same credential-resolution fix as search ("fetch failed; check the connection settings or choose another connection").
+- New peer dependency `@deepseek-ai/dsh-tool-web`.
+
+### dsh-tool-web-enhanced-core (private, not published)
+
+- `./shared`: enhanced tool names in the identities (`PluginIdentity.tools`), `isConnectionId`, catalog `optIn` and `use`, the `enhancedTools` setting, `disabled` defaulting to `optIn` for built-in connections, and `singleLine` for labels.
+- `./host`: the visibility controller (`ToolRestriction`) now also registers and masks the enhanced tools, with an atomic, rolled-back pair registration; the explicit entry (`EnhancedAccess` `run` / `list` / `ready`, `ReadyProviders`); conversation provider lists (table `provider_lists` in the existing version-1 storage domain, sharing the per-Session queue with selections); the shared enhanced-tool parts (`enhanced-parts/`); `Capability.enhanced`. The credential boundary in `runAdapter` no longer passes resolver `WebError`s through.
+- `./client`: `remoteServicesOffSource`, the "Enhanced tools" section, and a serialized settings write queue (`SettingsChange`, `readSettings`).
+
 ## v0.1.0 (2026-10-21)
 
 ### dsh-tool-web-enhanced-profile 0.1.0

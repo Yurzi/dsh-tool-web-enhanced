@@ -34,7 +34,7 @@ afterEach(async () => {
   vi.unstubAllGlobals()
   vi.unstubAllEnvs()
 })
-const INITIAL: FetchSettings = { version: 2, defaultConnection: 'builtin:local' }
+const INITIAL: FetchSettings = { version: 2, defaultConnection: 'builtin:local', connections: { 'builtin:deepseek-fetch-api': { disabled: false }, 'builtin:exa': { disabled: false }, 'builtin:firecrawl': { disabled: false }, 'builtin:tavily': { disabled: false }, 'builtin:tinyfish': { disabled: false } } }
 
 async function host(options: { storage?: boolean; root?: string; rawSettings?: Record<string, unknown>; settings?: FetchSettings; environment?: Record<string, string> } = {}) {
   const root = options.root ?? await mkdtemp(join(tmpdir(), 'fetch-host-'))
@@ -103,7 +103,7 @@ async function server(handler: (request: IncomingMessage, response: ServerRespon
   return 'http://127.0.0.1:' + address.port
 }
 
-const localSettings = (allowCidrs: string[]): FetchSettings => ({ version: 2, connections: { 'builtin:local': { options: { allowCidrs } } } })
+const localSettings = (allowCidrs: string[]): FetchSettings => ({ version: 2, connections: { 'builtin:deepseek-fetch-api': { disabled: false }, 'builtin:local': { options: { allowCidrs } } } })
 
 describe('fetchConnections real Host', () => {
   it.each([{ version: 1 }, { unknownOption: true }, { connections: [] }])('keeps invalid settings %j active with a Seat repair instruction but does not expose plugin WebError messages through Remote', async rawSettings => {
@@ -255,7 +255,7 @@ describe('fetchConnections real Host', () => {
     expect(connections[1]).toMatchObject({ access: 'account', status: 'ready' })
     expect(connections[5]).toMatchObject({ access: 'api-key', status: 'needs-credential' })
     expect(tokenEndpoints).toHaveLength(1)
-    h.configure({ connections: { 'builtin:exa': { disabled: true }, 'builtin:tinyfish': { disabled: true }, 'builtin:firecrawl': { access: 'api-key' } } })
+    h.configure({ connections: { 'builtin:exa': { disabled: true }, 'builtin:tinyfish': { disabled: true }, 'builtin:firecrawl': { disabled: false, access: 'api-key' } } })
     const changed = (await h.get(agent)).connections
     expect(changed[2]).toMatchObject({ access: 'keyless', status: 'disabled' })
     expect(changed[3]).toMatchObject({ access: 'api-key', status: 'needs-credential' })
@@ -276,7 +276,7 @@ describe('fetchConnections real Host', () => {
         response.end(JSON.stringify({ content: 'remote evidence' }))
       })
     })
-    const h = await host({ environment: { DEEPSEEK_API_KEY: 'fixture-key' }, settings: { version: 2, defaultConnection: 'builtin:deepseek-fetch-api', connections: { 'builtin:deepseek-fetch-api': { trustedEndpoint: true, options: { baseURL: origin } } } } })
+    const h = await host({ environment: { DEEPSEEK_API_KEY: 'fixture-key' }, settings: { version: 2, defaultConnection: 'builtin:deepseek-fetch-api', connections: { 'builtin:deepseek-fetch-api': { disabled: false, trustedEndpoint: true, options: { baseURL: origin } } } } })
     const url = 'http://127.0.0.1:1234/private?token=unchanged#fragment'
     await expect(h.ctx.web.fetch({ url })).resolves.toMatchObject({ url, body: { content: 'remote evidence' } })
     expect(targets).toEqual([url])

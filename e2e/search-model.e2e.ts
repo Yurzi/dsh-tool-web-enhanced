@@ -8,12 +8,11 @@ import { PROFILE_PACKAGE, SEARCH } from 'dsh-tool-web-enhanced-core/shared'
 import { stringify } from 'yaml'
 import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest'
 import { messagesAnswer, modelDocument, modelFixture, piAiFixture, piAiRows, responsesAnswer } from './fixtures/search-model.ts'
-import { addPlugins, artifacts, enterIsolatedEnvironment } from './harness/environment.ts'
+import { isolatedContext, addPlugins, artifacts, enterIsolatedEnvironment } from './harness/environment.ts'
 import { bootHost } from './harness/host.ts'
 import { modelResponse, startModelApi } from './harness/model-api.ts'
-import { upgradeEnvironment } from './harness/upgrade.ts'
 
-const e2e = upgradeEnvironment(inject('e2e'))
+const e2e = isolatedContext(inject('e2e'))
 const require = createRequire(join(e2e.install, 'node_modules/@deepseek-ai/dsh/package.json'))
 const credentials = require('@deepseek-ai/dsh-credentials') as { credentialRef: typeof credentialRef }
 const key = credentials.credentialRef(modelFixture.credentialRef)

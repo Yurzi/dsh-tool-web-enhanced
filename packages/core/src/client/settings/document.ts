@@ -46,8 +46,12 @@ export function settingsOperations(layers: SettingsLayers, operations: readonly 
   }
 }
 
-/** Share validation, revision fencing and automatic future migrations between both pages. */
-export function useSettingsDocument<S>(snapshot: SettingsDocumentSnapshot<S>, resolve: ResolveSettings, mutate: Mutate, migrations: SettingsMigrations = SETTINGS_MIGRATIONS) {
+/**
+ * Share validation, revision fencing and automatic future migrations between both pages.
+ * @param snapshot - the settings snapshot the page renders.
+ * @param read - the settings snapshot now, which a write the form accepted has already updated.
+ */
+export function useSettingsDocument<S>(snapshot: SettingsDocumentSnapshot<S>, read: () => SettingsDocumentSnapshot<S>, resolve: ResolveSettings, mutate: Mutate, migrations: SettingsMigrations = SETTINGS_MIGRATIONS) {
   const view = useMemo((): SettingsDocumentView<S> | undefined => {
     if (snapshot.status === 'unavailable' || snapshot.value === undefined || snapshot.revision === undefined) return undefined
     const result = editableSettings<S>(effectiveDocument(snapshot), { base: snapshot.base, user: snapshot.user }, snapshot.writable, resolve, migrations)
@@ -73,10 +77,25 @@ export function useSettingsDocument<S>(snapshot: SettingsDocumentSnapshot<S>, re
     void writeback()
   }, [view, revision, resolve, mutate])
 
-  const write: WriteSettings = async (operations, expectedRevision = revision) => {
+  // Sections write independently; one at a time, each on what the one before it left.
+  const queue = useRef<Promise<unknown>>(Promise.resolve())
+  const submit = async (change: Parameters<WriteSettings>[0], displayedRevision: number | undefined): Promise<boolean> => {
+    if (typeof change !== 'function') {
+      if (change.length === 0) return true
+      if (view === undefined || !snapshot.writable || displayedRevision === undefined) return false
+      return mutate(settingsOperations(view.layers, change, resolve), displayedRevision)
+    }
+    const current = read()
+    if (current.status !== 'ready' || !current.writable || current.revision === undefined) return false
+    const layers = { base: current.base, user: current.user }
+    const operations = change(layers)
     if (operations.length === 0) return true
-    if (view === undefined || !snapshot.writable || expectedRevision === undefined) return false
-    return mutate(settingsOperations(view.layers, operations, resolve), expectedRevision)
+    return mutate(settingsOperations(layers, operations, resolve), current.revision)
+  }
+  const write: WriteSettings = (change, expectedRevision = revision) => {
+    const task = queue.current.then(() => submit(change, expectedRevision))
+    queue.current = task.then(() => {}, () => {})
+    return task
   }
   return { view, write, migrationError: failure?.revision === revision ? failure?.diagnostic : undefined }
 }

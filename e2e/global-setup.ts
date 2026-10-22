@@ -18,7 +18,7 @@ import { addPlugins, artifacts, ensureDsh, isolatedEnvironment, packWorkspace, r
 export default function setup(project: TestProject): void {
   // pnpm's Vitest shim adds workspace packages to NODE_PATH. Clear it before
   // workers start, otherwise Node's global lookup paths can make app-boot
-  // prefer the workspace's new plain plugins over installed old bundles.
+  // prefer workspace packages over the run's packed profile installation.
   delete process.env.NODE_PATH
   rmSync(run, { recursive: true, force: true })
   rmSync(artifacts, { recursive: true, force: true })

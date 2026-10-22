@@ -8,7 +8,7 @@ row `web-fetch-enhanced` and selects its provider in the shared `web` row.
 | --- | --- |
 | Row id | `web-fetch-enhanced` |
 | Provider id in `ctx.web` | `fetch-enhanced` |
-| Model surface | DSH's own `web_fetch` (tool-web), unchanged |
+| Model surface | DSH's own `web_fetch` (tool-web), unchanged; with the row's Enhanced tools switch on, also `web_fetch_enhanced` and `list_web_fetch_providers` |
 | Per conversation | one connection or Off, from the composer menu or `/setup-fetch` |
 | Settings | row settings page on the Plugins page (`plugins.row.config`) |
 
@@ -20,6 +20,23 @@ next model request step. The connections are `builtin:local` (the default:
 DSH's own HTTP(S) fetcher plus an operator allowlist for non-public
 addresses), DSH's DeepSeek Fetch API, Exa, Firecrawl, Tavily and Tinyfish,
 plus custom adapter connections such as a self-hosted endpoint.
+
+- **Remote services start off.** DeepSeek Fetch API, Exa, Firecrawl, Tavily
+  and Tinyfish must be turned on in the row settings before a conversation can
+  choose them; turning one on agrees that URLs go to it. Local HTTP (the
+  default) stays on; custom connections are on when created. When every remote
+  service is off, the composer menu says more services can be turned on in
+  settings.
+- **Enhanced tools (optional).** With the row's Enhanced tools switch on (off
+  by default; turning it on agrees that the URL goes to the service the Agent
+  picks), the Agent also gets `web_fetch_enhanced` (`url` plus a required
+  `provider`, a connection id) and `list_web_fetch_providers`, which also
+  shows the local allowlist. They are registered only while the `web` row
+  routes fetch to this plugin, and only conversations started afterwards get
+  them, limited to the connections enabled when the conversation started. An
+  explicit call never changes the conversation's choice or model memory, is
+  refused when the conversation turned fetch off, and runs through the same
+  execution layer.
 
 - **Who controls access.** Only local fetching applies the operator's address
   allowlist; an empty allowlist is exactly DSH's public-only fetch. Hostnames
@@ -44,7 +61,7 @@ plus custom adapter connections such as a self-hosted endpoint.
 See [Functional design](../../docs/design.md) for [connections](../../docs/design.md#连接与目录),
 [the local allowlist](../../docs/design.md#fetch-local白名单与提示),
 [remote results](../../docs/design.md#远程抓取的结果映射与上限),
-[settings](../../docs/design.md#配置文档) and [errors](../../docs/design.md#错误与上游说明).
+[settings](../../docs/design.md#配置文档), [enhanced tools](../../docs/design.md#增强工具) and [errors](../../docs/design.md#错误与上游说明).
 
 ## Upgrading from 0.1.x
 

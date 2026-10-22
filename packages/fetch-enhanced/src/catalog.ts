@@ -27,7 +27,7 @@ const allowlist = { kind: 'list', pattern: /^[\s\S]{0,2000}$/u, max: ALLOWLIST_M
  */
 export const CATALOG = {
   local: {
-    label: 'Local HTTP', kind: 'local', remote: false,
+    label: 'Local HTTP', kind: 'local', remote: false, optIn: false,
     access: { keyless: true, apiKey: false, account: false },
     options: {
       allowCidrs: allowlist, allowHostnames: allowlist,
@@ -39,13 +39,13 @@ export const CATALOG = {
     },
   },
   'deepseek-fetch-api': {
-    label: 'DeepSeek Fetch API', kind: 'native', remote: true,
+    label: 'DeepSeek Fetch API', kind: 'native', remote: true, optIn: true,
     endpoint: 'https://api.deepseek.com/v1/tools', homepage: 'https://platform.deepseek.com',
     access: { keyless: false, apiKey: { credentialRef: 'DEEPSEEK_API_KEY' }, account: true },
     options: { baseURL: { kind: 'url' } },
   },
   exa: {
-    label: 'Exa', kind: 'adapter', remote: true,
+    label: 'Exa', kind: 'adapter', remote: true, optIn: true,
     endpoint: 'https://api.exa.ai/contents', homepage: 'https://exa.ai',
     // Keyless goes through Exa's hosted MCP tool, which takes only the URL and a character budget.
     access: { keyless: true, apiKey: { credentialRef: 'EXA_API_KEY' }, account: false },
@@ -55,7 +55,7 @@ export const CATALOG = {
     },
   },
   firecrawl: {
-    label: 'Firecrawl', kind: 'adapter', remote: true,
+    label: 'Firecrawl', kind: 'adapter', remote: true, optIn: true,
     endpoint: 'https://api.firecrawl.dev/v2/scrape', homepage: 'https://www.firecrawl.dev',
     access: { keyless: true, apiKey: { credentialRef: 'FIRECRAWL_API_KEY' }, account: false },
     options: {
@@ -68,7 +68,7 @@ export const CATALOG = {
     },
   },
   tavily: {
-    label: 'Tavily', kind: 'adapter', remote: true,
+    label: 'Tavily', kind: 'adapter', remote: true, optIn: true,
     endpoint: 'https://api.tavily.com/extract', homepage: 'https://www.tavily.com',
     access: { keyless: true, apiKey: { credentialRef: 'TAVILY_API_KEY' }, account: false },
     options: {
@@ -78,7 +78,7 @@ export const CATALOG = {
     },
   },
   tinyfish: {
-    label: 'Tinyfish', kind: 'adapter', remote: true,
+    label: 'Tinyfish', kind: 'adapter', remote: true, optIn: true,
     endpoint: 'https://api.fetch.tinyfish.ai', homepage: 'https://www.tinyfish.ai',
     // No documented anonymous fetch route: personal key only.
     access: { keyless: false, apiKey: { credentialRef: 'TINYFISH_API_KEY' }, account: false },

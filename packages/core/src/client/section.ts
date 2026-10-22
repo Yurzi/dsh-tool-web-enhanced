@@ -79,6 +79,12 @@ export interface ConnectionSection {
   readonly Options?: ComponentType<{ readonly sessionId: string }>
   /** Open the plugin's row settings page; undefined while the Plugins page is unavailable. */
   readonly settings: ObservableSnapshot<(() => void) | undefined>
+  /**
+   * Whether every remote service of the capability's catalog (catalog `optIn`)
+   * is off in the current row settings; the panel then says more services can
+   * be turned on in settings. False while the settings are unread or invalid.
+   */
+  readonly remoteServicesOff: ObservableSnapshot<boolean>
 }
 
 /** The browser service the ui package provides. */

@@ -11,8 +11,11 @@ import type { ResolvedSettings } from './settings/types.ts'
 const NOTICE_BUDGET = 2000
 const SAFETY_NOTICE = ' All other URL, DNS, redirect, and transport safety checks still apply.'
 
-/** Explain only the operator-authorized exceptions, retaining every other safety check. */
-export function allowlistNotice({ allowCidrs, allowHostnames }: AllowlistRules): string {
+/**
+ * Explain only the operator-authorized exceptions, retaining every other safety check.
+ * `subject` is who may reach them: `web_fetch` in the system prompt, `this provider` in list_web_fetch_providers.
+ */
+export function allowlistNotice({ allowCidrs, allowHostnames }: AllowlistRules, subject: string): string {
   if (allowCidrs.length === 0) return ''
   const cidrs = [...new Set(allowCidrs.map(rule => {
     const parsed = parseCidr(rule)
@@ -27,13 +30,13 @@ export function allowlistNotice({ allowCidrs, allowHostnames }: AllowlistRules):
   const scope = hostnames.length === 0
     ? ''
     : ` Only URLs whose hostname matches [${hostnames.join(', ')}] may use these exceptions.`
-  const full = `The operator has authorized web_fetch to reach non-public addresses within [${cidrs.join(', ')}].${scope}${SAFETY_NOTICE}`
+  const full = `The operator has authorized ${subject} to reach non-public addresses within [${cidrs.join(', ')}].${scope}${SAFETY_NOTICE}`
   if (full.length <= NOTICE_BUDGET) return full
 
   const hostnameScope = hostnames.length === 0
     ? ''
     : ' Only URLs whose hostname matches a configured hostname rule may use these exceptions.'
-  const summary = `The operator has authorized web_fetch exceptions described by ${cidrs.length} CIDR ranges and ${hostnames.length} hostname rules; see the fetch settings page for the complete allowlist.`
+  const summary = `The operator has authorized ${subject} exceptions described by ${cidrs.length} CIDR ranges and ${hostnames.length} hostname rules; see the fetch settings page for the complete allowlist.`
     + ` Non-public addresses must match a configured CIDR.${hostnameScope}${SAFETY_NOTICE}`
   const exampleBudget = NOTICE_BUDGET - summary.length
   const cidrExamples = ruleExamples('CIDR', cidrs, hostnames.length === 0 ? exampleBudget : Math.floor(exampleBudget / 2))
@@ -65,7 +68,7 @@ export function registerAllowlistNotice(ctx: Context, runtime: CapabilityRuntime
         if (plan === undefined || plan.kind !== 'ready') return ''
         const connection = settings().connections.get(plan.connectionId)
         if (!isSelectable(connection) || connection.kind !== 'local') return ''
-        return allowlistNotice(connection.options)
+        return allowlistNotice(connection.options, 'web_fetch')
       },
     })
   })

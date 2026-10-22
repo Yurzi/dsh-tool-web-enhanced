@@ -14,6 +14,7 @@ export const ServicesSection = createServicesSection<FetchSettings, CatalogKey, 
   label: catalogLabel, optionCopy, notes: SERVICE_NOTES, summaries: { local: 'access.local' }, extras: { local: localExtras },
   keys: {
     'services.title': 'services.title',
+    'services.optInNotice': 'services.optInNotice',
     'options.hint': 'options.hint',
     'options.keylessMore': 'options.keylessMore',
     'options.invalid': 'options.invalid',

@@ -14,14 +14,14 @@ function expectReset(config: unknown, field: string): void {
 }
 
 describe('fetch unified settings resolution', () => {
-  it('resolves common defaults with all catalog connections enabled without mutating input', () => {
+  it('resolves common defaults with remote services off without mutating input', () => {
     const document = Object.freeze({})
     const settings = resolveSettings(document)
     expect(document).toEqual({})
     expect(settings).toMatchObject({ version: CURRENT_SETTINGS_VERSION, defaultConnection: DEFAULT_CONNECTION, defaults: {}, showSelector: true })
     expect([...settings.connections.keys()]).toEqual(Object.keys(CATALOG).map(key => 'builtin:' + key))
     expect(settings.connections.get('builtin:local')).toEqual({ id: 'builtin:local', label: 'Local HTTP', kind: 'local', disabled: false, remote: false, access: 'keyless', trustedEndpoint: false, options: DEFAULT_LOCAL_SETTINGS })
-    expect(settings.connections.get('builtin:deepseek-fetch-api')).toEqual({ id: 'builtin:deepseek-fetch-api', label: 'DeepSeek Fetch API', kind: 'native', native: 'deepseek-fetch-api', disabled: false, remote: true, access: 'api-key', trustedEndpoint: false, credentialRef: 'DEEPSEEK_API_KEY', endpoint: CATALOG['deepseek-fetch-api'].endpoint, options: {} })
+    expect(settings.connections.get('builtin:deepseek-fetch-api')).toEqual({ id: 'builtin:deepseek-fetch-api', label: 'DeepSeek Fetch API', kind: 'native', native: 'deepseek-fetch-api', disabled: true, remote: true, access: 'api-key', trustedEndpoint: false, credentialRef: 'DEEPSEEK_API_KEY', endpoint: CATALOG['deepseek-fetch-api'].endpoint, options: {} })
   })
 
   it.each([true, false])('preserves showSelector %s with empty capability defaults', showSelector => {

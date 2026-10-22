@@ -3,6 +3,14 @@ import { describe, expect, it } from 'vitest'
 import { en, zh } from '../src/client/locales.ts'
 
 const copy = {
+  // docs/design.md, "远程服务缺省停用" and "开关与同意": verbatim.
+  'services.optInNotice': ['远程服务默认关闭。', 'Remote services are off by default.'],
+  'enhanced.title': ['增强工具', 'Enhanced tools'],
+  'services.off': ['未启用', 'Off'],
+  'write.unavailable': ['该连接未启用或已移除。', "That connection is turned off or was removed."],
+  'status.disabled': ['{name} 未在设置中启用。', '{name} is turned off in settings.'],
+  'enhanced.description': ['让 Agent 用 web_search_enhanced 在已启用的服务中自行选择本次搜索用哪个，并用 list_web_search_providers 查看可选项。只影响之后新建的会话。', 'Lets the Agent pick which enabled service runs a search with web_search_enhanced, and see the choices with list_web_search_providers. Applies to conversations started afterwards.'],
+  'enhanced.consent': ['打开即表示同意：Agent 选用某个服务时，查询会发送给该服务。', 'Turning this on means you agree that when the Agent picks a service, the query is sent to that service.'],
   'source.session': ['本会话', 'This conversation'],
   'source.inherited': ['来自父会话', 'Parent conversation'],
   'source.model': ['该模型上次的选择', "Model's last choice"],

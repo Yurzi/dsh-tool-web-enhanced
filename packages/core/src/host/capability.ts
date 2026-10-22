@@ -2,11 +2,14 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { z } from 'zod'
 import type { ConnectionView, PluginIdentity, SelectionChange } from '../shared/index.ts'
+import type { CapabilityEnhanced } from './enhanced.ts'
 import type { ConnectionBase } from './selectable.ts'
 
 /** The settings facts used by the selection mechanism; capabilities retain all other fields. */
 export interface CapabilitySettings<C extends ConnectionBase = ConnectionBase> {
   readonly defaultConnection: string
+  /** The operator's enhanced-tools switch; with a confirmed route it decides whether the two tools are registered. */
+  readonly enhancedTools: boolean
   readonly connections: ReadonlyMap<string, C>
 }
 export type ConnectionOf<S extends CapabilitySettings> = S['connections'] extends ReadonlyMap<string, infer C extends ConnectionBase> ? C : never
@@ -58,4 +61,6 @@ export interface Capability<S extends CapabilitySettings, O extends Record<strin
   execute(target: T, request: Q, call: CapabilityCall): Promise<R>
   /** Register exactly one native Web provider and bind its lifetime to ctx. */
   register(ctx: Context, invoke: CapabilityInvoke<Q, R>): void
+  /** The capability's part of its two enhanced tools; core decides when they are registered and for whom they are masked. */
+  readonly enhanced: CapabilityEnhanced<S, O, Q, R>
 }

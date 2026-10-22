@@ -14,7 +14,7 @@ export interface RemoteFetchResponse {
 }
 
 /** A fake remote service that only listens on loopback and retains the complete wire request. */
-export async function startRemoteFetchApi(initialResponse: RemoteFetchResponse) {
+export async function startRemoteFetchApi(initialResponse: RemoteFetchResponse | ((request: RemoteFetchRequest) => RemoteFetchResponse | Promise<RemoteFetchResponse>)) {
   const requests: RemoteFetchRequest[] = []
   let reply = initialResponse
   const server = createServer((request, response) => {
@@ -28,10 +28,11 @@ export async function startRemoteFetchApi(initialResponse: RemoteFetchResponse) 
     const chunks: Buffer[] = []
     request.on('data', (chunk: Buffer) => { chunks.push(chunk) })
     request.on('error', (error) => { response.destroy(error) })
-    request.on('end', () => {
+    request.on('end', async () => {
       received.body = Buffer.concat(chunks).toString('utf8')
-      response.writeHead(reply.status, reply.headers)
-      response.end(reply.body)
+      const result = typeof reply === 'function' ? await reply(received) : reply
+      response.writeHead(result.status, result.headers)
+      response.end(result.body)
     })
   })
   await new Promise<void>((resolve, reject) => {

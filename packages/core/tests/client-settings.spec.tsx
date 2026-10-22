@@ -6,14 +6,14 @@ import { createSettingsParts } from '../src/client/settings/parts.tsx'
 import { createDefaultsSection } from '../src/client/settings/DefaultsSection.tsx'
 import { createRouteNotice } from '../src/client/settings/RouteNotice.tsx'
 import { createOptionsEditor } from '../src/client/settings/OptionsEditor.tsx'
-import { createSparseSettings } from '../src/client/settings/sparse.ts'
+import { createSparseSettings, type SettingsLayers } from '../src/client/settings/sparse.ts'
 import type { OptionField } from '../src/client/settings/fields.ts'
 import { createServicesSection, type ExtraEditorProps, type ServicesCopyKey } from '../src/client/settings/ServicesSection.tsx'
 import { createCredentialEditor, type CredentialCopyKey } from '../src/client/settings/CredentialEditor.tsx'
 import { createCustomConnectionsSection, type CustomCopyKey } from '../src/client/settings/CustomConnections.tsx'
 import type { ModelCopyKey, ModelFormats } from '../src/client/settings/ConnectionEditor.tsx'
 import type { SettingsCatalog } from '../src/client/settings/model.ts'
-import { applyOps } from '../src/client/settings/parts.tsx'
+import { applyOps, type WriteSettings } from '../src/client/settings/parts.tsx'
 import { effectiveDocument, useSettingsDocument } from '../src/client/settings/document.ts'
 import type { SettingsDocumentSnapshot } from '../src/client/settings/secret-diagnostics.ts'
 import { resolveDocument } from '../src/shared/settings.ts'
@@ -25,6 +25,8 @@ const t = (key: string, params: Record<string, string | number> = {}) => key + (
 const parts = createSettingsParts<string>({ classes: { section: 'consumer-section' }, keys: { refused: 'fetch.refused', invalid: 'fetch.invalid', failed: 'fetch.failed' } })
 const sparse = createSparseSettings({ version: 2, fields: ['version', 'defaultConnection', 'connections'] })
 afterEach(cleanup)
+/** The operations a write submits; a change computed from layers sees the given ones. */
+const recorded = (change: Parameters<WriteSettings>[0], layers: SettingsLayers = {}) => [...(typeof change === 'function' ? change(layers) : change)]
 
 describe('settings skeleton with consumer copy and styles', () => {
   it('renders a capability default and its custom controls without a core dictionary', () => {
@@ -99,21 +101,21 @@ describe('settings skeleton with consumer copy and styles', () => {
 
 const TEST_CATALOG = {
   box: {
-    label: 'Box', kind: 'local', remote: false, access: { keyless: true, apiKey: false, account: false },
+    label: 'Box', kind: 'local', remote: false, optIn: false, access: { keyless: true, apiKey: false, account: false },
     options: { agent: { kind: 'text', pattern: /^.*$/u }, limit: { kind: 'integer', min: 0, max: 9 }, hosts: { kind: 'list', pattern: /^.*$/u, max: 5 } },
   },
   session: {
-    label: 'Session', kind: 'model', remote: true, access: { keyless: false, apiKey: false, account: false },
+    label: 'Session', kind: 'model', remote: true, optIn: false, access: { keyless: false, apiKey: false, account: false },
     options: { maxTokens: { kind: 'integer', min: 1, max: 100 }, domains: { kind: 'list', pattern: /^[a-z.]+$/u, max: 2 }, blocked: { kind: 'list', pattern: /^[a-z.]+$/u, max: 2 } },
     exclusive: [['domains', 'blocked']],
   },
   gate: {
-    label: 'Gate', kind: 'native', remote: true, endpoint: 'https://gate.example/v1',
+    label: 'Gate', kind: 'native', remote: true, optIn: false, endpoint: 'https://gate.example/v1',
     access: { keyless: false, apiKey: { credentialRef: 'GATE_KEY' }, account: true },
     options: { baseURL: { kind: 'url' } },
   },
   reader: {
-    label: 'Reader', kind: 'adapter', remote: true, endpoint: 'https://reader.example/read',
+    label: 'Reader', kind: 'adapter', remote: true, optIn: false, endpoint: 'https://reader.example/read',
     access: { keyless: true, apiKey: { credentialRef: 'READER_KEY' }, account: false },
     options: { depth: { kind: 'enum', values: ['basic', 'deep'], keyless: ['basic'] }, age: { kind: 'integer', min: 0, max: 9, keyless: false }, cache: { kind: 'boolean' } },
   },
@@ -147,8 +149,8 @@ const resolveTest = (document: unknown) => resolveDocument({ catalog: TEST_CATAL
 
 function mountServices(user: TestSettings = { version: 2 }, base: TestSettings = {}) {
   const writes: SettingsPathOpView[][] = []
-  const write = async (ops: readonly SettingsPathOpView[]) => { writes.push([...ops]); return true }
   const layers = { base, user }
+  const write: WriteSettings = async change => { writes.push(recorded(change, layers)); return true }
   render(<Services doc={{ config: effectiveDocument(layers), layers, revision: 3, editable: true }} write={write} credentials={{}} saveCredential={async () => {}} t={t} />)
   const configure = (name: string) => { fireEvent.click(screen.getByRole('button', { name: 'services.configureLabel: ' + name })) }
   /** The effective document after the writes so far, checked by the shared grammar. */
@@ -326,7 +328,7 @@ describe('catalog-driven services section', () => {
         setSnapshot({ status: 'ready', value: user, base: {}, user, revision, writable: true })
         return true
       }
-      const { view, write } = useSettingsDocument(snapshot, resolveTest, mutate)
+      const { view, write } = useSettingsDocument(snapshot, () => ({ status: 'ready', value: user, base: {}, user, revision, writable: true }), resolveTest, mutate)
       if (view?.kind !== 'ready') throw new Error('test settings are invalid')
       return <Services doc={{ config: view.config, layers: view.layers, revision: snapshot.revision!, editable: true }} write={write} credentials={{}} saveCredential={async () => {}} t={t} />
     }
@@ -434,7 +436,7 @@ describe('catalog-driven custom connections', () => {
     const Section = custom(catalog, protocols)
     const writes: SettingsPathOpView[][] = []
     const keys: [string, string][] = []
-    render(<Section doc={{ config: user, layers: { user }, revision: 4, editable: true }} write={async ops => { writes.push([...ops]); return true }}
+    render(<Section doc={{ config: user, layers: { user }, revision: 4, editable: true }} write={async ops => { writes.push(recorded(ops, { user })); return true }}
       credentials={{}} saveCredential={async (ref, value) => { keys.push([ref, value]) }} t={t} />)
     return { writes, keys }
   }
@@ -455,10 +457,19 @@ describe('catalog-driven custom connections', () => {
     const Section = custom(TEST_CATALOG)
     const user = { version: 2, defaultConnection: 'builtin:reader', connections: { 'custom:mine': { kind: 'adapter', adapter: 'reader', label: 'Mine', credentialRef: 'MINE_KEY' } } }
     const writes: SettingsPathOpView[][] = []
-    render(<Section doc={{ config: user, layers: { user }, revision: 4, editable: true }} write={async ops => { writes.push([...ops]); return true }} credentials={{}} saveCredential={async () => {}} t={t} />)
+    render(<Section doc={{ config: user, layers: { user }, revision: 4, editable: true }} write={async ops => { writes.push(recorded(ops)); return true }} credentials={{}} saveCredential={async () => {}} t={t} />)
     fireEvent.click(screen.getByRole('button', { name: 'custom.remove' }))
     fireEvent.click(screen.getAllByRole('button', { name: 'custom.remove' }).at(-1)!)
     await waitFor(() => { expect(writes).toEqual([[{ op: 'unset', path: ['connections'] }]]) })
+  })
+
+  it('shows a custom label written over several lines on one line, in the list and the editor, and toggles without touching it', async () => {
+    const h = mountCustom(TEST_CATALOG, { version: 2, connections: { 'custom:team': { kind: 'adapter', adapter: 'reader', label: 'Team\r\nReader', credentialRef: 'TEAM_KEY' } } })
+    expect(screen.getByText('Team Reader')).toBeDefined()
+    fireEvent.click(screen.getByRole('switch', { name: 'services.enable: Team Reader' }))
+    await waitFor(() => { expect(h.writes).toEqual([[{ op: 'set', path: ['connections', 'custom:team', 'disabled'], value: true }]]) })
+    fireEvent.click(screen.getByRole('button', { name: 'custom.edit' }))
+    expect(screen.getByLabelText('editor.label')).toHaveProperty('value', 'Team Reader')
   })
 
   it('says which service and which address receive the queries of a custom connection', () => {
@@ -475,7 +486,7 @@ describe('catalog-driven custom connections', () => {
   it('asks for trust again when the endpoint changes after it was confirmed', async () => {
     const Section = custom(TEST_CATALOG)
     const writes: SettingsPathOpView[][] = []
-    render(<Section doc={{ config: { version: 2 }, layers: { user: { version: 2 } }, revision: 4, editable: true }} write={async ops => { writes.push([...ops]); return true }}
+    render(<Section doc={{ config: { version: 2 }, layers: { user: { version: 2 } }, revision: 4, editable: true }} write={async ops => { writes.push(recorded(ops)); return true }}
       credentials={{}} saveCredential={async () => {}} t={t} />)
     fireEvent.click(screen.getByText('custom.addStructured'))
     fireEvent.change(screen.getByLabelText('editor.label'), { target: { value: 'Team' } })
@@ -502,7 +513,7 @@ describe('catalog-driven custom connections', () => {
     const connection = { kind: 'adapter', adapter: 'reader', label: 'Team', credentialRef: 'TEAM_KEY', endpoint: 'https://a.example/read', trustedEndpoint: true }
     const user = { version: 2, connections: { 'custom:team': connection } }
     const writes: SettingsPathOpView[][] = []
-    render(<Section doc={{ config: user, layers: { user }, revision: 4, editable: true }} write={async ops => { writes.push([...ops]); return true }} credentials={{}} saveCredential={async () => {}} t={t} />)
+    render(<Section doc={{ config: user, layers: { user }, revision: 4, editable: true }} write={async ops => { writes.push(recorded(ops)); return true }} credentials={{}} saveCredential={async () => {}} t={t} />)
     fireEvent.click(screen.getByRole('button', { name: 'custom.edit' }))
     expect(screen.getByRole('checkbox')).toHaveProperty('checked', true)
     fireEvent.change(screen.getByLabelText('editor.label'), { target: { value: 'Team 2' } })
@@ -525,7 +536,7 @@ describe('catalog-driven custom connections', () => {
     const Section = custom(TEST_CATALOG)
     const user = { version: 2, defaultConnection: 'custom:mine', connections: { 'custom:mine': { kind: 'adapter', adapter: 'reader', label: 'Mine', credentialRef: 'MINE_KEY' } } }
     const writes: SettingsPathOpView[][] = []
-    render(<Section doc={{ config: user, layers: { user }, revision: 4, editable: true }} write={async ops => { writes.push([...ops]); return true }} credentials={{}} saveCredential={async () => {}} t={t} />)
+    render(<Section doc={{ config: user, layers: { user }, revision: 4, editable: true }} write={async ops => { writes.push(recorded(ops)); return true }} credentials={{}} saveCredential={async () => {}} t={t} />)
     expect(screen.getByText('custom.addStructured')).toBeDefined()
     fireEvent.click(screen.getByRole('button', { name: 'custom.remove' }))
     fireEvent.click(screen.getAllByRole('button', { name: 'custom.remove' }).at(-1)!)
@@ -637,7 +648,7 @@ describe('catalog-driven custom connections', () => {
     const Section = custom(TEST_CATALOG)
     const writes: SettingsPathOpView[][] = []
     const keys: [string, string][] = []
-    render(<Section doc={{ config: { version: 2 }, layers: { user: { version: 2 } }, revision: 4, editable: true }} write={async ops => { writes.push([...ops]); return true }}
+    render(<Section doc={{ config: { version: 2 }, layers: { user: { version: 2 } }, revision: 4, editable: true }} write={async ops => { writes.push(recorded(ops)); return true }}
       credentials={{}} saveCredential={async (ref, value) => { keys.push([ref, value]) }} t={t} />)
     fireEvent.click(screen.getByText('custom.addStructured'))
     expect(screen.getByRole('button', { name: 'editor.adapter' }).textContent).toContain('Reader')

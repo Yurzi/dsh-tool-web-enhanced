@@ -1,6 +1,6 @@
 {
   "name": "dsh-web-fetch-enhanced",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "web_fetch provider for DeepSeek Harness with switchable fetch connections: local fetching with optional private-network access, the DeepSeek Fetch API, or remote reading services (Exa, Firecrawl, Tavily, Tinyfish); installed through dsh-tool-web-enhanced-profile",
   "keywords": [
     "deepseek-harness",
@@ -71,6 +71,7 @@
     "@deepseek-ai/dsh-settings": ">=0.2.1-rc.2 <0.3.0-0",
     "@deepseek-ai/dsh-storage-domain": ">=0.2.1-rc.2 <0.3.0-0",
     "@deepseek-ai/dsh-system-prompt": ">=0.2.1-rc.2 <0.3.0-0",
+    "@deepseek-ai/dsh-tool-web": ">=0.2.1-rc.2 <0.3.0-0",
     "@deepseek-ai/dsh-tools": ">=0.2.1-rc.2 <0.3.0-0",
     "@deepseek-ai/dsh-typert-protocol": ">=0.2.1-rc.2 <0.3.0-0",
     "@deepseek-ai/dsh-web": ">=0.2.1-rc.2 <0.3.0-0",
@@ -105,6 +106,7 @@
     "@deepseek-ai/dsh-settings": "catalog:",
     "@deepseek-ai/dsh-storage-domain": "catalog:",
     "@deepseek-ai/dsh-system-prompt": "catalog:",
+    "@deepseek-ai/dsh-tool-web": "catalog:",
     "@deepseek-ai/dsh-tools": "catalog:",
     "@deepseek-ai/dsh-typert-protocol": "catalog:",
     "@deepseek-ai/dsh-web": "catalog:",

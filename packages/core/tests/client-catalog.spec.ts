@@ -4,16 +4,16 @@ import { adapterKeys, builtinAccess, catalogFields, connectionChoices, connectio
 
 const CATALOG = {
   local: {
-    label: 'Local', kind: 'local', remote: false, access: { keyless: true, apiKey: false, account: false },
+    label: 'Local', kind: 'local', remote: false, optIn: false, access: { keyless: true, apiKey: false, account: false },
     options: { allow: { kind: 'list', pattern: /^.*$/u, max: 10 }, limit: { kind: 'integer', min: 0, max: 10 } },
   },
   native: {
-    label: 'Native', kind: 'native', remote: true, endpoint: 'https://api.example/v1',
+    label: 'Native', kind: 'native', remote: true, optIn: false, endpoint: 'https://api.example/v1',
     access: { keyless: false, apiKey: { credentialRef: 'NATIVE_KEY' }, account: true },
     options: { baseURL: { kind: 'url' } },
   },
   reader: {
-    label: 'Reader', kind: 'adapter', remote: true, endpoint: 'https://reader.example/read',
+    label: 'Reader', kind: 'adapter', remote: true, optIn: false, endpoint: 'https://reader.example/read',
     access: { keyless: true, apiKey: { credentialRef: 'READER_KEY' }, account: false },
     options: {
       depth: { kind: 'enum', values: ['basic', 'deep', 'max'], keyless: ['basic'] },
@@ -135,7 +135,7 @@ describe('catalog-driven settings facts', () => {
   })
 
   it('gives an entry without an access route of its own no access to configure', () => {
-    const session = { label: 'Session', kind: 'model', remote: true, access: { keyless: false, apiKey: false, account: false }, options: {} } as const
+    const session = { label: 'Session', kind: 'model', remote: true, optIn: false, access: { keyless: false, apiKey: false, account: false }, options: {} } as const
     expect(builtinAccess(session, {})).toBe('none')
     expect(builtinAccess(CATALOG.native, {})).toBe('api-key')
     expect(builtinAccess(CATALOG.reader, {})).toBe('keyless')

@@ -6,6 +6,14 @@ import { SERVICE_NOTES } from '../src/client/settings/model.ts'
 import { ADAPTER_KEYS } from '../src/catalog.ts'
 
 const copy = {
+  // docs/design.md, "远程服务缺省停用" and "开关与同意": verbatim.
+  'services.optInNotice': ['远程服务默认关闭。', 'Remote services are off by default.'],
+  'enhanced.title': ['增强工具', 'Enhanced tools'],
+  'services.off': ['未启用', 'Off'],
+  'write.unavailable': ['该连接未启用或已移除。', "That connection is turned off or was removed."],
+  'status.disabled': ['{name} 未在设置中启用。', '{name} is turned off in settings.'],
+  'enhanced.description': ['让 Agent 用 web_fetch_enhanced 在已启用的服务中自行选择本次获取用哪个，并用 list_web_fetch_providers 查看可选项。只影响之后新建的会话。', 'Lets the Agent pick which enabled service fetches a URL with web_fetch_enhanced, and see the choices with list_web_fetch_providers. Applies to conversations started afterwards.'],
+  'enhanced.consent': ['打开即表示同意：Agent 选用某个服务时，URL 会发送给该服务。', 'Turning this on means you agree that when the Agent picks a service, the URL is sent to that service.'],
   'services.keyless': ['无需密钥', 'No key needed'],
   'selector.offRow': ['关闭', 'Off'],
   'settings.intro': ['每个会话通过地球按钮或 /setup-fetch 选择网页获取连接。本页设置默认连接及各连接的参数。状态点只反映配置，不代表服务可用性。', 'Each conversation chooses a fetch connection with the globe button or /setup-fetch. Set the default and each connection below. Status dots show configuration only, not service health.'],
@@ -37,7 +45,11 @@ describe('fetch browser copy', () => {
       const placeholders = (value: string) => [...value.matchAll(/[{]([^}]+)[}]/gu)].map(match => match[1]!).toSorted()
       expect(placeholders(zh[key]), key).toEqual(placeholders(en[key]))
     }
-    for (const dictionary of [zh, en]) expect(Object.values(dictionary).join(' ')).not.toMatch(/web_search|web_fetch|profile|配置包|抓取/)
+    // Only the Enhanced tools copy names tools: the two it turns on (docs/design.md, "开关与同意").
+    const text = (dictionary: Record<LocaleKey, string>) => Object.entries(dictionary)
+      .map(([key, value]) => key.startsWith('enhanced.') ? value.replaceAll(/web_fetch_enhanced|list_web_fetch_providers/gu, '') : value)
+      .join(' ')
+    for (const dictionary of [zh, en]) expect(text(dictionary)).not.toMatch(/web_search|web_fetch|profile|配置包|抓取/)
   })
   it.each([
     ['zh', '增强网页获取', '用你选择的网页获取连接提供 web_fetch：本机获取（可选内网放行规则）、DeepSeek Fetch API，或远程读取服务（Exa、Firecrawl、Tavily、Tinyfish）。'],

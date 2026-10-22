@@ -40,7 +40,7 @@ export interface App {
  * Launch Chromium, open the launch URL, and dismiss the dialogs a fresh home shows.
  * @param url - the one-time launch URL from `startWeb`.
  */
-export async function openApp(url: string, contextOptions: BrowserContextOptions = {}): Promise<App> {
+export async function openApp(url: string, contextOptions: BrowserContextOptions = {}, activation: 'dismiss' | 'keep' = 'dismiss'): Promise<App> {
   if (chromiumPath === undefined) throw new Error('no Chromium found; set DSH_E2E_CHROMIUM')
   // Chromium's SingletonSocket must fit Linux's 108-byte Unix-socket path limit, which
   // any directory of a checkout under a long path (GitHub's /home/runner/work/<repo>/<repo>)
@@ -63,18 +63,23 @@ export async function openApp(url: string, contextOptions: BrowserContextOptions
     const errors: string[] = []
     page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()) })
     page.on('pageerror', (error) => { errors.push(error.message) })
-    await page.addLocatorHandler(page.getByRole('dialog', { name: 'Preview Notice' }), async (dialog) => {
-      await dialog.getByRole('button', { name: 'Continue' }).click()
+    const onboarding = contextOptions.locale === 'zh-CN'
+      ? { preview: '预览版说明', continue: '继续', later: '稍后配置' }
+      : { preview: 'Preview Notice', continue: 'Continue', later: 'Configure later' }
+    await page.addLocatorHandler(page.getByRole('dialog', { name: onboarding.preview, exact: true }), async (dialog) => {
+      await dialog.getByRole('button', { name: onboarding.continue, exact: true }).click()
     })
-    await page.addLocatorHandler(page.getByRole('button', { name: 'Configure later' }), async (button) => { await button.click() })
+    await page.addLocatorHandler(page.getByRole('button', { name: onboarding.later, exact: true }), async (button) => { await button.click() })
     const welcome = contextOptions.locale === 'zh-CN' ? { title: '开始使用', close: '关闭' } : { title: 'Get started', close: 'Close' }
     // DSH may open its sign-in dialog late, under an open connections menu: dismiss it without a pointer hit test.
     await page.addLocatorHandler(page.getByRole('dialog', { name: welcome.title, exact: true }), async (dialog) => {
       await dialog.getByRole('button', { name: welcome.close, exact: true }).dispatchEvent('click')
     })
-    await page.addLocatorHandler(page.getByRole('dialog', { name: copy['activation.title'] }), async (dialog) => {
-      await dialog.getByRole('button', { name: copy['activation.later'], exact: true }).click()
-    })
+    if (activation === 'dismiss') {
+      await page.addLocatorHandler(page.getByRole('dialog', { name: copy['activation.title'] }), async (dialog) => {
+        await dialog.getByRole('button', { name: copy['activation.later'], exact: true }).click()
+      })
+    }
     await page.goto(url)
     return {
       browser,

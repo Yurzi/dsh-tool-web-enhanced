@@ -8,6 +8,7 @@ export interface SearchSettings {
   version?: typeof CURRENT_CONFIG_VERSION
   defaultConnection?: string
   showSelector?: boolean
+  enhancedTools?: boolean
   defaults?: { freshness?: Freshness }
   connections?: Record<string, BuiltinOverride | CustomConnection>
 }

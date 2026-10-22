@@ -9,6 +9,7 @@ import { contract, type SearchConnectionView } from '../contract.ts'
 import { executeSearch, type SearchTarget } from '../search/execute.ts'
 import type { ResolvedSettings } from '../settings/resolve.ts'
 import { createSearchSeat } from '../seat.ts'
+import { searchEnhanced } from '../tools/index.ts'
 import { describeConnections } from './connections.ts'
 import { optionsCodec, type SearchOptions } from './options.ts'
 import type {} from './remote.ts'
@@ -43,6 +44,7 @@ export function searchCapability(ctx: Context, settings: () => ResolvedSettings)
       return executeSearch(target, request, { onDiagnostic, credential: ref => resolveApiKey(ctx, ref) }, call.signal)
     },
     register: (scope, invoke) => { scope.web.registerSearchProvider(createSearchSeat(SEARCH.providerId, () => ({ id: SEARCH.providerId, available: () => true, search: invoke }))) },
+    enhanced: searchEnhanced(ctx),
   }
 }
 

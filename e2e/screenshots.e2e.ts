@@ -27,7 +27,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Screenshot matr
 
   beforeAll(async () => {
     try {
-      server = await startWeb(e2e)
+      server = await startWeb(e2e, [join(import.meta.dirname, 'fixtures/remote-enabled.yml')])
       app = await openApp(server.url)
       // Settle DSH's asynchronous first-run dialogs before opening a transient account menu.
       await openBundle(app.page)

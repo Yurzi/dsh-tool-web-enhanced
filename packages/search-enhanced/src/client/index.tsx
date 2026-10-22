@@ -7,7 +7,9 @@ import type {} from '@deepseek-ai/dsh-client-ui-commands/client'
 import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import { SEARCH, PROFILE_PACKAGE, WEB_ROW, rowConfigKey } from 'dsh-tool-web-enhanced-core/shared'
 import { contract } from '../contract.ts'
-import { withRetiredSecretDiagnostics } from 'dsh-tool-web-enhanced-core/client'
+import { remoteServicesOffSource, withRetiredSecretDiagnostics } from 'dsh-tool-web-enhanced-core/client'
+import { CATALOG } from '../catalog.ts'
+import { resolveSettings } from '../settings/resolve.ts'
 import { RETIRED_FIELDS } from '../settings/retired.ts'
 import type { SearchSettings } from '../settings/types.ts'
 import { searchCommand } from './command.ts'
@@ -58,6 +60,7 @@ export async function apply(ctx: Context): Promise<void> {
     const selection = new SearchSelectionStore(remote, () => { pairings.invalidate() })
     const page: SettingsPageInjected = {
       hooks: { settings, credentials: credentials.source, route: route.source, pairings: pairings.source },
+      readSettings: () => settings.getSnapshot(),
       async mutate(ops, revision) {
         return settings.mutate(ops, revision)
       },
@@ -74,7 +77,7 @@ export async function apply(ctx: Context): Promise<void> {
     scope.effect(() => scope.configForms.whileServed([SEARCH.rowId], () => scope.slots.inject('plugins.row.config', () => scope.slots.register({
       name: 'plugins.row.config', key: rowConfigKey(SEARCH), locale: NS, inject: () => page,
     }, SettingsPage))), 'search: settings page')
-    const section = searchSection(selection, navigation, t)
+    const section = searchSection(selection, navigation, remoteServicesOffSource(settings, CATALOG, resolveSettings), t)
     scope.inject(['webConnections'], ui => {
       ui.effect(() => ui.webConnections.registerRoute('search', route), 'search: route facts')
       ui.effect(() => {

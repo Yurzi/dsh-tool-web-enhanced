@@ -1,7 +1,7 @@
-export { FETCH, PROFILE_PACKAGE, SEARCH, UI, rowConfigKey, type PluginIdentity, type RowIdentity } from './ids.ts'
+export { FETCH, PROFILE_PACKAGE, SEARCH, UI, rowConfigKey, type EnhancedToolNames, type PluginIdentity, type RowIdentity } from './ids.ts'
 export {
-  BUILTIN_PREFIX, CREDENTIAL_REF, CUSTOM_CONNECTION_ID, CUSTOM_PREFIX, TEXT_MAX_LENGTH,
-  builtinId, builtinKey, defaultAccess, isBuiltinId, isCustomId, validateOptions,
+  BUILTIN_CONNECTION_ID, BUILTIN_PREFIX, CREDENTIAL_REF, CUSTOM_CONNECTION_ID, CUSTOM_PREFIX, TEXT_MAX_LENGTH,
+  builtinId, builtinKey, defaultAccess, isBuiltinId, isConnectionId, isCustomId, validateOptions,
   type Access, type AccessFacts, type AccessMode, type BackendKind, type ConnectionId, type Descriptor, type OptionRule, type ProtocolDescriptor,
 } from './connections.ts'
 export { WEB_ENV, WEB_FIELD, WEB_ROW, isRouted, routeOf, type Route } from './route.ts'

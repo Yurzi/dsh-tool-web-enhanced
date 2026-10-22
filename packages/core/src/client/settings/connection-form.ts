@@ -4,6 +4,7 @@
  * destination.
  */
 import { CREDENTIAL_REF, CUSTOM_CONNECTION_ID, CUSTOM_PREFIX, type ProtocolDescriptor } from '../../shared/connections.ts'
+import { singleLine } from '../../shared/settings.ts'
 import { isEndpoint } from '../../shared/url.ts'
 import { applyFields, conflictOf, fieldText, isValidText, type FieldTexts, type OptionField } from './fields.ts'
 import { adapterKeys, catalogEntry, catalogFields, type AdapterKeyOf, type CustomConnection, type OptionCopyTable, type SettingsCatalog } from './model.ts'
@@ -64,7 +65,7 @@ export function formatKey(format: Format): string {
 export function formOf<A extends string, P extends string>(id: string, connection: CustomConnection<A, P>): ConnectionForm<A, P> {
   const options = connection.options === undefined ? {} : connection.options
   const fields: FormFields = {
-    id, label: connection.label, credentialRef: connection.credentialRef,
+    id, label: singleLine(connection.label), credentialRef: connection.credentialRef,
     endpoint: connection.endpoint === undefined ? '' : connection.endpoint,
     options: Object.fromEntries(Object.entries(options).map(([name, value]) => [name, fieldText(value)])),
   }
@@ -130,7 +131,7 @@ export function createConnectionForm<T extends SettingsCatalog, K extends string
 
   function buildConnection(input: Form, consent: boolean, taken: readonly string[], previous?: CustomConnection<A, P>): BuildResult<A, P> {
     const fail = (error: FormError): BuildResult<A, P> => ({ ok: false, error })
-    const form: Form = { ...input, id: input.id.trim(), label: input.label.trim(), credentialRef: input.credentialRef.trim(), endpoint: input.endpoint.trim() }
+    const form: Form = { ...input, id: input.id.trim(), label: singleLine(input.label), credentialRef: input.credentialRef.trim(), endpoint: input.endpoint.trim() }
     if (!CUSTOM_CONNECTION_ID.test(form.id)) return fail('id')
     if (taken.includes(form.id)) return fail('duplicate')
     if (form.label === '' || form.label.length > 200) return fail('label')

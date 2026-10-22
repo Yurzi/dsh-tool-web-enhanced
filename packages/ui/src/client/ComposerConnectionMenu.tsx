@@ -11,6 +11,7 @@ import { createPortal } from 'react-dom'
 import {
   IconCheckOutlineRegular,
   IconChevronDownOutlineRegular,
+  IconChevronRightOutlineRegular,
   IconGlobeOutlineRegular,
   IconSettingsOutlineRegular,
   IconWarningOutlineRegular,
@@ -527,6 +528,7 @@ function SectionPanel({
 }) {
   const state = useObservable(section.selection.source(sessionId))
   const settingsFn = useObservable(section.settings)
+  const remoteServicesOff = useObservable(section.remoteServicesOff)
   const bodyRef = useRef<HTMLDivElement | null>(null)
 
   const view = state.view
@@ -542,6 +544,8 @@ function SectionPanel({
   // A failed read leaves no current source to name.
   const source = view !== undefined && state.readFailure === undefined ? section.sourceText(view) : ''
   const summaryId = panelId + '-summary'
+  // Connections turned off in settings are not offered; the Session's own choice stays, so its check and warning have a row.
+  const listed = view === undefined ? [] : view.connections.filter(conn => conn.status !== 'disabled' || conn.id === view.selection.connectionId)
 
   return (
     <div
@@ -627,7 +631,7 @@ function SectionPanel({
                 </span>
               </button>
 
-              {view.connections.map(conn => {
+              {listed.map(conn => {
                 const text = section.describe(conn)
                 const isSelected = conn.id === view.selection.connectionId
                 const isReady = conn.status === 'ready'
@@ -673,7 +677,7 @@ function SectionPanel({
               })}
             </div>
 
-            {view.connections.length === 0 && <div className={css.empty}>{t('menu.empty')}</div>}
+            {listed.length === 0 && <div className={css.empty}>{t('menu.empty')}</div>}
 
             {section.Options && (
               <div className={css.optionsWrapper}>
@@ -683,6 +687,27 @@ function SectionPanel({
           </>
         )}
       </div>
+
+      {/* Outside the scrolling list, so it stays at the panel's foot. */}
+      {remoteServicesOff && (
+        <div className={css.panelFooter}>
+          {settingsFn === undefined ? (
+            <span className={css.footerText}>{t('menu.moreServices')}</span>
+          ) : (
+            <button
+              type="button"
+              className={css.footerAction}
+              onClick={() => {
+                onCloseMenu()
+                settingsFn()
+              }}
+            >
+              <span>{t('menu.moreServices')}</span>
+              <IconChevronRightOutlineRegular size={12} className={css.footerIcon} aria-hidden="true" />
+            </button>
+          )}
+        </div>
+      )}
     </div>
   )
 }

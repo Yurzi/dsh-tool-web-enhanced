@@ -18,6 +18,7 @@ export function selectionDomain(name: string) {
   return defineDomain({ name, version: 1, tables: {
     selections: domainTable<string, StoredSelection>(selection),
     pairings: domainTable<string, z.output<typeof pairing>>(pairing),
+    provider_lists: domainTable<string, string[]>(z.array(z.string())),
   } })
 }
 export type SelectionDomain = Domain<ReturnType<typeof selectionDomain>>
@@ -59,8 +60,21 @@ export function openDomain(ctx: Context, name: string, unavailable = () => capab
 /** Couples persistent option encoding to the domain, without retaining any global state. */
 export class SessionStorage<O extends Record<string, unknown>, S> implements DomainAccess {
   private readonly access: DomainAccess
+  private readonly queues = new Map<string, Promise<void>>()
   constructor(ctx: Context, name: string, readonly optionsCodec: OptionsCodec<O, S>, unavailable?: () => WebError) {
     this.access = openDomain(ctx, name, unavailable)
   }
   domain(): Promise<SelectionDomain> { return this.access.domain() }
+
+  exclusive<T>(id: string, work: () => Promise<T>): Promise<T> {
+    const previous = this.queues.get(id)
+    const run = previous === undefined ? work() : previous.then(work)
+    // Callers retain the rejection; only the queue tail settles to admit later work.
+    const tail = run.then(() => {}, () => {})
+    this.queues.set(id, tail)
+    void tail.then(() => { if (this.queues.get(id) === tail) this.queues.delete(id) })
+    return run
+  }
+
+  settled(id: string): Promise<void> | undefined { return this.queues.get(id) }
 }

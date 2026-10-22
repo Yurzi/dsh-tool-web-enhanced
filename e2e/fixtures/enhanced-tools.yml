@@ -1,0 +1,7 @@
+# Both capabilities opt into enhanced tools before creating a conversation.
+- id: web-search-enhanced
+  config:
+    enhancedTools: true
+- id: web-fetch-enhanced
+  config:
+    enhancedTools: true

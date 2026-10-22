@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { FETCH, PROFILE_PACKAGE, rowConfigKey } from 'dsh-tool-web-enhanced-core/shared'
+import { FETCH, PROFILE_PACKAGE, SEARCH, rowConfigKey } from 'dsh-tool-web-enhanced-core/shared'
 import { parse, stringify } from 'yaml'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest'
 import { en as fetchText, zh as fetchZh } from '../packages/fetch-enhanced/src/client/locales.ts'
@@ -7,11 +7,10 @@ import { en as searchText } from '../packages/search-enhanced/src/client/locales
 import { zh as uiZh } from '../packages/ui/src/client/locales.ts'
 import { firecrawlResponse } from './fixtures/remote-fetch.ts'
 import { type App, browserRequired, chromiumPath, openApp, recordBrowserFailure } from './harness/browser.ts'
-import { addPlugins, composedRows, profilePatchPath } from './harness/environment.ts'
+import { isolatedContext, addPlugins, composedRows, profilePatchPath } from './harness/environment.ts'
 import { openConnectionTab, newSession, openBundle, openConnections, openFetchSettings } from './harness/navigation.ts'
 import { startRemoteFetchApi } from './harness/remote-fetch-api.ts'
 import { expectTheme, setTheme, type ThemePreference } from './harness/theme.ts'
-import { upgradeEnvironment } from './harness/upgrade.ts'
 import { type WebServer, startWeb } from './harness/web.ts'
 
 const base = inject('e2e')
@@ -25,7 +24,7 @@ const viewport = { width: 1280, height: 1100 }
 const draftRef = 'REVIEW_DRAFT_FETCH_KEY'
 
 describe.skipIf(chromiumPath === undefined && !browserRequired)('UI review settings and Chinese screenshots', () => {
-  let e2e: ReturnType<typeof upgradeEnvironment>
+  let e2e: ReturnType<typeof isolatedContext>
   let app: App | undefined
   let server: WebServer | undefined
   let api: Awaited<ReturnType<typeof startRemoteFetchApi>>
@@ -39,7 +38,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('UI review setti
   beforeEach(() => {
     // Native workspace/draft restoration is outside this visual matrix. Give
     // every restart its own home, matching the model screenshot specifications.
-    e2e = upgradeEnvironment(base)
+    e2e = isolatedContext(base)
     const { [PROFILE_PACKAGE]: profile, ...plugins } = e2e.tarballs
     if (profile === undefined) throw new Error('the global setup did not pack the profile bundle')
     addPlugins(e2e, [profile], plugins)
@@ -47,22 +46,25 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('UI review setti
     savedPatch = { path, content: existsSync(path) ? readFileSync(path, 'utf8') : '' }
     const original: unknown = savedPatch.content.trim() === '' ? [] : parse(savedPatch.content)
     if (!Array.isArray(original)) throw new Error('The public profile user patch must be a YAML list')
-    visualPatch = stringify([...original, { id: FETCH.rowId, config: {
-      version: 2,
-      defaultConnection: 'builtin:local',
-      connections: {
-        'custom:review-firecrawl': {
-          kind: 'adapter', adapter: 'firecrawl', label: 'Review Firecrawl',
-          endpoint: new URL('v2/scrape', api.url).href,
-          credentialRef: 'REVIEW_FIRECRAWL_KEY', trustedEndpoint: true,
+    visualPatch = stringify([...original,
+      { id: SEARCH.rowId, config: { connections: { 'builtin:firecrawl': { disabled: false } } } },
+      { id: FETCH.rowId, config: {
+        version: 2,
+        defaultConnection: 'builtin:local',
+        connections: {
+          'builtin:firecrawl': { disabled: false },
+          'custom:review-firecrawl': {
+            kind: 'adapter', adapter: 'firecrawl', label: 'Review Firecrawl',
+            endpoint: new URL('v2/scrape', api.url).href,
+            credentialRef: 'REVIEW_FIRECRAWL_KEY', trustedEndpoint: true,
+          },
+          'custom:review-tavily': {
+            kind: 'adapter', adapter: 'tavily', label: 'Review Tavily',
+            endpoint: new URL('extract', api.url).href,
+            credentialRef: 'REVIEW_TAVILY_KEY', trustedEndpoint: true,
+          },
         },
-        'custom:review-tavily': {
-          kind: 'adapter', adapter: 'tavily', label: 'Review Tavily',
-          endpoint: new URL('extract', api.url).href,
-          credentialRef: 'REVIEW_TAVILY_KEY', trustedEndpoint: true,
-        },
-      },
-    } }])
+      } }])
   })
 
   async function reopenWithLocale(locale: 'en-US' | 'zh-CN') {

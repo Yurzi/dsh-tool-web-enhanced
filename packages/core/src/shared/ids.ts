@@ -16,22 +16,37 @@ export interface RowIdentity {
   readonly rowId: string
 }
 
+/**
+ * The two model-facing tools a capability registers while the operator has
+ * them turned on and the `web` row routes the capability to this plugin.
+ * Model-facing text calls a connection a "provider".
+ */
+export interface EnhancedToolNames {
+  /** Runs one request on a provider the Agent names. */
+  readonly action: string
+  /** Lists the providers the Agent may name in this conversation. */
+  readonly list: string
+}
+
 /** A row that serves one web capability. */
 export interface PluginIdentity extends RowIdentity {
   /** Provider id registered in `ctx.web`; the profile writes it into the `web` row. */
   readonly providerId: string
+  readonly tools: EnhancedToolNames
 }
 
 export const SEARCH: PluginIdentity = {
   packageName: 'dsh-web-search-enhanced',
   rowId: 'web-search-enhanced',
   providerId: 'search-enhanced',
+  tools: { action: 'web_search_enhanced', list: 'list_web_search_providers' },
 }
 
 export const FETCH: PluginIdentity = {
   packageName: 'dsh-web-fetch-enhanced',
   rowId: 'web-fetch-enhanced',
   providerId: 'fetch-enhanced',
+  tools: { action: 'web_fetch_enhanced', list: 'list_web_fetch_providers' },
 }
 
 /** The browser-only row holding the shared composer connection menu. */

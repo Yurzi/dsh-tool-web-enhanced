@@ -32,7 +32,10 @@ export function ActivationPrompt({ onDismiss, onOpenDetails, webConfigForm, nati
         </>
       }
     >
-      <p>{t(hasIssues ? 'activation.preflight' : 'activation.body')}</p>
+      {hasIssues ? <p>{t('activation.preflight')}</p> : <>
+        <p>{t('activation.body')}</p>
+        <p>{t('activation.remoteOff')}</p>
+      </>}
     </Modal>
   )
 }

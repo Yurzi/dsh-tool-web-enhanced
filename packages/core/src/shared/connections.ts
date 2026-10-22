@@ -18,6 +18,12 @@ export const CUSTOM_PREFIX = 'custom:'
 /** Operator-defined connection ids: `custom:` plus a short, readable name. */
 export const CUSTOM_CONNECTION_ID = /^custom:[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/u
 
+/** Catalog connection ids: `builtin:` plus a lower-case, hyphenated catalog key. */
+export const BUILTIN_CONNECTION_ID = /^builtin:[a-z0-9]{1,50}(?:-[a-z0-9]{1,50}){0,5}$/u
+
+/** Whether a string, such as an untrusted tool argument, has the grammar of a connection id; it may still name nothing. */
+export const isConnectionId = (value: string): value is ConnectionId => BUILTIN_CONNECTION_ID.test(value) || CUSTOM_CONNECTION_ID.test(value)
+
 /** A DSH Credentials reference, the only form a key is ever stored in. */
 export const CREDENTIAL_REF = /^[A-Za-z_][A-Za-z0-9_]*$/u
 
@@ -67,6 +73,10 @@ export interface Descriptor {
   readonly kind: BackendKind
   /** Whether the query or URL leaves this machine for a third-party service; only drives explanatory text. */
   readonly remote: boolean
+  /** A remote service the operator must turn on: the built-in connection starts disabled (docs/design.md, "连接与目录"). */
+  readonly optIn: boolean
+  /** Short English phrase on what the connection is for, shown to the Agent only where it changes the choice. */
+  readonly use?: string
   readonly access: AccessFacts
   readonly options: Readonly<Record<string, OptionRule>>
   /** Pairs of options at most one of which may be set. */
@@ -83,6 +93,8 @@ export type ExclusiveOptions = readonly [string, string]
  */
 export interface ProtocolDescriptor {
   readonly label: string
+  /** Same meaning as {@link Descriptor.use}, for custom connections of this protocol. */
+  readonly use?: string
   readonly options: Readonly<Record<string, OptionRule>>
   /** Pairs of options at most one of which may be set. */
   readonly exclusive?: readonly ExclusiveOptions[]

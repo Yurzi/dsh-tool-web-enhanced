@@ -36,7 +36,7 @@ export function createDefaultsSection<K extends string>({ parts: { Section, Sett
     const action = useWrite(t)
     const disabled = !doc.editable || action.busy
     const save = (path: string[], target: unknown, fallback?: unknown) => {
-      void action.run(() => write(sparse.sparseSettingOperations(doc.layers, path, target, fallback)))
+      void action.run(() => write(layers => sparse.sparseSettingOperations(layers, path, target, fallback)))
     }
     const missing = defaultConnection !== undefined && !choices.some(choice => choice.id === defaultConnection)
     const warning = missing ? t(keys.connectionMissing, { id: defaultConnection })

@@ -5,6 +5,7 @@ import type { SettingsPageInjected } from '../injected.ts'
 import type { NS, LocaleKey } from '../locales.ts'
 import { CustomConnectionsSection } from './CustomConnections.tsx'
 import { DefaultsSection } from './DefaultsSection.tsx'
+import { EnhancedToolsSection } from './EnhancedToolsSection.tsx'
 import { PairingsSection } from './PairingsSection.tsx'
 import { resolveSettings } from '../../settings/resolve.ts'
 import { settingsParts, type SettingsDoc } from './parts.tsx'
@@ -14,12 +15,12 @@ import css from './Settings.module.css'
 
 export type SettingsPageProps = PropsRuntime<'plugins.row.config'> & InjectFace<SettingsPageInjected> & PropsLocale<typeof NS>
 
-export function SettingsPage({ useSettings, useCredentials, useRoute, usePairings, mutate, saveCredential, forgetPairing, t }: SettingsPageProps) {
+export function SettingsPage({ useSettings, useCredentials, useRoute, usePairings, readSettings, mutate, saveCredential, forgetPairing, t }: SettingsPageProps) {
   const snapshot = useSettings(value => value)
   const credentials = useCredentials(value => value)
   const route = useRoute(value => value)
   const pairings = usePairings(value => value)
-  const { view, write, migrationError } = useSettingsDocument(snapshot, resolveSettings, mutate)
+  const { view, write, migrationError } = useSettingsDocument(snapshot, readSettings, resolveSettings, mutate)
   if (snapshot.status === 'unavailable') return null
   if (snapshot.value === undefined || snapshot.revision === undefined) {
     return <p className={css.status} role="status"><StateDot state="ongoing" />{t('settings.loading')}</p>
@@ -39,6 +40,7 @@ export function SettingsPage({ useSettings, useCredentials, useRoute, usePairing
     {migrationError === undefined ? null : <p className={css.warning} role="alert" title={migrationError}>{t('settings.invalid')}</p>}
     <RouteNotice route={route} t={t} />
     <DefaultsSection doc={doc} write={write} credentials={credentials} t={t} />
+    <EnhancedToolsSection doc={doc} write={write} t={t} />
     <ServicesSection doc={doc} write={write} credentials={credentials} saveCredential={saveCredential} t={t} />
     <CustomConnectionsSection doc={doc} write={write} credentials={credentials} saveCredential={saveCredential} t={t} />
     <PairingsSection pairingsState={pairings} config={doc.config} forgetPairing={forgetPairing} t={t} />

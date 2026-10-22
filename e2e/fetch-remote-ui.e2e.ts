@@ -8,19 +8,18 @@ import { afterAll, afterEach, beforeAll, describe, expect, inject, it } from 'vi
 import { en as fetchText } from '../packages/fetch-enhanced/src/client/locales.ts'
 import { firecrawlResponse, remoteFetchFixture } from './fixtures/remote-fetch.ts'
 import { type App, browserRequired, chromiumPath, openApp, recordBrowserFailure } from './harness/browser.ts'
-import { addPlugins, composedRows, enterIsolatedEnvironment } from './harness/environment.ts'
+import { isolatedContext, addPlugins, composedRows, enterIsolatedEnvironment } from './harness/environment.ts'
 import { bootHost } from './harness/host.ts'
 import { openConnectionTab, newSession, openConnections, openFetchSettings } from './harness/navigation.ts'
 import { startRemoteFetchApi } from './harness/remote-fetch-api.ts'
-import { upgradeEnvironment } from './harness/upgrade.ts'
 import { type WebServer, startWeb } from './harness/web.ts'
 
-const e2e = upgradeEnvironment(inject('e2e'))
+const e2e = isolatedContext(inject('e2e'))
 const require = createRequire(join(e2e.install, 'node_modules/@deepseek-ai/dsh/package.json'))
 const credentials = require('@deepseek-ai/dsh-credentials') as { credentialRef: typeof credentialRef }
 const tinyfishKey = credentials.credentialRef('TINYFISH_API_KEY')
 const customKey = credentials.credentialRef(remoteFetchFixture.credentialRef)
-const loopbackOverlay = join(import.meta.dirname, 'fixtures/fetch-allow-loopback.yml')
+const loopbackOverlay = join(import.meta.dirname, 'fixtures/fetch-remote-loopback.yml')
 const notice = 'authorized web_fetch to reach non-public addresses within [127.0.0.1/32]'
 const services = ['Exa', 'Firecrawl', 'Tavily', 'Tinyfish'] as const
 

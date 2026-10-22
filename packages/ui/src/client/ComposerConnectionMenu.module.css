@@ -346,6 +346,55 @@
   padding: 4px 12px;
 }
 
+/* A capability whose remote services are all off says where to turn more on. */
+.panelFooter {
+  flex: none;
+  padding: 4px 0;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+/* Without a settings entry the hint is only text. */
+.footerText {
+  display: block;
+  padding: 5px 12px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* The whole row opens settings, like the panel's rows. */
+.footerAction {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 28px;
+  padding: 4px 12px;
+  border: none;
+  border-radius: var(--dsw-radius-xs);
+  background: transparent;
+  color: var(--dsw-alias-link);
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.footerAction:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.footerAction:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1.5px var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+}
+
+.footerIcon {
+  flex: none;
+}
+
 .notices {
   flex: none;
   padding: 4px 0;

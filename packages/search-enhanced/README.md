@@ -8,7 +8,7 @@ row `web-search-enhanced` and selects its provider in the shared `web` row.
 | --- | --- |
 | Row id | `web-search-enhanced` |
 | Provider id in `ctx.web` | `search-enhanced` |
-| Model surface | DSH's own `web_search` (tool-web), unchanged |
+| Model surface | DSH's own `web_search` (tool-web), unchanged; with the row's Enhanced tools switch on, also `web_search_enhanced` and `list_web_search_providers` |
 | Per conversation | one connection or Off, from the composer menu or `/setup-search` |
 | Settings | row settings page on the Plugins page (`plugins.row.config`) |
 
@@ -23,6 +23,23 @@ OpenAlex and Semantic Scholar, plus custom adapter connections and fixed-model
 connections over Anthropic Messages, OpenAI Responses or OpenAI Chat
 Completions. Native connections keep the behaviour of DSH's own providers;
 only their error messages are restated.
+
+- **Remote services start off.** DeepSeek Search API, Exa, Firecrawl, Tavily,
+  Tinyfish, OpenAlex and Semantic Scholar must be turned on in the row
+  settings before a conversation can choose them; turning one on agrees that
+  queries go to it. DeepSeek Messages (the default) and the conversation model
+  stay on; custom connections are on when created. When every remote service
+  is off, the composer menu says more services can be turned on in settings.
+- **Enhanced tools (optional).** With the row's Enhanced tools switch on (off
+  by default; turning it on agrees that the query goes to the service the
+  Agent picks), the Agent also gets `web_search_enhanced` (`queries` plus a
+  required `provider`, a connection id) and `list_web_search_providers`. They
+  are registered only while the `web` row routes search to this plugin, and
+  only conversations started afterwards get them, limited to the connections
+  enabled when the conversation started. An explicit call never changes the
+  conversation's choice or model memory, is refused when the conversation
+  turned search off, and runs through the same execution layer; a backend
+  failure tells the Agent to pick another provider.
 
 - **Where the query goes.** Every connection sends the query to the service
   named in its label (a model connection: to the model's provider). Model
@@ -42,7 +59,7 @@ only their error messages are restated.
 For the catalog, model-search options, settings grammar and error behavior,
 see [Functional design](../../docs/design.md): [connections](../../docs/design.md#连接与目录),
 [session selection](../../docs/design.md#会话选择), [settings document](../../docs/design.md#配置文档),
-[model backend](../../docs/design.md#model-后端) and [errors](../../docs/design.md#错误与上游说明).
+[model backend](../../docs/design.md#model-后端), [enhanced tools](../../docs/design.md#增强工具) and [errors](../../docs/design.md#错误与上游说明).
 
 ## Upgrading from 0.1.x
 

@@ -12,10 +12,10 @@
  * existing install instead.
  */
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { join } from 'node:path'
-import { parse, parseDocument, type ScalarTag } from 'yaml'
+import { join, relative, sep } from 'node:path'
+import { parse, parseDocument, stringify, type ScalarTag } from 'yaml'
 import { pack, publishablePackages, repo } from '../../scripts/workspace.ts'
 
 /** Scratch space for runs, ignored by git. */
@@ -44,6 +44,18 @@ export interface E2EContext {
   readonly env: Record<string, string>
   /** Packed tarball of every publishable package, by package name. */
   readonly tarballs: Record<string, string>
+}
+
+/** Give one scenario its own homes and caches beneath the suite run. */
+export function isolatedContext(base: E2EContext): E2EContext {
+  const directory = mkdtempSync(join(run, 'isolated-'))
+  const env = { ...base.env }
+  for (const [name, value] of Object.entries(env)) {
+    if (value !== run && !value.startsWith(`${run}${sep}`)) continue
+    env[name] = join(directory, relative(run, value))
+    mkdirSync(env[name], { recursive: true, mode: 0o700 })
+  }
+  return { ...base, env }
 }
 
 declare module 'vitest' {
@@ -138,7 +150,7 @@ export function dsh(e2e: Pick<E2EContext, 'cli' | 'env'>, args: readonly string[
 }
 
 /** Directory of the isolated profile. */
-export const profileDir = (e2e: Pick<E2EContext, 'env'>) => join(e2e.env.DSH_HOME!, 'profiles', PROFILE)
+export const profileDir = (e2e: Pick<E2EContext, 'env'>, profileName = PROFILE) => join(e2e.env.DSH_HOME!, 'profiles', profileName)
 
 /**
  * Install packages into the isolated profile with the real plugin manager.
@@ -148,19 +160,27 @@ export const profileDir = (e2e: Pick<E2EContext, 'env'>) => join(e2e.env.DSH_HOM
  * @param e2e - the run's install and environment.
  * @param specs - install specs.
  * @param overrides - package name → tarball, written to the profile's pnpm-workspace.yaml.
+ * @param profileName - shipped template to create and install into (Web unless testing base).
  */
-export function addPlugins(e2e: Pick<E2EContext, 'cli' | 'env'>, specs: readonly string[], overrides: Record<string, string> = {}): void {
+export function addPlugins(e2e: Pick<E2EContext, 'cli' | 'env'>, specs: readonly string[], overrides: Record<string, string> = {}, profileName = PROFILE): void {
   // The first command against a profile creates it from the shipped template.
-  dsh(e2e, ['--profile', PROFILE, '--dump-config'])
+  dsh(e2e, ['--profile', profileName, '--dump-config'])
   if (Object.keys(overrides).length > 0) {
-    const file = join(profileDir(e2e), 'pnpm-workspace.yaml')
+    const file = join(profileDir(e2e, profileName), 'pnpm-workspace.yaml')
     const document = parseDocument(readFileSync(file, 'utf8'))
     for (const [name, tarball] of Object.entries(overrides)) document.setIn(['overrides', name], `file:${tarball}`)
     writeFileSync(file, String(document))
   }
   // `--profile` must precede the arguments forwarded to pnpm. The store lives
   // inside the run, and removing a package later needs the same `--store-dir`.
-  dsh(e2e, ['plugin', '--profile', PROFILE, 'add', ...specs, '--store-dir', join(run, 'pnpm-store'), '--ignore-scripts'])
+  dsh(e2e, ['plugin', '--profile', profileName, 'add', ...specs, '--store-dir', join(run, 'pnpm-store'), '--ignore-scripts'])
+}
+
+/** Initialize a true base-only custom profile through app-boot's public API. */
+export function createBaseProfile(e2e: E2EContext, name: string): void {
+  const require = createRequire(join(e2e.install, 'node_modules/@deepseek-ai/dsh/package.json'))
+  const app = require('@deepseek-ai/dsh-app-boot') as { initProfile(directory: string, bundles: readonly string[]): void; DEFAULT_PROFILE_BUNDLES: readonly string[] }
+  app.initProfile(profileDir(e2e, name), app.DEFAULT_PROFILE_BUNDLES)
 }
 
 /** One row of a composed entry list. */
@@ -194,6 +214,16 @@ export function composedRows(e2e: Pick<E2EContext, 'cli' | 'env'>, overlays: rea
 export function enterIsolatedEnvironment(env: Record<string, string>): void {
   for (const name of Object.keys(process.env)) if (!(name in env)) delete process.env[name]
   Object.assign(process.env, env)
+}
+
+/** Apply an explicit test fixture to the real writable layer, rather than a higher-priority CLI overlay. */
+export function installUserFixture(e2e: E2EContext, fixture: string): void {
+  const path = profilePatchPath(e2e)
+  const source = existsSync(path) ? readFileSync(path, 'utf8') : ''
+  const original: unknown = source.trim() === '' ? [] : parse(source)
+  const additions: unknown = parse(readFileSync(fixture, 'utf8'))
+  if (!Array.isArray(original) || !Array.isArray(additions)) throw new Error('Profile fixtures must be YAML patch lists')
+  writeFileSync(path, stringify([...original, ...additions]))
 }
 
 /** Resolve the user patch through DSH's public profile loader, never a guessed filename. */

@@ -22,11 +22,12 @@ import { scopeOf } from '@deepseek-ai/dsh-scope'
 import { SEARCH, selectionContract, type ConnectionView } from '../src/shared/index.ts'
 import type { WebSearchRequest, WebSearchResult } from '@deepseek-ai/dsh-web'
 import { afterEach, expect, it, vi } from 'vitest'
+import { inertEnhanced } from './fixtures/enhanced.ts'
 import { installCapability, Pairings, Sessions, SessionStorage, ToolRestriction, selectionDomain, routeFacts, type Capability, type OptionsCodec } from '../src/host/index.ts'
 
 const domainName = 'core_restriction'
 const searchDomain = selectionDomain(domainName)
-const initialSettings = () => ({ defaultConnection: 'builtin:test', connections: new Map([['builtin:test', { id: 'builtin:test', kind: 'native' as const, disabled: false }]]) })
+const initialSettings = () => ({ defaultConnection: 'builtin:test', enhancedTools: false, connections: new Map([['builtin:test', { id: 'builtin:test', kind: 'native' as const, disabled: false }]]) })
 type SettingsValue = ReturnType<typeof initialSettings>
 const optionsCodec: OptionsCodec<Record<string, never>, SettingsValue> = { initial: () => ({}), fromRecord: () => ({}), toRecord: () => ({}) }
 
@@ -39,6 +40,7 @@ function installFixture(ctx: Context, settings: () => SettingsValue = initialSet
     target: connection => connection.id,
     execute: async () => ({ sources: [], truncated: false }),
     register: (scope, search) => { scope.web.registerSearchProvider({ id: SEARCH.providerId, available: () => true, search }) },
+    enhanced: inertEnhanced(SEARCH.tools),
   }
   installCapability(ctx, capability)
 }

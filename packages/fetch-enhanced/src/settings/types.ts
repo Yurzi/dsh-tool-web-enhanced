@@ -18,6 +18,7 @@ export type CustomConnection = SharedCustomConnection<AdapterKey>
 export interface FetchSettings {
   version?: typeof CURRENT_CONFIG_VERSION
   showSelector?: boolean
+  enhancedTools?: boolean
   defaults?: Record<string, never>
   defaultConnection?: string
   connections?: Record<string, BuiltinOverride | CustomConnection>

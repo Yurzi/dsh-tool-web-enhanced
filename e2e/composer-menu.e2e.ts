@@ -8,14 +8,13 @@ import { en as uiText } from '../packages/ui/src/client/locales.ts'
 import { afterAll, afterEach, beforeAll, describe, expect, inject, it } from 'vitest'
 import { PROFILE_PACKAGE } from 'dsh-tool-web-enhanced-core/shared'
 import { type App, browserRequired, chromiumPath, openApp, recordBrowserFailure } from './harness/browser.ts'
-import { addPlugins, enterIsolatedEnvironment } from './harness/environment.ts'
-import { upgradeEnvironment } from './harness/upgrade.ts'
+import { isolatedContext, addPlugins, enterIsolatedEnvironment } from './harness/environment.ts'
 import { bootHost, type Host } from './harness/host.ts'
 import { connectionButton, connectionTabs, openConnectionTab, newSession, openConnections } from './harness/navigation.ts'
 import { type WebServer, startWeb } from './harness/web.ts'
 
 // Do not race other specs' persisted draft restoration when opening the workspace picker.
-const e2e = upgradeEnvironment(inject('e2e'))
+const e2e = isolatedContext(inject('e2e'))
 
 describe.skipIf(chromiumPath === undefined && !browserRequired)('Composer search selection', () => {
   let server: WebServer | undefined

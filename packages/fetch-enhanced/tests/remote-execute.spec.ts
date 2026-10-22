@@ -355,10 +355,16 @@ describe('fetch remote execution and bounded transport', () => {
     expect(diagnostic.stack).not.toContain('original private request stack')
   })
 
-  it('preserves contract errors but gives caller cancellation precedence', async () => {
-    const error = new WebError('WEB_PROVIDER_ERROR', 'safe contract error')
-    const backend = createRemoteBackend(connection('http://127.0.0.1:9'), { credential: async () => { throw error } })
-    await expect(backend.fetch(input)).rejects.toBe(error)
+  it('contains credential resolver WebErrors but gives caller cancellation precedence', async () => {
+    const error = new WebError('resolver secret-0123456789', 'WEB_PROVIDER_ERROR')
+    const onDiagnostic = vi.fn()
+    const backend = createRemoteBackend(connection('http://127.0.0.1:9'), { credential: async () => { throw error }, onDiagnostic })
+    const pending = backend.fetch(input)
+    await expect(pending).rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR', message: 'dsh-web-fetch-enhanced: fetch failed; check the connection settings or choose another connection' })
+    await expect(pending).rejects.not.toBe(error)
+    await expect(pending).rejects.not.toHaveProperty('cause')
+    expect(onDiagnostic).toHaveBeenCalledOnce()
+    expect(onDiagnostic.mock.calls[0]![0]).toMatchObject({ name: 'Error', message: 'Adapter credential resolution failed' })
     const controller = new AbortController()
     const cancelled = createRemoteBackend(connection('http://127.0.0.1:9'), { credential: async () => { controller.abort(); throw error } })
     await expect(cancelled.fetch(input, controller.signal)).rejects.toMatchObject({ code: 'WEB_ABORTED' })

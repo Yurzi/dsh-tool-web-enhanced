@@ -125,6 +125,7 @@ function mountPage({
     useCredentials: bindHook(credentials),
     useRoute: bindHook(route),
     usePairings: bindHook(pairings),
+    readSettings: () => settings.getSnapshot(),
     mutate,
     saveCredential,
     forgetPairing,
@@ -436,5 +437,42 @@ describe('fetch row settings', () => {
     h.configure(tZh('connection.local'))
     expect(input(h, 'allowlist.allowCidrs').disabled).toBe(true)
     expect(h.mutate).not.toHaveBeenCalled()
+  })
+})
+
+describe('remote services off by default and the Enhanced tools switch', () => {
+  const headings = (container: HTMLElement) => [...container.querySelectorAll('h4')].map(heading => heading.textContent)
+  const enabled = (row: HTMLElement) => row.querySelector('[role="switch"]')!.getAttribute('aria-checked')
+
+  it('places Enhanced tools right after the defaults and before the services', () => {
+    const { container } = mountPage()
+    const order = headings(container)
+    expect(order.indexOf(tZh('enhanced.title'))).toBe(order.indexOf(tZh('defaults.title')) + 1)
+    expect(order.indexOf(tZh('services.title'))).toBe(order.indexOf(tZh('enhanced.title')) + 1)
+    const section = [...container.querySelectorAll('h4')].find(heading => heading.textContent === tZh('enhanced.title'))!.closest('section')!
+    expect(section.textContent).toContain(tZh('enhanced.consent'))
+    expect(section.textContent).toContain(tZh('enhanced.description'))
+    expect(section.querySelector('[role="switch"]')!.getAttribute('aria-label')).toBe(tZh('enhanced.title'))
+  })
+
+  it('turns the enhanced tools on with one sparse write', async () => {
+    const { container, mutate } = mountPage()
+    const toggle = container.querySelector('[role="switch"][aria-label="' + tZh('enhanced.title') + '"]')
+    expect(toggle!.getAttribute('aria-checked')).toBe('false')
+    click(toggle)
+    await flush()
+    expect(mutate).toHaveBeenCalledWith([{ op: 'set', path: ['enhancedTools'], value: true }], 8)
+  })
+
+  it('shows remote services off until turned on, says so above the list, and turns one on with disabled: false', async () => {
+    const { container, mutate, row } = mountPage()
+    const services = [...container.querySelectorAll('h4')].find(heading => heading.textContent === tZh('services.title'))!.closest('section')!
+    expect(services.querySelector('p')!.textContent).toBe(tZh('services.optInNotice'))
+    expect(enabled(row('Exa'))).toBe('false')
+    expect(row('Exa').textContent).toContain(tZh('services.off'))
+    expect(enabled(row(tZh('connection.local')))).toBe('true')
+    click(row('Exa').querySelector('[role="switch"]'))
+    await flush()
+    expect(mutate).toHaveBeenCalledWith([{ op: 'set', path: ['connections', 'builtin:exa', 'disabled'], value: false }], 8)
   })
 })

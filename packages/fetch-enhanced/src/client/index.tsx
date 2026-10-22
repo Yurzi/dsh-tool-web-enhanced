@@ -9,7 +9,8 @@ import { FETCH, PROFILE_PACKAGE, WEB_ROW, rowConfigKey } from 'dsh-tool-web-enha
 import { contract } from '../contract.ts'
 import type { FetchSettings } from '../settings/types.ts'
 import { fetchCommand } from './command.ts'
-import { CredentialStatus, PairingsStatus, editableSettings } from 'dsh-tool-web-enhanced-core/client'
+import { CredentialStatus, PairingsStatus, editableSettings, remoteServicesOffSource } from 'dsh-tool-web-enhanced-core/client'
+import { CATALOG } from '../catalog.ts'
 import { resolveSettings } from '../settings/resolve.ts'
 import { credentialRefs } from './settings/model.ts'
 import type { SettingsPageInjected } from './injected.ts'
@@ -60,6 +61,7 @@ export async function apply(ctx: Context): Promise<void> {
     const selection = new FetchSelectionStore(remote, () => { pairings.invalidate() })
     const page: SettingsPageInjected = {
       hooks: { settings, credentials: credentials.source, route: route.source, pairings: pairings.source },
+      readSettings: () => settings.getSnapshot(),
       async mutate(ops, revision) {
         return settings.mutate(ops, revision)
       },
@@ -76,7 +78,7 @@ export async function apply(ctx: Context): Promise<void> {
     scope.effect(() => scope.configForms.whileServed([FETCH.rowId], () => scope.slots.inject('plugins.row.config', () => scope.slots.register({
       name: 'plugins.row.config', key: rowConfigKey(FETCH), locale: NS, inject: () => page,
     }, SettingsPage))), 'fetch: settings page')
-    const section = fetchSection(selection, navigation, t)
+    const section = fetchSection(selection, navigation, remoteServicesOffSource(settings, CATALOG, resolveSettings), t)
     scope.inject(['webConnections'], ui => {
       ui.effect(() => ui.webConnections.registerRoute('fetch', route), 'fetch: route facts')
       ui.effect(() => {

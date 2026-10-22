@@ -9,7 +9,7 @@ import { applyOps } from '../src/client/settings/parts.tsx'
 import type { SettingsDocumentSnapshot } from '../src/client/settings/secret-diagnostics.ts'
 
 const migrations: SettingsMigrations = { currentVersion: 3, steps: new Map([[2, document => ({ ...document, showSelector: false })]]) }
-const resolve = (document: unknown) => resolveDocument({ document, migrations, catalog: { local: { kind: 'local', label: 'Local', remote: false, access: { keyless: true, apiKey: false, account: false }, options: {} } }, defaults: { schema: z.strictObject({}), defaultConnection: 'builtin:local' }, capabilityLabel: 'test' })
+const resolve = (document: unknown) => resolveDocument({ document, migrations, catalog: { local: { kind: 'local', label: 'Local', remote: false, optIn: false, access: { keyless: true, apiKey: false, account: false }, options: {} } }, defaults: { schema: z.strictObject({}), defaultConnection: 'builtin:local' }, capabilityLabel: 'test' })
 const snapshot = (user: Record<string, unknown>, writable = true): SettingsDocumentSnapshot<Record<string, unknown>> => ({ status: 'ready', value: user, base: {}, user, revision: 7, writable })
 afterEach(cleanup)
 
@@ -19,7 +19,7 @@ describe('actual client future migration writeback', () => {
     const writes: { operations: SettingsPathOpView[]; revision: number }[] = []
     const mutate = async (operations: SettingsPathOpView[], revision: number) => { writes.push({ operations, revision }); stored = applyOps(stored, operations); return true }
     const source = snapshot(user)
-    const { result, rerender } = renderHook(props => useSettingsDocument(props.source, resolve, mutate, migrations), { initialProps: { source } })
+    const { result, rerender } = renderHook(props => useSettingsDocument(props.source, () => props.source, resolve, mutate, migrations), { initialProps: { source } })
     await waitFor(() => { expect(writes).toHaveLength(1) })
     expect(writes[0]?.revision).toBe(7)
     expect(stored).toEqual({ version: 3, showSelector: false })
@@ -35,7 +35,7 @@ describe('actual client future migration writeback', () => {
   it('does not persist read-only or invalid migrations', () => {
     const writes: unknown[] = []
     const mutate = async (...args: unknown[]) => { writes.push(args); return true }
-    const { result, rerender } = renderHook(({ source }) => useSettingsDocument(source, resolve, mutate, migrations), { initialProps: { source: snapshot({}, false) } })
+    const { result, rerender } = renderHook(({ source }) => useSettingsDocument(source, () => source, resolve, mutate, migrations), { initialProps: { source: snapshot({}, false) } })
     expect(result.current.view).toMatchObject({ kind: 'ready', config: { version: 3 }, needsWriteback: false })
     rerender({ source: snapshot({ version: 4 }) })
     expect(result.current.view).toMatchObject({ kind: 'invalid', needsWriteback: false })
@@ -47,7 +47,10 @@ describe('actual client future migration writeback', () => {
   it('surfaces writeback failure and does not retry the same revision', async () => {
     let attempts = 0
     const mutate = async () => { attempts += 1; throw new Error('revision conflict') }
-    const { result, rerender } = renderHook(() => useSettingsDocument(snapshot({}), resolve, mutate, migrations))
+    const { result, rerender } = renderHook(() => {
+      const source = snapshot({})
+      return useSettingsDocument(source, () => source, resolve, mutate, migrations)
+    })
     await waitFor(() => { expect(result.current.migrationError).toBe('revision conflict') })
     rerender()
     expect(attempts).toBe(1)

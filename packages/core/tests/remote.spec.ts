@@ -57,7 +57,7 @@ async function host(options: {
     return () => { uploadResolvers.delete(resolver) }
   } } as never)
   const controller = new SessionController(ctx, { nativeOpen: false })
-  const settings = { defaultConnection: 'builtin:local', connections: new Map([
+  const settings = { defaultConnection: 'builtin:local', enhancedTools: false, connections: new Map([
     ['builtin:local', { id: 'builtin:local', kind: 'local' as const, disabled: false }],
   ]) }
   const codec: OptionsCodec<Record<string, never>, typeof settings> = {

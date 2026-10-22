@@ -145,7 +145,7 @@ describe('live configuration and public route data', () => {
 
   it('exposes current and reset-only retired volatile fields and accepts an omitted version', () => {
     const config = plugin.Config({})
-    expect(Object.keys(config).toSorted()).toEqual(['connections', 'defaultConnection', 'defaults', 'showSelector', 'version', ...RETIRED_FIELDS].toSorted())
+    expect(Object.keys(config).toSorted()).toEqual(['connections', 'defaultConnection', 'defaults', 'enhancedTools', 'showSelector', 'version', ...RETIRED_FIELDS].toSorted())
     for (const field of Object.values(config)) expect(field.get()).toBeUndefined()
     expect(() => plugin.resolveSettings({})).not.toThrow()
   })

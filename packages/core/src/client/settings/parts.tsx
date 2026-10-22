@@ -34,10 +34,19 @@ export interface SettingsDoc<S = unknown> {
 }
 
 /**
- * Submit operations fenced by a revision (default: the one the page shows);
- * resolves whether the Host accepted them. No operations is a no-op success.
+ * Operations computed from the layers they will apply to: the page runs it
+ * once the writes before it have settled, on the document they left.
  */
-export type WriteSettings = (ops: readonly SettingsPathOpView[], revision?: number) => Promise<boolean>
+export type SettingsChange = (layers: SettingsLayers) => readonly SettingsPathOpView[]
+
+/**
+ * Submit a change after the page's earlier writes; resolves whether the Host
+ * accepted it. Operations are fenced by a revision (default: the one the page
+ * shows), so a form that edited what it displayed is refused once that changed;
+ * a {@link SettingsChange} is fenced by the revision it was computed on. No
+ * operations is a no-op success.
+ */
+export type WriteSettings = (change: readonly SettingsPathOpView[] | SettingsChange, revision?: number) => Promise<boolean>
 
 /** A local schema failure whose diagnostic stays out of the translated message. */
 export class SettingsValidationError extends Error {}
@@ -56,11 +65,12 @@ export function createSettingsParts<K extends string>({ classes: css, keys }: {
   classes: SettingsClasses
   keys: Readonly<Record<'refused' | 'invalid' | 'failed', K>>
 }) {
-  function Section({ title, actions, children }: { title: string; actions?: ReactNode; children: ReactNode }) {
+  /** `titleId` lets a control inside name itself by the section title. */
+  function Section({ title, titleId, actions, children }: { title: string; titleId?: string | undefined; actions?: ReactNode; children: ReactNode }) {
     return (
       <section className={css.section}>
         <div className={css.sectionHead}>
-          <h4 className={css.sectionTitle}>{title}</h4>
+          <h4 id={titleId} className={css.sectionTitle}>{title}</h4>
           {actions}
         </div>
         {children}

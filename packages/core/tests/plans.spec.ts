@@ -15,13 +15,14 @@ import { z } from 'zod'
 import { afterEach, expect, it } from 'vitest'
 import { SEARCH, selectionContract, type ConnectionView } from '../src/shared/index.ts'
 import { installCapability, type Capability, type OptionsCodec } from '../src/host/index.ts'
+import { inertEnhanced } from './fixtures/enhanced.ts'
 
 const cleanups: Array<() => Promise<unknown>> = []
 afterEach(async () => { for (const cleanup of cleanups.splice(0).toReversed()) await cleanup() })
 
 type Options = { flavor: string }
 type Connection = { id: string; kind: 'adapter'; disabled: boolean; parameter: string }
-const initial = () => ({ defaultConnection: 'builtin:first', flavor: 'initial', connections: new Map<string, Connection>([
+const initial = () => ({ defaultConnection: 'builtin:first', enhancedTools: false, flavor: 'initial', connections: new Map<string, Connection>([
   ['builtin:first', { id: 'builtin:first', kind: 'adapter', disabled: false, parameter: 'initial' }],
   ['builtin:second', { id: 'builtin:second', kind: 'adapter', disabled: false, parameter: 'other' }],
 ]) })
@@ -56,6 +57,7 @@ async function host(disabled = false) {
     target: (connection, options) => ({ connectionId: connection.id, parameter: connection.parameter, flavor: options.flavor }),
     execute: async target => { calls.push(target); return { sources: [], truncated: false } },
     register: (scope, search) => { scope.web.registerSearchProvider({ id: SEARCH.providerId, available: () => true, search }) },
+    enhanced: inertEnhanced(SEARCH.tools),
   }
   await ctx.plugin({ inject: ['web'], apply: (scope: Context) => { installCapability(scope, capability) } })
   const handle = await ctx.agents.create({ sessionId: SessionId('one') })

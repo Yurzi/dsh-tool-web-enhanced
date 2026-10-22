@@ -9,7 +9,7 @@ for (const [name, resolve, defaults] of [['custom-enabled', resolveTestSettings,
   describe(name + ' shared settings document grammar', () => {
     it('uses the same resolved document fields and common connection fields', () => {
       const result = resolve({ version: 2, showSelector: false })
-      expect(Object.keys(result).toSorted()).toEqual(['connections', 'defaultConnection', 'defaults', 'showSelector', 'version'])
+      expect(Object.keys(result).toSorted()).toEqual(['connections', 'defaultConnection', 'defaults', 'enhancedTools', 'showSelector', 'version'])
       expect(result).toMatchObject({ version: 2, showSelector: false, defaults })
       for (const connection of result.connections.values()) {
         expect(connection).toMatchObject({ id: expect.any(String), label: expect.any(String), disabled: false, remote: expect.any(Boolean), kind: expect.any(String), access: expect.any(String), trustedEndpoint: false, options: expect.any(Object) })
@@ -144,7 +144,7 @@ describe('option rules', () => {
   it('checks exclusive options of catalog entries and of custom model protocols in the document', () => {
     const list = { kind: 'list', pattern: /^[a-z.]+$/u, max: 5 } as const
     const options = { allow: list, block: list }
-    const catalog = { follow: { label: 'Follow', kind: 'model', remote: true, access: { keyless: false, apiKey: false, account: false }, options, exclusive: [['allow', 'block']] } } as const
+    const catalog = { follow: { label: 'Follow', kind: 'model', remote: true, optIn: false, access: { keyless: false, apiKey: false, account: false }, options, exclusive: [['allow', 'block']] } } as const
     const protocols = { strict: { label: 'Strict', options, exclusive: [['allow', 'block']] }, loose: { label: 'Loose', options } } as const
     const resolve = (connections: Record<string, unknown>) => resolveDocument({ catalog, protocols, document: { connections }, defaults: { schema: z.strictObject({}), defaultConnection: 'builtin:follow' }, capabilityLabel: 'test' })
     const both = { allow: ['a.example'], block: ['b.example'] }

@@ -6,12 +6,11 @@ import { FETCH, PROFILE_PACKAGE } from 'dsh-tool-web-enhanced-core/shared'
 import { stringify } from 'yaml'
 import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest'
 import { customFetchDocument, firecrawlResponse, remoteFetchFixture } from './fixtures/remote-fetch.ts'
-import { addPlugins, artifacts, enterIsolatedEnvironment } from './harness/environment.ts'
+import { isolatedContext, addPlugins, artifacts, enterIsolatedEnvironment } from './harness/environment.ts'
 import { bootHost } from './harness/host.ts'
 import { startRemoteFetchApi } from './harness/remote-fetch-api.ts'
-import { upgradeEnvironment } from './harness/upgrade.ts'
 
-const e2e = upgradeEnvironment(inject('e2e'))
+const e2e = isolatedContext(inject('e2e'))
 const require = createRequire(join(e2e.install, 'node_modules/@deepseek-ai/dsh/package.json'))
 const key = (require('@deepseek-ai/dsh-credentials') as { credentialRef: typeof credentialRef }).credentialRef(remoteFetchFixture.credentialRef)
 

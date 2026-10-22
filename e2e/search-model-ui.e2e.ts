@@ -11,17 +11,16 @@ import { MODEL_PROTOCOLS } from '../packages/search-enhanced/src/catalog.ts'
 import { en as text, zh } from '../packages/search-enhanced/src/client/locales.ts'
 import { messagesAnswer, modelDocument, modelFixture, piAiFixture, piAiRows } from './fixtures/search-model.ts'
 import { type App, browserRequired, chromiumPath, openApp, recordBrowserFailure } from './harness/browser.ts'
-import { addPlugins, artifacts, composedRows, enterIsolatedEnvironment, profilePatchPath } from './harness/environment.ts'
+import { isolatedContext, addPlugins, artifacts, composedRows, enterIsolatedEnvironment, profilePatchPath } from './harness/environment.ts'
 import { bootHost } from './harness/host.ts'
 import { connectionButton, openConnectionTab, newSession, openBundle, openConnections, openSearchSettings } from './harness/navigation.ts'
 import { startModelApi } from './harness/model-api.ts'
 import { modelGroups, modelViewport } from './harness/model-visuals.ts'
 import { expectTheme, setTheme } from './harness/theme.ts'
-import { upgradeEnvironment } from './harness/upgrade.ts'
 import { type WebServer, startWeb } from './harness/web.ts'
 
 const base = inject('e2e')
-const e2e = upgradeEnvironment(base)
+const e2e = isolatedContext(base)
 const require = createRequire(join(e2e.install, 'node_modules/@deepseek-ai/dsh/package.json'))
 const credentials = require('@deepseek-ai/dsh-credentials') as { credentialRef: typeof credentialRef }
 const deepseekKey = credentials.credentialRef('DEEPSEEK_API_KEY')
@@ -200,7 +199,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Model search co
   it.each(matrix)('captures model settings, editor and menu at $width px in $scheme', async ({ width, scheme }) => {
     // Screenshots must not inherit native blank-session restoration/model preferences
     // from the functional cases. Each viewport has the same isolated declarative state.
-    const isolated = upgradeEnvironment(base)
+    const isolated = isolatedContext(base)
     const { [PROFILE_PACKAGE]: profile, ...plugins } = isolated.tarballs
     if (profile === undefined) throw new Error('the global setup did not pack the profile bundle')
     addPlugins(isolated, [profile], plugins)
@@ -256,7 +255,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Model search co
   it('shows a hand-written pi-ai session route as ready without making a model request', async () => {
     // Independent home: GUI checks its current conversation; cold persistence is
     // covered separately by the Host Remote, never the shell's sidebar restore.
-    const isolated = upgradeEnvironment(base)
+    const isolated = isolatedContext(base)
     const { [PROFILE_PACKAGE]: profile, ...plugins } = isolated.tarballs
     if (profile === undefined) throw new Error('the global setup did not pack the profile bundle')
     addPlugins(isolated, [profile], plugins)

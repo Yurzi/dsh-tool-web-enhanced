@@ -7,7 +7,7 @@ import { describe, freshnessLabel, sourceText, writeFailureText, type Translate 
 import type { SearchSelectionStore } from './selection.ts'
 import css from './Section.module.css'
 
-export function searchSection(selection: SearchSelectionStore, settings: ObservableSnapshot<(() => void) | undefined>, t: Translate): ConnectionSection {
+export function searchSection(selection: SearchSelectionStore, settings: ObservableSnapshot<(() => void) | undefined>, remoteServicesOff: ObservableSnapshot<boolean>, t: Translate): ConnectionSection {
   function Options({ sessionId }: { readonly sessionId: string }) {
     const state = useObservable(selection.source(sessionId))
     const [error, setError] = useState('')
@@ -38,7 +38,7 @@ export function searchSection(selection: SearchSelectionStore, settings: Observa
       error === '' ? null : createElement('p', { role: 'alert', className: css.error }, error))
   }
   return {
-    capability: 'search', order: 10, title: () => t('section.title'), selection, settings, Options,
+    capability: 'search', order: 10, title: () => t('section.title'), selection, settings, remoteServicesOff, Options,
     describe: connection => describe(connection, t),
     sourceText: view => sourceText(view, t),
     writeFailureText: error => writeFailureText(error, t),

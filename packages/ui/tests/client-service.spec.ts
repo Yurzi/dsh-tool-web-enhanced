@@ -22,6 +22,7 @@ function mockSection(capability: 'search' | 'fetch', order: number): ConnectionS
     sourceText: () => 'default',
     writeFailureText: err => err.message,
     settings: createSnapshotStore(undefined),
+    remoteServicesOff: createSnapshotStore(false),
   }
 }
 

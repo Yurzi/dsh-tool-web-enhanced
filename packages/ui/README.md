@@ -15,10 +15,16 @@ Provides the shared connection menu, activation prompt and profile overview
 without depending on either provider row:
 
 - **Composer button and menu**: one tab per running search or fetch plugin,
-  to pick a connection or Off for the conversation. The button collapses to
-  its globe together with DSH's model selector when the composer row is
-  short of room.
-- **Activation prompt**: shown once when the profile is enabled.
+  to pick a connection or Off for the conversation. A panel lists the
+  connections that are turned on (plus the conversation's own choice if it
+  was turned off since), and, when all of that capability's remote services
+  are off, a footer link saying more services can be turned on in settings.
+  The button collapses to its globe together with DSH's model selector when
+  the composer row is short of room. The Agent's enhanced-tool calls never
+  show up here.
+- **Activation prompt**: shown once when the profile is enabled; it also says
+  remote services are off by default, unless the upgrade check found a
+  problem, in which case it points to the overview instead.
 - **Bundle overview** on the profile's Plugins page: whether the `web` row
   routes each capability to this profile, whether a plugin row is disabled,
   and an upgrade check for 0.1.x leftovers.

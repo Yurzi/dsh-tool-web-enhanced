@@ -7,6 +7,7 @@ import { contract, type FetchConnectionView } from '../contract.ts'
 import { createLocalBackend } from '../local/backend.ts'
 import { createRemoteBackend } from '../remote/execute.ts'
 import { registerAllowlistNotice } from '../prompt.ts'
+import { fetchEnhanced } from '../tools/index.ts'
 import type { ResolvedSettings } from '../settings/types.ts'
 import { describeConnections } from './connections.ts'
 import { optionsCodec, type FetchOptions } from './options.ts'
@@ -35,6 +36,7 @@ export function fetchCapability(ctx: Context, settings: () => ResolvedSettings):
     register: (scope, invoke) => {
       scope.web.registerFetchProvider({ id: FETCH.providerId, available: () => true, fetch: invoke })
     },
+    enhanced: fetchEnhanced(ctx),
   }
 }
 

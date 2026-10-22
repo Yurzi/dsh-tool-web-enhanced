@@ -26,7 +26,7 @@ it('supports a capability with no session options and isolates its storage from 
   await ctx.plugin(Storage)
   await ctx.plugin(StorageJson, { root })
   await ctx.plugin(StorageDomain, { backend: 'json' })
-  const settings = { defaultConnection: 'builtin:local', connections: new Map([['builtin:local', { id: 'builtin:local', kind: 'local' as const, disabled: false }]]) }
+  const settings = { defaultConnection: 'builtin:local', enhancedTools: false, connections: new Map([['builtin:local', { id: 'builtin:local', kind: 'local' as const, disabled: false }]]) }
   const codec: OptionsCodec<Record<string, never>, typeof settings> = { initial: () => ({}), fromRecord: () => ({}), toRecord: () => ({}) }
   const sessions = (name: string) => {
     const storage = new SessionStorage(ctx, name, codec)

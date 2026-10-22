@@ -58,8 +58,8 @@ describe('settings appearance regressions', () => {
 
   it('marks missing native credentials warning, while keyless stays done and disabled stays idle', () => {
     const { container } = render(<>
-      <SearchServices doc={doc<SearchSettings>({ version: 2, connections: { 'builtin:exa': { disabled: true } } })} write={write} credentials={{ DEEPSEEK_API_KEY: 'missing', SEMANTIC_SCHOLAR_API_KEY: 'missing' }} saveCredential={saveCredential} t={searchT} />
-      <FetchServices doc={doc<FetchSettings>({ version: 2 })} write={write} credentials={{ DEEPSEEK_API_KEY: 'missing' }} saveCredential={saveCredential} t={fetchT} />
+      <SearchServices doc={doc<SearchSettings>({ version: 2, connections: { 'builtin:exa': { disabled: true }, 'builtin:deepseek-search-api': { disabled: false }, 'builtin:semanticscholar': { disabled: false } } })} write={write} credentials={{ DEEPSEEK_API_KEY: 'missing', SEMANTIC_SCHOLAR_API_KEY: 'missing' }} saveCredential={saveCredential} t={searchT} />
+      <FetchServices doc={doc<FetchSettings>({ version: 2, connections: { 'builtin:deepseek-fetch-api': { disabled: false } } })} write={write} credentials={{ DEEPSEEK_API_KEY: 'missing' }} saveCredential={saveCredential} t={fetchT} />
     </>)
     const row = (label: string) => [...container.querySelectorAll('li')].find(item => item.textContent?.includes(label))!
     for (const label of ['DeepSeek Messages', 'DeepSeek Search API', 'DeepSeek Fetch API', 'Semantic Scholar']) {
@@ -79,7 +79,7 @@ describe('settings appearance regressions', () => {
   })
 
   it('warns about the default native credentials and clears the warning when configured', () => {
-    const config = doc<FetchSettings>({ version: 2, defaultConnection: 'builtin:deepseek-fetch-api' })
+    const config = doc<FetchSettings>({ version: 2, defaultConnection: 'builtin:deepseek-fetch-api', connections: { 'builtin:deepseek-fetch-api': { disabled: false } } })
     const { rerender } = render(<FetchDefaults doc={config} write={write} credentials={{ DEEPSEEK_API_KEY: 'missing' }} t={fetchT} />)
     expect(screen.getByRole('status').textContent).toContain('Needs a DeepSeek account or API key')
     rerender(<FetchDefaults doc={config} write={write} credentials={{ DEEPSEEK_API_KEY: 'configured' }} t={fetchT} />)
@@ -123,6 +123,16 @@ describe('settings appearance regressions', () => {
     expect(rule(source, '.labels')).toContain('display: var(--dsh-composer-model-text-display, block)')
     expect(rule(source, '.iconMarks')).toContain('display: var(--dsh-composer-model-icon-display, none)')
     expect(source).not.toContain('@container')
+  })
+
+  it('draws the more-services hint as a row-wide link, and its plain text as secondary', () => {
+    const source = menuSource()
+    const action = rule(source, '.footerAction')
+    expect(action).toContain('color: var(--dsw-alias-link)')
+    expect(action).toContain('min-height: 28px')
+    expect(action).toContain('width: 100%')
+    expect(rule(source, '.footerAction:hover')).toContain('background: var(--dsw-alias-interactive-bg-hover)')
+    expect(rule(source, '.footerText')).toContain('color: var(--dsw-alias-label-secondary)')
   })
 
   it('stacks the capability panels in one grid cell and hides the inactive one without dropping its size', () => {

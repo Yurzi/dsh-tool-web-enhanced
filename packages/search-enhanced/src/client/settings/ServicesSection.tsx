@@ -15,6 +15,7 @@ export const ServicesSection = createServicesSection<SearchSettings, CatalogKey,
   optionGroups: { 'session-model': SESSION_MODEL_GROUPS },
   keys: {
     'services.title': 'services.title',
+    'services.optInNotice': 'services.optInNotice',
     'options.hint': 'options.hint',
     'options.keylessMore': 'options.keylessMore',
     'options.invalid': 'options.invalid',

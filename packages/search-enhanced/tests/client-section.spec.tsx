@@ -25,6 +25,7 @@ async function fixture(freshness: boolean) {
   const section = searchSection(
     selection,
     createSnapshotStore<(() => void) | undefined>(undefined),
+    createSnapshotStore(false),
     (key, params = {}) => typeof params.name === 'string' ? key + ':' + params.name : key,
   )
   if (section.Options === undefined) throw new Error('missing search options')

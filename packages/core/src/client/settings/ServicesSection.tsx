@@ -15,9 +15,10 @@ import type { ClientTranslate } from '../command.ts'
 import type { CredentialEditorComponent, SaveCredential } from './CredentialEditor.tsx'
 import type { OptionGroup, OptionsEditor } from './OptionsEditor.tsx'
 import { builtinAccess, builtinCredential, builtinOverride, catalogFields, keylessRejected, type BuiltinAccess, type CatalogSettings, type OptionCopyTable } from './model.ts'
+import { effectiveDocument } from './document.ts'
 import { applyOps, classNames, type SettingsClasses, type SettingsParts, type SettingsDoc, type WriteSettings } from './parts.tsx'
 import { createServiceFields, type ServiceFieldsCopyKey } from './ServiceFields.tsx'
-import type { SparseSettings } from './sparse.ts'
+import type { SettingsLayers, SparseSettings } from './sparse.ts'
 
 /**
  * Configuration only, not service health or a conversation's account
@@ -44,7 +45,7 @@ export interface ExtraEditor<S, K extends string> {
   readonly Editor: ComponentType<ExtraEditorProps<S, K>>
 }
 
-export type ServicesCopyKey = ServiceFieldsCopyKey | "services.title" | "options.hint" | "options.keylessMore" | "services.remoteNotice" | "services.off" | "services.configureLabel" | "services.configure" | "services.enable" | "services.access" | "services.accessKeyless" | "services.accessPersonal" | "services.accessHint.keyless" | "services.accessHint.apiKey" | "services.accountHint" | "services.getKey" | "options.title" | "services.keyless" | "services.account" | "services.personalKey" | "credential.set" | "credential.unset"
+export type ServicesCopyKey = ServiceFieldsCopyKey | "services.title" | "services.optInNotice" | "options.hint" | "options.keylessMore" | "services.remoteNotice" | "services.off" | "services.configureLabel" | "services.configure" | "services.enable" | "services.access" | "services.accessKeyless" | "services.accessPersonal" | "services.accessHint.keyless" | "services.accessHint.apiKey" | "services.accountHint" | "services.getKey" | "options.title" | "services.keyless" | "services.account" | "services.personalKey" | "credential.set" | "credential.unset"
 export function createServicesSection<S extends CatalogSettings, C extends string, K extends string>({
   classes: css, keys, parts, CredentialEditor, optionsEditor: { OptionsForm }, sparse,
   catalog, optionCopy, label, notes = {}, summaries = {}, optionGroups = {}, extras = {},
@@ -80,8 +81,11 @@ export function createServicesSection<S extends CatalogSettings, C extends strin
 
   function ServicesSection(props: ServiceProps) {
     const catalogKeys = Object.keys(catalog) as C[]
+    // Said once for the list; each panel names its own recipient.
+    const optIn = catalogKeys.some(key => catalog[key].optIn)
     return (
       <Section title={props.t(keys['services.title'])}>
+        {optIn ? <p className={css.note}>{props.t(keys['services.optInNotice'])}</p> : null}
         <ul className={css.list}>
           {catalogKeys.map(key => <ServiceRow key={key} catalogKey={key} {...props} />)}
         </ul>
@@ -104,32 +108,43 @@ export function createServicesSection<S extends CatalogSettings, C extends strin
     const credential = builtinCredential(info, override)
     const credentialRef = credential === undefined ? undefined : credential.ref
     const credentialStatus = credentialRef === undefined ? undefined : credentials[credentialRef]
-    const enabled = override.disabled !== true
+    // Without an override of its own, an entry is as the catalog starts it: a remote service is off.
+    const enabled = !(override.disabled ?? info.optIn)
     const disabled = !doc.editable || action.busy
 
-    const operations = (path: string[], target: unknown, fallback?: unknown) =>
-      sparse.sparseSettingOperations(doc.layers, ['connections', connectionId, ...path], target, fallback)
-    const save = (path: string[], target: unknown, fallback?: unknown) => action.run(() => write(operations(path, target, fallback)))
+    // Each write is computed on the document the page's earlier writes left, not on this render's.
+    const operations = (layers: SettingsLayers, path: string[], target: unknown, fallback?: unknown) =>
+      sparse.sparseSettingOperations(layers, ['connections', connectionId, ...path], target, fallback)
+    const save = (path: string[], target: unknown, fallback?: unknown) => action.run(() => write(layers => operations(layers, path, target, fallback)))
     const stored = override.options === undefined ? {} : override.options
-    const saveOptions = (changes: Readonly<Record<string, unknown>>) => action.run(() => {
-      let layers = doc.layers
-      const optionOps = Object.entries(changes).flatMap(([option, value]) => {
+    const saveOptions = (changes: Readonly<Record<string, unknown>>) => action.run(() => write(initial => {
+      let layers = initial
+      return Object.entries(changes).flatMap(([option, value]) => {
         const next = sparse.sparseSettingOperations(layers, ['connections', connectionId, 'options', option], value)
         // A sparse unset may prune an empty parent; subsequent paths must see
         // that change before this one atomic write is validated and submitted.
         layers = { ...layers, user: applyOps(layers.user, next) }
         return next
       })
-      return write(optionOps)
-    })
+    }))
 
-    /** The keyless route takes only the options it accepts; the rest go in the same write. */
+    /**
+     * The keyless route takes only the options it accepts; the rest go in the
+     * same write. Which ones those are is read from the layers the write runs
+     * on: options changed while it waited stay as they are now.
+     */
     const switchAccess = (next: AccessMode) => {
       if (next === 'api-key') return save(['access'], next, 'keyless')
-      const rejected = keylessRejected(info.options, stored)
-      const kept = Object.fromEntries(Object.entries(stored).filter(([option]) => !rejected.includes(option)))
-      const optionOps = rejected.length === 0 ? [] : operations(['options'], Object.keys(kept).length === 0 ? undefined : kept)
-      return action.run(() => write([...operations(['access'], next, 'keyless'), ...optionOps]))
+      return action.run(() => write(layers => {
+        const current = builtinOverride(effectiveDocument(layers), catalogKey).options
+        const options = current === undefined ? {} : current
+        const rejected = keylessRejected(info.options, options)
+        const kept = Object.fromEntries(Object.entries(options).filter(([option]) => !rejected.includes(option)))
+        return [
+          ...operations(layers, ['access'], next, 'keyless'),
+          ...(rejected.length === 0 ? [] : operations(layers, ['options'], Object.keys(kept).length === 0 ? undefined : kept)),
+        ]
+      }))
     }
 
     const note = notes[catalogKey]
@@ -175,7 +190,7 @@ export function createServicesSection<S extends CatalogSettings, C extends strin
               checked={enabled}
               label={t(keys['services.enable'], { name })}
               disabled={disabled}
-              onChange={next => void save(['disabled'], !next, false)}
+              onChange={next => void save(['disabled'], !next, info.optIn)}
             />
           </div>
         </div>

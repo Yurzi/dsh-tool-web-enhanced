@@ -1,6 +1,7 @@
 import { createServer, type RequestListener } from 'node:http'
 import { once } from 'node:events'
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
+import { WebError } from '@deepseek-ai/dsh-web'
 import {
   adapterTarget, apiKeyHeader, bearer, capabilityErrors, createMcpClient, createTransport, getJson, isRecord, mapWire, postJson, runAdapter,
   type AdapterIO, type AdapterTarget, type AdapterWire, type KeylessBound, type McpRoute,
@@ -443,4 +444,20 @@ describe('wire result mapping', () => {
     // @ts-expect-error A wire without a required anonymous route cannot serve a keyless catalog entry.
     missing satisfies KeylessBound<{ readonly keyless: true }, AdapterWire<Input, string>>
   })
+})
+
+it.each(['error', 'web-error', 'fake-abort'] as const)('fixes every credential resolver exception at the adapter boundary (%s)', async kind => {
+  const secret = 'resolver-secret-0123456789'
+  const failure = kind === 'error' ? new Error(secret) : new WebError(secret, kind === 'fake-abort' ? 'WEB_ABORTED' : 'WEB_PROVIDER_ERROR')
+  Object.assign(failure, { cause: new Error(secret) })
+  failure.stack = 'original stack ' + secret
+  const onDiagnostic = vi.fn()
+  const io = { ...fixture(async () => { throw failure }), onDiagnostic }
+  const pending = runAdapter(io, WIRE, personal('http://127.0.0.1:1'), INPUT, undefined)
+  await expect(pending).rejects.toMatchObject({ message: 'Adapter credential resolution failed' })
+  await expect(pending).rejects.not.toBe(failure)
+  await expect(pending).rejects.not.toHaveProperty('cause')
+  await expect(pending).rejects.not.toHaveProperty('stack', expect.stringContaining(secret))
+  // The capability's established outer boundary diagnoses and rewrites this ordinary Error.
+  expect(onDiagnostic).not.toHaveBeenCalled()
 })
