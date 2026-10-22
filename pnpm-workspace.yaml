@@ -10,6 +10,7 @@ catalog:
   '@deepseek-ai/cordis-plugin-loader': 1.0.6
   '@deepseek-ai/schemastery': 3.18.5
   '@deepseek-ai/dsh-agent': 0.2.1-rc.2
+  '@deepseek-ai/dsh-agent-default-model': 0.2.1-rc.2
   '@deepseek-ai/dsh-agent-loop': 0.2.1-rc.2
   '@deepseek-ai/dsh-agent-loop-testkit': 0.0.1-rc.1
   '@deepseek-ai/dsh-agent-preset': 0.2.1-rc.2
@@ -35,13 +36,18 @@ catalog:
   '@deepseek-ai/dsh-launch-environment': 0.2.1-rc.2
   '@deepseek-ai/dsh-llm': 0.2.1-rc.2
   '@deepseek-ai/dsh-ptc-runtime': 0.2.1-rc.2
+  '@deepseek-ai/dsh-ptc-runtime-node': 0.2.1-rc.2
+  '@deepseek-ai/dsh-sandbox-local': 0.2.1-rc.2
+  '@deepseek-ai/dsh-sandbox-policy': 0.2.1-rc.2
   '@deepseek-ai/dsh-scope': 0.2.1-rc.2
   '@deepseek-ai/dsh-session': 0.2.1-rc.2
+  '@deepseek-ai/dsh-session-persistence-jsonl': 0.2.1-rc.2
   '@deepseek-ai/dsh-session-projection': 0.2.1-rc.2
   '@deepseek-ai/dsh-settings': 0.2.1-rc.2
   '@deepseek-ai/dsh-storage': 0.2.1-rc.2
   '@deepseek-ai/dsh-storage-domain': 0.2.1-rc.2
   '@deepseek-ai/dsh-storage-json': 0.2.1-rc.2
+  '@deepseek-ai/dsh-subprocess-local': 0.2.1-rc.2
   '@deepseek-ai/dsh-system-prompt': 0.2.1-rc.2
   '@deepseek-ai/dsh-tool-web': 0.2.1-rc.2
   '@deepseek-ai/dsh-tools': 0.2.1-rc.2
@@ -71,9 +77,14 @@ overrides:
 # A fresh install fails on any dependency build script not listed here.
 # koffi (through DSH's dsh-fs-local) loads the binary of its prebuilt
 # @koromix/koffi-<platform> optional dependency, so its install script stays off.
+# node-pty (through dsh-subprocess-local, mounted only by the PTC tests) loads
+# its bundled prebuilds/<platform>-<arch> binary; both packages' scripts only
+# rebuild it or fix the macOS spawn-helper mode, so they stay off as well.
 allowBuilds:
+  '@deepseek-ai/dsh-subprocess-local': false
   esbuild: true
   koffi: false
+  node-pty: false
 
 # DSH publishes every 0.2.x prerelease as one train; releases younger than
 # pnpm's minimum age would otherwise block an upgrade to the Host under test.

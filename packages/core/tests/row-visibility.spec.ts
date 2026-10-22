@@ -2,14 +2,14 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createRequire } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
+import AgentDefaultModel from '@deepseek-ai/dsh-agent-default-model'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import AgentPresets from '@deepseek-ai/dsh-agent-preset-registry'
 import { shippedWebPreset } from './fixtures/shipped-preset.ts'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
+import * as SessionPersistenceJsonl from '@deepseek-ai/dsh-session-persistence-jsonl'
 import Projections from '@deepseek-ai/dsh-session-projection'
 import SessionController from '@deepseek-ai/dsh-api-session-controller'
 import TypertRegistry from '@deepseek-ai/dsh-typert-registry'
@@ -43,11 +43,7 @@ async function host(enhancedTools: boolean, priorEvents = false, persistence = f
   await ctx.plugin(Storage)
   await ctx.plugin(StorageJson, { root: join(root, 'storage') })
   await ctx.plugin(StorageDomain, { backend: 'json' })
-  if (persistence) {
-    const installed = createRequire('/usr/lib/node_modules/@deepseek-ai/dsh/package.json')
-    const backend = await import(pathToFileURL(installed.resolve('@deepseek-ai/dsh-session-persistence-jsonl')).href)
-    await ctx.plugin(backend, { root: join(root, 'sessions'), compression: 'none' })
-  }
+  if (persistence) await ctx.plugin(SessionPersistenceJsonl, { root: join(root, 'sessions'), compression: 'none' })
   await mountWebSettings(ctx, root, {
     web: { searchProvider: SEARCH.providerId, fetchProvider: FETCH.providerId },
     rows: [
@@ -95,9 +91,7 @@ it.each([SEARCH, FETCH])('offers initial enabled row $rowId and follows actual w
 })
 
 async function controller(ctx: Context): Promise<SessionController> {
-  const installed = createRequire('/usr/lib/node_modules/@deepseek-ai/dsh/package.json')
-  const defaults = await import(pathToFileURL(installed.resolve('@deepseek-ai/dsh-agent-default-model')).href)
-  await ctx.plugin(defaults.default, { provider: 'fixture', model: 'fixture' })
+  await ctx.plugin(AgentDefaultModel, { provider: 'fixture', model: 'fixture' })
   await ctx.plugin(TypertRegistry)
   const resolvers = new Set<unknown>()
   ctx.provide('fileUploads', { registerAgentResolver: (resolver: unknown) => {

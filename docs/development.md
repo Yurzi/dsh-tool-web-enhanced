@@ -137,6 +137,8 @@ export PNPM_HOME=$PWD/.pnpm-home \
 
 两处都不要在没核对 DSH 发布包的情况下删除；升级基线时复查。
 
+**测试只从仓库依赖导入 DSH 包**，不读本机全局安装的 DSH（CI 上没有它）。真实 PTC 运行时（`dsh-fs-local`、`dsh-subprocess-local`、`dsh-sandbox-local`、`dsh-sandbox-policy`、`dsh-ptc-runtime-node`）、JSONL 会话持久化（`dsh-session-persistence-jsonl`）与默认模型（`dsh-agent-default-model`）因此是根 devDependencies，版本走 catalog。它们带来的 `node-pty` 用自带的预编译二进制，`pnpm-workspace.yaml` 的 `allowBuilds` 把它和 `dsh-subprocess-local` 的安装脚本关掉（与 `koffi` 相同），否则全新安装会因未登记的构建脚本失败。
+
 ### 产物的 tree-shaking
 
 两侧 Host 产物各自只含本侧的服务解析，这一点不在 `check` 里自动检查。改服务模块的组织方式（合并两侧 wire、在模块顶层执行代码、改构建配置）后，构建并在两侧的 `lib/index.js` 里确认只属于另一侧解析的字符串不出现、本侧的出现。把它做成 `scripts` 里的检查是[候选事项](plan.md#候选与待定)。
