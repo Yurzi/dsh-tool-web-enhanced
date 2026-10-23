@@ -51,7 +51,7 @@ const copy = {
   'status.modelReady': ['{access} · 模型搜索 · 查询发送给 {name}', '{access} · model search · sent to {name}'],
   'status.sessionModelNeedsKey': ['会话模型的 API Key 未设置', "The conversation model's API key isn't set"],
   'status.sessionModelNeedsSignIn': ['请重新登录 DeepSeek 账号', 'Sign in to the DeepSeek account again'],
-  'status.reason.no-model': ['本会话还没有选择模型', 'No model chosen for this conversation yet'],
+  'status.reason.no-model': ['还不知道本会话下一次请求用哪个模型', "The model for this conversation's next request isn't known yet"],
   'status.reason.unknown-route': ['无法读取会话模型服务商的设置', "Can't read the settings of this model's provider"],
   'status.reason.protocol': ['该路由在模型设置里没有声明支持的 api', 'Its route declares no supported api'],
   'status.reason.endpoint': ['该路由在模型设置里没有固定的接口地址', 'Its route has no fixed endpoint'],

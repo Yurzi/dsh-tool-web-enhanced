@@ -1,5 +1,4 @@
 import type { Context } from '@deepseek-ai/cordis'
-import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-api-session-controller'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { Remote, RemoteError, remoteErrorOf, TypertRemoteService, type RemoteErrorCode } from '@deepseek-ai/dsh-typert-protocol'
@@ -10,7 +9,8 @@ import { selectionRequest, providerRequest, pairingsRequest, forgetPairingReques
 import type { z } from 'zod'
 import type { HostContract } from './capability.ts'
 import type { Pairings } from './pairings.ts'
-import { SelectionConflict, type CurrentSelection, type SessionChange } from './sessions.ts'
+import { liveSession, SelectionConflict, type CurrentSelection, type SessionChange, type SessionTarget } from './sessions.ts'
+import { sessionOrigin } from './session-origin.ts'
 import { InvalidSettingsError } from './settings-row.ts'
 
 export type ConnectionsView<O, V> = CurrentSelection<O> & { readonly connections: V[] }
@@ -26,10 +26,10 @@ export interface ConnectionsServiceOptions<O extends Record<string, unknown>, V 
   readonly namespace: string
   readonly contract: HostContract<O>
   readonly sessions: {
-    current(agent: Agent): Promise<CurrentSelection<O>>
-    change(agent: Agent, change: SessionChange<O>, expectedRevision: number): Promise<CurrentSelection<O>>
+    current(target: SessionTarget): Promise<CurrentSelection<O>>
+    change(target: SessionTarget, change: SessionChange<O>, expectedRevision: number): Promise<CurrentSelection<O>>
     selectable(connectionId: string): boolean
-    connections(agent: Agent): Promise<V[]>
+    connections(target: SessionTarget): Promise<V[]>
   }
   readonly pairings: Pairings
   readonly providerView: () => ProviderView
@@ -65,8 +65,8 @@ export function createConnectionsService<O extends Record<string, unknown>, V ex
     async get(request: SelectionRequest): Promise<ConnectionsView<O, V>> {
       return boundary('get', async () => {
         const { sessionId } = parse(selectionRequest, request)
-        const agent = await this.readableAgent(sessionId)
-        return this.view(agent, await spec.sessions.current(agent))
+        const target = await this.target(sessionId)
+        return this.view(target, await spec.sessions.current(target))
       })
     }
 
@@ -74,7 +74,7 @@ export function createConnectionsService<O extends Record<string, unknown>, V ex
     async set(request: SelectionChange<O>): Promise<ConnectionsView<O, V>> {
       return boundary('set', async () => {
         const { sessionId, connectionId, options, expectedRevision } = parse(spec.contract.selectionChange, request)
-        const agent = await this.agent(sessionId)
+        const target = await this.target(sessionId)
         if (typeof connectionId === 'string' && !spec.sessions.selectable(connectionId)) {
           // The capability contributes these names through ConnectionsRemoteErrors<NS>.
           throw new RemoteError((spec.namespace + '/unavailable') as RemoteErrorCode, 'the connection is missing, disabled or unsupported', { connectionId })
@@ -82,12 +82,12 @@ export function createConnectionsService<O extends Record<string, unknown>, V ex
         let current: CurrentSelection<O>
         try {
           const change = { ...options, ...(connectionId === undefined ? {} : { connectionId }) } as SessionChange<O>
-          current = await spec.sessions.change(agent, change, expectedRevision)
+          current = await spec.sessions.change(target, change, expectedRevision)
         } catch (error) {
           if (error instanceof SelectionConflict) throw new RemoteError((spec.namespace + '/conflict') as RemoteErrorCode, 'the selection changed elsewhere; re-read it and retry', {})
           throw error
         }
-        return this.view(agent, current)
+        return this.view(target, current)
       })
     }
 
@@ -116,23 +116,24 @@ export function createConnectionsService<O extends Record<string, unknown>, V ex
       })
     }
 
-    /**
-     * Reads also reach a live child (spawn/fork) Agent, which the controller
-     * reserves for subagent routing; anything else resolves or resumes as usual.
-     */
-    private async readableAgent(sessionId: string): Promise<Agent> {
-      return this.ctx.agents.get(sessionId as SessionId) ?? this.agent(sessionId)
-    }
-
-    /** Ordinary Sessions only: writes to a child Session stay refused by the controller. */
-    private async agent(sessionId: string): Promise<Agent> {
-      const found = await this.ctx.sessionController.resolveAgent(sessionId as SessionId)
+    private async target(sessionId: string): Promise<SessionTarget> {
+      const id = sessionId as SessionId
+      const agent = this.ctx.agents.get(id)
+      if (agent !== undefined) return liveSession(agent)
+      const persistence = this.ctx.get('sessionPersistence')
+      if (persistence !== undefined) {
+        const stored = await persistence.stat(id)
+        if (stored !== undefined && sessionOrigin(stored.header).kind === 'subagent') {
+          return { kind: 'cold', id, header: stored.header }
+        }
+      }
+      const found = await this.ctx.sessionController.resolveAgent(id)
       if ('error' in found) throw found.error
-      return found.agent
+      return liveSession(found.agent)
     }
 
-    private async view(agent: Agent, current: CurrentSelection<O>): Promise<ConnectionsView<O, V>> {
-      return { ...current, connections: await spec.sessions.connections(agent) }
+    private async view(target: SessionTarget, current: CurrentSelection<O>): Promise<ConnectionsView<O, V>> {
+      return { ...current, connections: await spec.sessions.connections(target) }
     }
   }
   return new Service()

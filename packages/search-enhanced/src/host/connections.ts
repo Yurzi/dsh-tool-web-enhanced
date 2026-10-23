@@ -1,6 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import type { Agent } from '@deepseek-ai/dsh-agent'
-import { credentialReadiness, nextModel, routeKeyConfigured } from 'dsh-tool-web-enhanced-core/host'
+import { credentialReadiness, routeKeyConfigured, type SessionModel } from 'dsh-tool-web-enhanced-core/host'
 import { modelUrl } from '../model/protocols.ts'
 import { fixedRoute, sessionRoute } from '../model/route.ts'
 import type { ModelRoute } from '../model/types.ts'
@@ -8,13 +7,13 @@ import { CATALOG, honorsFreshness } from '../catalog.ts'
 import type { SearchConnectionView } from '../contract.ts'
 import type { Connection, ResolvedSettings } from '../settings/resolve.ts'
 
-export async function describeConnections(ctx: Context, settings: ResolvedSettings, agent: Agent): Promise<SearchConnectionView[]> {
+export async function describeConnections(ctx: Context, settings: ResolvedSettings, model: SessionModel | undefined): Promise<SearchConnectionView[]> {
   return Promise.all([...settings.connections.values()].map(async (connection): Promise<SearchConnectionView> => {
     const base = baseOf(connection)
     if (connection.kind === 'model') {
       const target = connection.route.kind === 'fixed'
         ? { kind: 'route' as const, route: fixedRoute(connection.route) }
-        : sessionRoute(ctx, nextModel(ctx, agent))
+        : sessionRoute(ctx, model)
       const access = target.kind === 'route' ? target.route.auth.kind : 'api-key'
       if (connection.disabled) return { ...base, access, status: 'disabled' }
       if (target.kind === 'unsupported') return { ...base, access, status: 'unsupported', reason: target.reason }
@@ -26,7 +25,7 @@ export async function describeConnections(ctx: Context, settings: ResolvedSettin
     const endpoint = connection.kind === 'native'
       ? typeof connection.options.baseURL === 'string' ? connection.options.baseURL : CATALOG[connection.native].endpoint
       : undefined
-    return { ...base, ...await credentialReadiness(ctx, agent, { endpoint, credentialRef: connection.credentialRef }) }
+    return { ...base, ...await credentialReadiness(ctx, model, { endpoint, credentialRef: connection.credentialRef }) }
   }))
 }
 

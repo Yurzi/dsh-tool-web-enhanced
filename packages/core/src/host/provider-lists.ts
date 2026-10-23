@@ -1,10 +1,12 @@
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { SessionStorage } from './storage.ts'
+import { parentOf, sessionOrigin } from './session-origin.ts'
 
 /** Live setup/created events do not make a new conversation a restored one. */
 export function isNewConversation(session: Session): boolean {
-  return session.header.parentSession === undefined && !session.header.isSeeded
+  const origin = sessionOrigin(session.header)
+  return parentOf(origin) === undefined && !origin.seeded
     && session.firstLiveSeq === 0 && session.firstLifecycleSeq === 0
 }
 
@@ -24,7 +26,7 @@ export class ProviderLists<O extends Record<string, unknown>, S> {
       const table = (await this.storage.domain()).table('provider_lists')
       const stored = table.get(agent.session.id)
       if (stored !== undefined) return this.nonempty(stored)
-      const parent = agent.session.header.parentSession
+      const parent = parentOf(sessionOrigin(agent.session.header))
       let ids: readonly string[] | undefined
       if (parent !== undefined) {
         await this.storage.settled(parent)

@@ -12,7 +12,7 @@ import { createConnectionsService } from './remote.ts'
 import { ToolRestriction, type ProviderListRead } from './restriction.ts'
 import { providerView, routeFacts } from './route.ts'
 import { isSelectable } from './selectable.ts'
-import { Sessions } from './sessions.ts'
+import { liveSession, Sessions } from './sessions.ts'
 import { SessionStorage } from './storage.ts'
 import { InvalidSettingsError } from './settings-row.ts'
 
@@ -40,7 +40,7 @@ export function installCapability<S extends CapabilitySettings, O extends Record
   const restriction: ToolRestriction = new ToolRestriction(ctx, {
     tool: capability.tool,
     routed: () => routeFacts(ctx, capability.field, capability.identity.providerId).kind === 'this',
-    selection: async agent => (await sessions.peek(agent)).selection.connectionId,
+    selection: async agent => (await sessions.peek(liveSession(agent))).selection.connectionId,
     enhanced: {
       rowId: capability.identity.rowId, names: capability.enhanced.names,
       enabled: () => {
@@ -53,11 +53,11 @@ export function installCapability<S extends CapabilitySettings, O extends Record
       providers: agent => lists.read(agent),
     },
   })
-  const sessions = new Sessions(ctx, () => capability.settings(), storage, pairings, restriction, (settings, agent) => capability.describe(settings, agent))
+  const sessions = new Sessions(ctx, () => capability.settings(), storage, pairings, restriction, (settings, model) => capability.describe(settings, model))
   const capture = async (agent: Agent, signal?: AbortSignal): Promise<Plan<O>> => {
     const operation = restriction.begin(agent)
     try {
-      const read = sessions.current(agent)
+      const read = sessions.current(liveSession(agent))
       const { selection } = signal === undefined ? await read : await errors.abortable(read, signal)
       if (!restriction.active) return { kind: 'failed', error: contextUnavailable() }
       let providers: ProviderListRead = { kind: 'unread' }
@@ -98,7 +98,7 @@ export function installCapability<S extends CapabilitySettings, O extends Record
     ctx.logger.warn('%s: starting tool visibility failed: %s', capability.identity.rowId, error)
   })
   ctx.on('agent/disposed', ({ agent }) => { snapshots.forget(agent); restriction.forget(agent) })
-  ctx.inject(['sessionController', 'typert'], scope => {
+  ctx.inject(['sessionController', 'typert', 'agents'], scope => {
     createConnectionsService(scope, { namespace: capability.remoteNamespace, contract: capability.contract, sessions, pairings,
       providerView: () => providerView(capability.identity.providerId, capability.field) })
   })

@@ -21,6 +21,7 @@ import { FETCH, type PairingsView, type ProviderView } from 'dsh-tool-web-enhanc
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { FetchSelectionView } from '../src/contract.ts'
 import { installFetch } from '../src/host/runtime.ts'
+import { describeConnections } from '../src/host/connections.ts'
 import * as entry from '../src/index.ts'
 import { routeFacts } from 'dsh-tool-web-enhanced-core/host'
 import { resolveSettings } from '../src/settings/resolve.ts'
@@ -137,11 +138,56 @@ describe('fetchConnections real Host', () => {
     expect(results.filter(result => result.status === 'rejected')).toMatchObject([{ reason: { code: 'fetchConnections/conflict' } }])
     expect(await h.get()).toMatchObject({ selection: { revision: 1 }, source: 'session' })
     expect((await h.get(h.two)).selection.revision).toBe(0)
-    const child = await h.add('owned-child', { meta: { origin: 'subagent' } })
-    // A live child Agent is readable; writes stay with DSH's subagent routing.
+    const child = await h.add('owned-child', { meta: { origin: 'subagent' }, agentOptions: { provider: 'child-provider', model: 'child-model' } })
+    // Owned children can change selection without remembering their known model.
     expect(await h.get(child)).toMatchObject({ selection: { connectionId: 'builtin:local', revision: 0 }, source: 'default' })
-    await expect(h.set({ connectionId: null, expectedRevision: 0 }, child)).rejects.toMatchObject({ code: 'session/agent-busy' })
-    expect((await h.get(child)).selection.revision).toBe(0)
+    expect(await h.invoke('pairings')).toEqual({ pairings: [] })
+    expect(await h.set({ connectionId: null, expectedRevision: 0 }, child)).toMatchObject({ source: 'session', selection: { connectionId: null, revision: 1 } })
+    expect((await h.get(child)).selection.revision).toBe(1)
+    expect(await h.invoke('pairings')).toEqual({ pairings: [] })
+  })
+
+  it.each([false, true])('applies owned child writes on the next request, not the frozen step (seeded=%s)', async seeded => {
+    const origin = await server((_request, response) => { response.end('local evidence') })
+    const h = await host({ settings: localSettings(['127.0.0.1/32']) })
+    const child = await h.add('child-step', {
+      meta: { origin: 'subagent', parentSession: h.one.session.id, isSeeded: seeded },
+      ...(seeded ? { inheritedEventCount: 0 as never, seed: [] } : {}),
+      agentOptions: { provider: 'child-provider', model: 'child-model' },
+    })
+    expect(await h.get(child)).toMatchObject({ source: seeded ? 'inherited' : 'default', selection: { connectionId: 'builtin:local', revision: 0 } })
+    await h.request(child)
+    await h.set({ connectionId: 'builtin:deepseek-fetch-api', expectedRevision: 0 }, child)
+    await h.request(child) // Recapturing the same request must keep its old selection.
+    await expect(h.fetch(child, origin)).resolves.toMatchObject({ body: { content: 'local evidence' } })
+    await h.set({ connectionId: null, expectedRevision: 0 })
+    expect(await h.get(child)).toMatchObject({ source: 'session', selection: { connectionId: 'builtin:deepseek-fetch-api', revision: 1 } })
+    await h.request(child, 1)
+    await expect(h.fetch(child, origin)).rejects.toMatchObject({ code: 'WEB_PROVIDER_CREDENTIAL_MISSING' })
+    await h.set({ connectionId: null, expectedRevision: 1 }, child)
+    await h.request(child, 1)
+    await expect(h.fetch(child, origin)).rejects.toMatchObject({ code: 'WEB_PROVIDER_CREDENTIAL_MISSING' })
+    await h.request(child, 2)
+    await expect(h.fetch(child)).rejects.toMatchObject({ code: 'WEB_PROVIDER_UNAVAILABLE' })
+    expect(await h.invoke('pairings')).toEqual({ pairings: [] })
+  })
+
+  it('remembers both top-level and user-fork choices with known models', async () => {
+    const h = await host()
+    const top = await h.add('top-writer', { agentOptions: { provider: 'p', model: 'top' } })
+    await h.set({ connectionId: 'builtin:local', expectedRevision: 0 }, top)
+    const fork = await h.add('user-fork-writer', {
+      meta: { parentSession: top.session.id, isSeeded: true }, inheritedEventCount: 0 as never, seed: [],
+      agentOptions: { provider: 'p', model: 'fork' },
+    })
+    expect(await h.get(fork)).toMatchObject({ source: 'inherited', selection: { connectionId: 'builtin:local', revision: 0 } })
+    await h.set({ connectionId: null, expectedRevision: 0 }, fork)
+    expect(await h.invoke('pairings')).toEqual({ pairings: [
+      { provider: 'p', model: 'top', connectionId: 'builtin:local' },
+      { provider: 'p', model: 'fork', connectionId: null },
+    ] })
+    const reader = await h.add('fork-model-reader', { agentOptions: { provider: 'p', model: 'fork' } })
+    expect(await h.get(reader)).toMatchObject({ source: 'model', selection: { connectionId: null } })
   })
 
   it('rejects unavailable connections and all session options without changing revision', async () => {
@@ -238,6 +284,14 @@ describe('fetchConnections real Host', () => {
     await expect(h.fetch()).rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR' })
     await h.request(h.one, 1)
     await expect(h.fetch()).rejects.toMatchObject({ code: 'WEB_BLOCKED_URL' })
+  })
+
+  it('describes a cold conversation with API-key readiness only even when an account is signed in', async () => {
+    const h = await host()
+    h.ctx.provide('deepseekAccount', { resolveToken: async () => { throw new Error('unknown models must not resolve account tokens') } } as never)
+    const connections = await describeConnections(h.ctx, resolveSettings(localSettings([])), undefined)
+    expect(connections.find(connection => connection.id === 'builtin:local')).toMatchObject({ access: 'keyless', status: 'ready' })
+    expect(connections.find(connection => connection.id === 'builtin:deepseek-fetch-api')).toMatchObject({ access: 'api-key', status: 'needs-credential' })
   })
 
   it('describes keyless local and credential/account remote readiness without exposing refs', async () => {

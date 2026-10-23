@@ -3,7 +3,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type {} from '@deepseek-ai/dsh-deepseek-account'
 import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
-import { ACCOUNT_PROVIDER, nextModel, requestModel } from './model.ts'
+import { ACCOUNT_PROVIDER, requestModel, type SessionModel } from './model.ts'
 
 /** Credentials is authoritative; absence does not fall back to process.env. */
 export async function resolveApiKey(ctx: Context, ref: string): Promise<string | undefined> {
@@ -57,11 +57,11 @@ export function nativeAuth(ctx: Context, ref: string, secrets = new Set<string>(
 }
 
 /** Account readiness uses the next selected model, while request authentication uses its frozen route. */
-export async function credentialReadiness(ctx: Context, agent: Agent, options: { readonly endpoint?: string | undefined; readonly credentialRef: string }): Promise<{
+export async function credentialReadiness(ctx: Context, model: SessionModel | undefined, options: { readonly endpoint?: string | undefined; readonly credentialRef: string }): Promise<{
   readonly access: 'account' | 'api-key'
   readonly status: 'ready' | 'needs-credential'
 }> {
-  const account = options.endpoint !== undefined && nextModel(ctx, agent)?.provider === ACCOUNT_PROVIDER ? ctx.get('deepseekAccount') : undefined
+  const account = options.endpoint !== undefined && model?.provider === ACCOUNT_PROVIDER ? ctx.get('deepseekAccount') : undefined
   if (account !== undefined && await account.resolveToken(options.endpoint!) !== undefined) return { access: 'account', status: 'ready' }
   const credentials = ctx.get('credentials')
   const credential = credentials === undefined ? undefined : await credentials.describe(credentialRef(options.credentialRef))

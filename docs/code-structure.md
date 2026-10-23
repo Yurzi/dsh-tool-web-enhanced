@@ -77,14 +77,15 @@ src/
 | 模块 | 职责 |
 | --- | --- |
 | [capability.ts](<../packages/core/src/host/capability.ts>) · [runtime.ts](<../packages/core/src/host/runtime.ts>) | 能力参数（含 `enhancedTools` 与 `Capability.enhanced`）、选项 codec 与调用上下文类型；installCapability 连接会话选择、计划、对话列表、可见性控制器、显式入口、Remote 与 provider 注册。 |
-| [sessions.ts](<../packages/core/src/host/sessions.ts>) · [plans.ts](<../packages/core/src/host/plans.ts>) | 会话选择解析（fork 继承、revision、模型记忆）；请求步快照（Snapshots）与选择计划。 |
+| [sessions.ts](<../packages/core/src/host/sessions.ts>) · [plans.ts](<../packages/core/src/host/plans.ts>) | 以会话为目标（`SessionTarget`：运行中的 `live` 或冷的 `cold`；`liveSession`）的会话选择解析（fork 继承、revision、按会话来源写模型记忆、写入后同步当时运行中的 Agent）；请求步快照（Snapshots）与选择计划。 |
+| [session-origin.ts](<../packages/core/src/host/session-origin.ts>) | 会话来源 `sessionOrigin`：只读会话头公开字段（`origin`、`parentSession`、`isSeeded`）得出 `top-level` / `fork` / `subagent`；`parentOf`。 |
 | [selectable.ts](<../packages/core/src/host/selectable.ts>) · [restriction.ts](<../packages/core/src/host/restriction.ts>) | 连接是否存在且启用；可见性控制器 `ToolRestriction`：原生工具遮罩，增强工具的注册（可回滚的成对注册、注册世代）、按 Agent 遮罩与有序撤下，路由与开关变化后的重算。 |
 | [enhanced.ts](<../packages/core/src/host/enhanced.ts>) · [explicit.ts](<../packages/core/src/host/explicit.ts>) | 增强工具的契约类型（`ExplicitCall`、`Rejection`、`ReadyProviders`、`ProviderListing`、`EnhancedAccess`、`CapabilityEnhanced` 等）；显式入口 `explicitAccess`：`run` / `list` / `ready` 的检查顺序、`withInitiator` 执行与就绪状态的异常边界。 |
-| [provider-lists.ts](<../packages/core/src/host/provider-lists.ts>) | 新建对话的判断 `isNewConversation`；`ProviderLists`：对话 provider 列表的建立、继承、读取（空记录读作没有列表）。 |
+| [provider-lists.ts](<../packages/core/src/host/provider-lists.ts>) | 新建对话的判断 `isNewConversation`（经 `sessionOrigin`）；`ProviderLists`：对话 provider 列表的建立、继承、读取（空记录读作没有列表）。 |
 | [storage.ts](<../packages/core/src/host/storage.ts>) · [pairings.ts](<../packages/core/src/host/pairings.ts>) | 存储域（表 `selections`、`pairings`、`provider_lists`，version 1）、生命周期内存取与每会话队列；模型与连接的配对记录。 |
 | [model.ts](<../packages/core/src/host/model.ts>) · [route.ts](<../packages/core/src/host/route.ts>) | 下一模型与当前请求模型身份；公开设置与环境中的 Host 路由事实。 |
-| [settings-row.ts](<../packages/core/src/host/settings-row.ts>) · [remote.ts](<../packages/core/src/host/remote.ts>) | Volatile 设置行、候选文档校验与无效设置报告；连接 Remote 服务及服务端异常隔离。 |
-| [credentials.ts](<../packages/core/src/host/credentials.ts>) | API key、路由 key（无 Credentials 服务时回退启动环境）、账号 token 与就绪状态。 |
+| [settings-row.ts](<../packages/core/src/host/settings-row.ts>) · [remote.ts](<../packages/core/src/host/remote.ts>) | Volatile 设置行、候选文档校验与无效设置报告；连接 Remote 服务（`get` / `set` 共用的取法：运行中的 Agent → 冷的子 Agent 会话 → `resolveAgent`）及服务端异常隔离。 |
+| [credentials.ts](<../packages/core/src/host/credentials.ts>) | API key、路由 key（无 Credentials 服务时回退启动环境）、账号 token 与就绪状态（按下一次请求的模型，未知时只看 API key）。 |
 | [errors.ts](<../packages/core/src/host/errors.ts>) · [native.ts](<../packages/core/src/host/native.ts>) | 能力错误类型、取消与错误工厂；包装 DSH 原生 provider 并重述错误。 |
 | [transport.ts](<../packages/core/src/host/transport.ts>) · [mcp.ts](<../packages/core/src/host/mcp.ts>) | 有界 HTTP 读写、统一期限与上游说明；一次工具调用内的 MCP 握手与 JSON / SSE 解析。 |
 | [adapter.ts](<../packages/core/src/host/adapter.ts>) | AdapterWire、目标、鉴权、mapWire 与 runAdapter。 |
@@ -258,6 +259,7 @@ src/
 | [disable-search.yml](<../e2e/fixtures/disable-search.yml>) / [disable-fetch.yml](<../e2e/fixtures/disable-fetch.yml>) / [disable-ui.yml](<../e2e/fixtures/disable-ui.yml>) | 分别停用搜索、抓取与共享 UI 行。 |
 | [fetch-allow-loopback.yml](<../e2e/fixtures/fetch-allow-loopback.yml>) / [fetch-native-route.yml](<../e2e/fixtures/fetch-native-route.yml>) | 显式允许回环的本地连接；把抓取路由切到原生 HTTP。 |
 | [remote-fetch.ts](<../e2e/fixtures/remote-fetch.ts>) / [search-model.ts](<../e2e/fixtures/search-model.ts>) | 自定义抓取连接与 Firecrawl 页响应；固定模型、Session 路由与协议响应。 |
+| [subagent-selection.ts](<../e2e/fixtures/subagent-selection.ts>) | 两侧各两个指向不同回环目的地的连接（固定模型搜索、Firecrawl 抓取）；回环模型：按队列给父 Agent 下发工具调用，可在子 Agent 的请求处暂停。 |
 
 下表“套件”指共用本次运行的隔离 home，“独立”指另用 `isolatedContext` 派生 home，均不是用户的 DSH home。
 
@@ -286,18 +288,19 @@ src/
 | [enhanced-readiness.e2e.ts](<../e2e/enhanced-readiness.e2e.ts>) | 同一 GUI Host 保存自定义连接的密钥并刷新浏览器后，菜单与列出工具的就绪状态一致 | 是 | 独立 |
 | [enhanced-review-visuals.e2e.ts](<../e2e/enhanced-review-visuals.e2e.ts>) | 补拍的评审截图：工具行的真实结果、展开的远程服务说明、在 GUI 打开 Exa 前后同一会话的菜单、有无预检问题的首次启用提示（宽度 / 主题 / 语言矩阵） | 是 | 每例独立 |
 | [enhanced-write-race.e2e.ts](<../e2e/enhanced-write-race.e2e.ts>) | 同一轮里跨节的连续写入都保存且没有警告；本页读到 revision 之后的外部修改仍被拒 | 是 | 每例独立 |
+| [subagent-selection.e2e.ts](<../e2e/subagent-selection.e2e.ts>) | 回环模型让父 Agent 经 preset 的 `subagent` / `subagent_fork` 建两个子会话；在 Web 打开子会话，不在运行与运行中都经菜单改两侧连接，下一步（或父 Agent 用 `send_message` 再叫起时）请求发往新连接，模型记忆保持为空；Web 的分叉会话照常写两侧的模型记忆 | 是 | 独立 |
 
-当前 e2e 基线为 23 个文件、159 个测试（最终 `pnpm run test:e2e`）。
+当前 e2e 基线为 24 个文件、161 个测试（最终 `pnpm run test:e2e`）。
 
 ## 测试清单
 
-当前测试基线为 **99 个文件、2140 个测试**（最终 `pnpm run check`，不含 e2e）；逐包数量如下，参数化用例按实际展开计数。每行对应一个测试文件；tests/fixtures/ 下的辅助模块不计入。
+当前测试基线为 **102 个文件、2190 个测试**（最终 `pnpm run check`，不含 e2e）；逐包数量如下，参数化用例按实际展开计数。每行对应一个测试文件；tests/fixtures/ 下的辅助模块不计入。
 
 | 包 | 测试文件 | 通过测试 |
 | --- | ---: | ---: |
-| core | 32 | 557 |
-| search-enhanced | 29 | 807 |
-| fetch-enhanced | 30 | 682 |
+| core | 34 | 597 |
+| search-enhanced | 30 | 813 |
+| fetch-enhanced | 30 | 686 |
 | ui | 7 | 86 |
 | profile | 1 | 8 |
 
@@ -322,14 +325,16 @@ core 的测试夹具：[fixtures/enhanced.ts](<../packages/core/tests/fixtures/e
 | [client-sparse.spec.ts](<../packages/core/tests/client-sparse.spec.ts>) | 稀疏写入、版本标记与 Reset。 |
 | [mcp.spec.ts](<../packages/core/tests/mcp.spec.ts>) | MCP JSON / SSE、分块边界、大小限制与错误脱敏。 |
 | [native.spec.ts](<../packages/core/tests/native.spec.ts>) | 共享原生鉴权、错误改写与成功内容处理。 |
+| [nested-remote.spec.ts](<../packages/core/tests/nested-remote.spec.ts>) | 运行时服务、插件行与传输各在非根 fiber 下（同 DSH loader）时，两侧 Remote 的 `get` / `set` 照常读写、Host 日志没有未注入服务的访问错误。 |
 | [plans.spec.ts](<../packages/core/tests/plans.spec.ts>) | 请求步冻结与当前连接复查。 |
 | [providers-fetch.spec.ts](<../packages/core/tests/providers-fetch.spec.ts>) | 抓取 outcome、目标状态与服务失败说明。 |
 | [providers-search.spec.ts](<../packages/core/tests/providers-search.spec.ts>) | 搜索 API 错误信封与说明边界。 |
 | [redaction.spec.ts](<../packages/core/tests/redaction.spec.ts>) | 凭据检测、成功内容替换与安全诊断副本。 |
-| [remote.spec.ts](<../packages/core/tests/remote.spec.ts>) | Remote 契约错误、存储异常与固定内部错误；运行中的 spawn / fork 子 Agent 可读连接状态（含继承）、写入仍被拒，不在运行时回到 controller 解析。 |
-| [restriction.spec.ts](<../packages/core/tests/restriction.spec.ts>) | 原生工具遮罩：路由返回、选择变化与卸载。 |
+| [remote.spec.ts](<../packages/core/tests/remote.spec.ts>) | Remote 契约错误、存储异常与固定内部错误；运行中的 spawn / subagent_fork 子 Agent 可读（含继承）可写、不写模型记忆；真实 JSONL 的冷子会话读写不恢复 Agent、恢复后保持所选，没有记录时取默认或继承、不查模型记忆，并发写入只拒一个过期修订号；普通冷会话（含用户 fork）经真实 controller 恢复并写记忆；会话不存在时保留 controller 的 not-found；没有 `sessionPersistence` 时回到 controller。 |
+| [restriction.spec.ts](<../packages/core/tests/restriction.spec.ts>) | 原生工具遮罩：路由返回、选择变化与卸载；子 Agent 会话写为关闭后立即隐藏；排队中的冷写入提交时目标已恢复，按恢复后的 Agent 同步、旧的捕获不覆盖，不写记忆。 |
 | [row-visibility.spec.ts](<../packages/core/tests/row-visibility.spec.ts>) | 真实 Settings 行上的开关与 `web` 路由变化；真实 `sessionController` 建立的对话、空记录、JSONL 恢复的新建判断与子会话继承。 |
 | [selectable.spec.ts](<../packages/core/tests/selectable.spec.ts>) | 各连接类型的可选择条件。 |
+| [session-origin.spec.ts](<../packages/core/tests/session-origin.spec.ts>) | `sessionOrigin` 覆盖会话头公开字段的 8 种组合；选择继承、对话列表复制与新建判断经真实接缝与改用前的公式逐一对照。 |
 | [sessions.spec.ts](<../packages/core/tests/sessions.spec.ts>) | 空选项能力与安装间存储隔离。 |
 | [settings-grammar.spec.ts](<../packages/core/tests/settings-grammar.spec.ts>) | 共享文档语法、未知字段与 adapter / model 连接。 |
 | [settings-labels.spec.ts](<../packages/core/tests/settings-labels.spec.ts>) | 标签在解析时单行化，不拒绝、不改写文档。 |
@@ -358,11 +363,12 @@ core 的测试夹具：[fixtures/enhanced.ts](<../packages/core/tests/fixtures/e
 | [client-settings-model.spec.ts](<../packages/search-enhanced/tests/client-settings-model.spec.ts>) | model 协议分组、参数提示与连接表单事实。 |
 | [client-settings.spec.tsx](<../packages/search-enhanced/tests/client-settings.spec.tsx>) | 设置交互、信任、无效文档与 Reset。 |
 | [client-sparse.spec.ts](<../packages/search-enhanced/tests/client-sparse.spec.ts>) | 搜索设置的稀疏操作。 |
+| [cold-host.spec.ts](<../packages/search-enhanced/tests/cold-host.spec.ts>) | 真实能力生命周期、`WebRuntime`、Remote 与 JSONL：冷的 spawn / subagent_fork 子会话经 Remote 改选择不恢复 Agent、不写记忆；恢复后 `agent/created` 的计划即用新连接，之后每一步按 `agent/request` 重新捕获（同一步内仍冻结）。 |
 | [contract.spec.ts](<../packages/search-enhanced/tests/contract.spec.ts>) | Remote schema、视图与严格输入。 |
 | [enhanced-credentials.spec.ts](<../packages/search-enhanced/tests/enhanced-credentials.spec.ts>) | 经真实增强工具：adapter 与固定模型的凭据依赖异常（含 `WebError`）不进入结果，真实取消仍为 `WEB_ABORTED`。 |
 | [enhanced-listing.spec.ts](<../packages/search-enhanced/tests/enhanced-listing.spec.ts>) | `searchListing`：目录用途、接收方（运维端点取主机名）与按访问方式的实时性。 |
 | [enhanced-search.spec.ts](<../packages/search-enhanced/tests/enhanced-search.spec.ts>) | 经真实 `WebRuntime` 与能力执行：按 id 调 adapter、native、固定模型与会话模型，不改会话选择；去敏与上游说明在提示之后；并行两个 provider；列出随设置变化而定义不变；就绪子句（含读不到时）；每个调用 Agent 的身份。 |
-| [host.spec.ts](<../packages/search-enhanced/tests/host.spec.ts>) | 真实 Host 的选择、记忆、继承、冻结与恢复。 |
+| [host.spec.ts](<../packages/search-enhanced/tests/host.spec.ts>) | 真实 Host 的选择、记忆、继承、冻结与恢复；子 Agent 会话的写入从下一请求步生效、不写记忆，顶层与用户 fork 写记忆；没有下一请求模型时会话模型连接为 `no-model`、native 只看 API key。 |
 | [mcp.spec.ts](<../packages/search-enhanced/tests/mcp.spec.ts>) | 搜索 MCP 执行与错误边界。 |
 | [model-execute.spec.ts](<../packages/search-enhanced/tests/model-execute.spec.ts>) | model 请求、鉴权、回答来源与凭据处理；API key 与账号令牌解析的依赖异常一律固定化。 |
 | [model-protocols.spec.ts](<../packages/search-enhanced/tests/model-protocols.spec.ts>) | 模型 URL、协议请求与响应解析。 |
@@ -396,7 +402,7 @@ core 的测试夹具：[fixtures/enhanced.ts](<../packages/core/tests/fixtures/e
 | [enhanced-credentials.spec.ts](<../packages/fetch-enhanced/tests/enhanced-credentials.spec.ts>) | 经真实增强工具：adapter 凭据依赖异常不进入结果，真实取消仍为 `WEB_ABORTED`。 |
 | [enhanced-fetch.spec.ts](<../packages/fetch-enhanced/tests/enhanced-fetch.spec.ts>) | 经真实 `WebRuntime` 与能力执行：按 id 调 local、远程 adapter 与 native，不改会话选择；提示不加在 local 的 URL 无效与白名单拒绝上（远程服务的拒绝仍加）；并行；列出的接收方与 `this provider` 白名单说明。 |
 | [enhanced-listing.spec.ts](<../packages/fetch-enhanced/tests/enhanced-listing.spec.ts>) | `fetchListing`：接收方（运维端点取主机名）与 local 的白名单说明。 |
-| [host.spec.ts](<../packages/fetch-enhanced/tests/host.spec.ts>) | 真实 Host 的选择、记忆、继承、快照与恢复。 |
+| [host.spec.ts](<../packages/fetch-enhanced/tests/host.spec.ts>) | 真实 Host 的选择、记忆、继承、快照与恢复；子 Agent 会话的写入从下一请求步生效、不写记忆，顶层与用户 fork 写记忆；没有下一请求模型时只按 API key 判断就绪。 |
 | [local-provider.spec.ts](<../packages/fetch-enhanced/tests/local-provider.spec.ts>) | 官方 HTTP transport 上的本地授权、取消与限制；自有错误前缀与上游错误原样透传。 |
 | [native.spec.ts](<../packages/fetch-enhanced/tests/native.spec.ts>) | 原生鉴权、端点与请求级安全边界。 |
 | [plugin.spec.ts](<../packages/fetch-enhanced/tests/plugin.spec.ts>) | provider 注册、设置行、公开路由与卸载。 |

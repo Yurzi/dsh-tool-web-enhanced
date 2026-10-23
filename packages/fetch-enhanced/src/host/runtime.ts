@@ -21,7 +21,7 @@ export function fetchCapability(ctx: Context, settings: () => ResolvedSettings):
     remoteNamespace: 'fetchConnections',
     storageDomain: 'web_fetch_enhanced',
     contract, optionsCodec, settings,
-    describe: (current, agent) => describeConnections(ctx, current, agent),
+    describe: (current, model) => describeConnections(ctx, current, model),
     target: connection => {
       switch (connection.kind) {
         case 'local': return createLocalBackend(() => connection.options, ctx.logger)

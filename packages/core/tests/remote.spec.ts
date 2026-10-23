@@ -1,13 +1,16 @@
 /** Real Agents, Session Controller, Gateway, selection domain and JSON backend. */
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
+import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { Context, type Message } from '@deepseek-ai/cordis'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
+import AgentDefaultModel from '@deepseek-ai/dsh-agent-default-model'
+import * as SessionPersistenceJsonl from '@deepseek-ai/dsh-session-persistence-jsonl'
 import Gateway from '@deepseek-ai/dsh-api-gateway'
 import SessionController from '@deepseek-ai/dsh-api-session-controller'
-import { SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
+import { SessionId, SessionLogOffset, type SessionStore } from '@deepseek-ai/dsh-session'
 import Projections from '@deepseek-ai/dsh-session-projection'
 import Storage from '@deepseek-ai/dsh-storage'
 import * as StorageDomain from '@deepseek-ai/dsh-storage-domain'
@@ -17,10 +20,11 @@ import TypertRegistry from '@deepseek-ai/dsh-typert-registry'
 import { afterEach, describe, expect, it } from 'vitest'
 import { selectionContract, type ConnectionView, type ProviderView } from '../src/shared/selection.ts'
 import type { OptionsCodec } from '../src/host/capability.ts'
+import type { SessionModel } from '../src/host/model.ts'
 import { Pairings } from '../src/host/pairings.ts'
 import { createConnectionsService } from '../src/host/remote.ts'
 import { ToolRestriction } from '../src/host/restriction.ts'
-import { Sessions } from '../src/host/sessions.ts'
+import { liveSession, Sessions } from '../src/host/sessions.ts'
 import { SessionStorage } from '../src/host/storage.ts'
 import { settingsRow } from '../src/host/settings-row.ts'
 import { WebError } from '@deepseek-ai/dsh-web'
@@ -33,7 +37,9 @@ const internal = { code: 'gateway/internal', message: 'connection request failed
 
 async function host(options: {
   providerView?: () => ProviderView
-  describe?: () => Promise<ConnectionView[]>
+  describe?: (settings: unknown, model: SessionModel | undefined) => Promise<ConnectionView[]>
+  persistence?: boolean
+  query?: boolean
   invalidSettings?: boolean
 } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'remote-private-storage-token-'))
@@ -45,6 +51,29 @@ async function host(options: {
   await mountAgentLoopTestDependencies(ctx, { tools: { mode: 'native' } })
   await ctx.plugin(Projections)
   await ctx.plugin(AgentLoop)
+  if (options.persistence) {
+    await ctx.plugin(SessionPersistenceJsonl, { root: join(root, 'sessions'), compression: 'none' })
+    await ctx.plugin(AgentDefaultModel, { provider: 'fixture', model: 'm' })
+  }
+  if (options.query) {
+    // Peer-only resolution exposes the public instance type here, not the exported constructor type.
+    const require = createRequire(import.meta.resolve('@deepseek-ai/dsh-api-session-controller'))
+    type Query = Context['sessionQuery']
+    const { default: SessionQuery }: {
+      default: abstract new (ctx: Context) => Query
+    } = await import(require.resolve('@deepseek-ai/dsh-session-query'))
+    // Keep real exact reads for cold recovery/not-found; this fixture does not provide search.
+    class ExactReadQuery extends SessionQuery {
+      override searchSessions(..._args: Parameters<Query['searchSessions']>): ReturnType<Query['searchSessions']> {
+        throw new Error('remote fixture does not support session search')
+      }
+
+      override searchEvents(..._args: Parameters<Query['searchEvents']>): ReturnType<Query['searchEvents']> {
+        throw new Error('remote fixture does not support event search')
+      }
+    }
+    void new ExactReadQuery(ctx)
+  }
   await ctx.plugin(Storage)
   await ctx.plugin(StorageJson, { root })
   await ctx.plugin(StorageDomain, { backend: 'json' })
@@ -142,7 +171,7 @@ describe('connection Remote failure boundary', () => {
   it.each(['get', 'set'] as const)('sanitizes a real JSON storage write failure during %s and logs its private path', async method => {
     const h = await host()
     await h.storage.domain()
-    if (method === 'set') await h.sessions.current(h.agent)
+    if (method === 'set') await h.sessions.current(liveSession(h.agent))
     await h.blockWrites()
     const error = await sanitized(h, h.invoke(method, {
       sessionId: h.agent.id, ...(method === 'set' ? { connectionId: null, expectedRevision: 0 } : {}),
@@ -237,7 +266,7 @@ describe('connection Remote failure boundary', () => {
     const handle = await h.ctx.agents.create({
       // Another model than the parent's: its memory, written by the parent's set, does not apply.
       sessionId: SessionId(id), agentOptions: { provider: 'fixture', model: 'child' },
-      meta: { parentSession: h.agent.session.id, origin: 'subagent', isSeeded: fork },
+      meta: { cwd: h.root, parentSession: h.agent.session.id, origin: 'subagent', isSeeded: fork },
       ...(fork ? { seed: [], inheritedEventCount: SessionLogOffset(0) } : {}),
     })
     cleanups.push(() => handle.dispose())
@@ -264,15 +293,171 @@ describe('connection Remote failure boundary', () => {
     expect(h.logs).toHaveLength(0)
   })
 
-  it.each([false, true])('still refuses writes to a live child Agent (fork=%s) with the controller failure', async fork => {
+  it.each([false, true])('writes a live child Agent without changing model memory (fork=%s)', async fork => {
     const h = await host()
-    const { handle, error } = await child(h, 'owned-child', fork)
-    const before = await h.invoke('get', { sessionId: handle.agent.id })
+    const { handle } = await child(h, 'owned-child', fork)
+    await h.invoke('get', { sessionId: handle.agent.id })
+    expect(await h.invoke('set', { sessionId: handle.agent.id, connectionId: null, expectedRevision: 0 }))
+      .toMatchObject({ selection: { connectionId: null, revision: 1 }, source: 'session' })
+    expect(await h.pairings.list()).toEqual([])
+    expect(await h.invoke('get', { sessionId: handle.agent.id })).toMatchObject({ selection: { connectionId: null, revision: 1 } })
+    expect(h.logs).toHaveLength(0)
+  })
+
+  async function makeCold(h: Host, handle: Awaited<ReturnType<Host['ctx']['agents']['create']>>) {
+    const sessions = h.ctx.sessions as unknown as SessionStore
+    await sessions.flush(handle.agent.session)
+    const id = handle.agent.session.id
+    await handle.dispose()
+    expect(h.ctx.agents.get(id)).toBeUndefined()
+    expect((h.ctx.sessions as unknown as SessionStore).get(id)).toBeUndefined()
+    expect(await h.ctx.sessionPersistence.stat(id)).toMatchObject({ header: { id } })
+    return id
+  }
+
+  it.each([false, true])('reads and writes a real JSONL cold child without restoring it, then resumes its durable choice (fork=%s)', async fork => {
+    const describedModels: Array<SessionModel | undefined> = []
+    const h = await host({ persistence: true, describe: async (_settings, model) => {
+      describedModels.push(model)
+      return []
+    } })
+    const { handle } = await child(h, 'durable-child', fork)
+    // Establish a record while live, just as the runtime capture does.
+    await h.invoke('get', { sessionId: handle.agent.id })
+    const id = await makeCold(h, handle)
+    const created: SessionId[] = []
+    h.ctx.on('agent/created', ({ agent }) => { created.push(agent.id) })
+    describedModels.splice(0)
+    expect(await h.invoke('get', { sessionId: id })).toMatchObject({ selection: { connectionId: 'builtin:local', revision: 0 } })
+    expect(await h.invoke('set', { sessionId: id, connectionId: null, expectedRevision: 0 }))
+      .toMatchObject({ selection: { connectionId: null, revision: 1 }, source: 'session' })
+    expect(await h.invoke('get', { sessionId: id })).toMatchObject({ selection: { connectionId: null, revision: 1 } })
+    expect(describedModels).toEqual([undefined, undefined, undefined])
+    expect(h.ctx.agents.get(id)).toBeUndefined()
+    expect((h.ctx.sessions as unknown as SessionStore).get(id)).toBeUndefined()
+    expect(created).toEqual([])
+    expect(await h.pairings.list()).toEqual([])
+    expect((await h.storage.domain()).table('selections').get(id)).toMatchObject({ connectionId: null, revision: 1 })
+
+    const resumed = await h.ctx.agents.resume({ resumeSessionId: id, agentOptions: { provider: 'fixture', model: 'child' } })
+    cleanups.push(() => resumed.dispose())
+    expect(resumed.agent.id).toBe(id)
+    expect(created).toEqual([id])
+    expect(await h.sessions.current(liveSession(resumed.agent)))
+      .toMatchObject({ selection: { connectionId: null, revision: 1 }, source: 'session' })
+    // Once explicitly selected, a fork no longer follows later parent changes.
+    await h.invoke('set', { sessionId: h.agent.id, connectionId: 'builtin:local', expectedRevision: 0 })
+    expect(await h.invoke('get', { sessionId: id })).toMatchObject({ selection: { connectionId: null, revision: 1 } })
+    expect(h.logs).toHaveLength(0)
+  })
+
+  it.each([false, true])('uses default or inherited selection for a cold child with no record, not model memory (fork=%s)', async fork => {
+    const h = await host({ persistence: true })
+    await h.invoke('set', { sessionId: h.agent.id, connectionId: null, expectedRevision: 0 })
+    await h.pairings.set({ provider: 'fixture', model: 'child' }, null)
+    const before = await h.pairings.list()
+    const { handle } = await child(h, 'no-selection-record', fork)
+    const id = await makeCold(h, handle)
+    const table = (await h.storage.domain()).table('selections')
+    expect(table.get(id)).toBeUndefined()
+    const created: SessionId[] = []
+    h.ctx.on('agent/created', ({ agent }) => { created.push(agent.id) })
+    expect(await h.invoke('get', { sessionId: id })).toMatchObject(fork
+      ? { selection: { connectionId: null, revision: 0 }, source: 'inherited' }
+      : { selection: { connectionId: 'builtin:local', revision: 0 }, source: 'default' })
+    expect(table.get(id)).toMatchObject({ connectionId: fork ? null : 'builtin:local', revision: 0 })
+    expect(await h.pairings.list()).toEqual(before)
+    expect(h.ctx.agents.get(id)).toBeUndefined()
+    expect(created).toEqual([])
+    const resumed = await h.ctx.agents.resume({ resumeSessionId: id, agentOptions: { provider: 'fixture', model: 'child' } })
+    cleanups.push(() => resumed.dispose())
+    // Revision-zero defaults are recalculated with the next live model; inheritance stays inheritance.
+    expect(await h.invoke('get', { sessionId: id })).toMatchObject({
+      selection: { connectionId: null, revision: 0 }, source: fork ? 'inherited' : 'model',
+    })
+    expect(h.logs).toHaveLength(0)
+  })
+
+  it.each([false, true])('restores an ordinary JSONL cold Session through the real controller and writes model memory (user fork=%s)', async fork => {
+    for (const method of ['get', 'set'] as const) {
+      const h = await host({ persistence: true, query: true })
+      const original = await h.ctx.agents.create({
+        sessionId: SessionId('cold-ordinary-' + method), agentOptions: { provider: 'fixture', model: 'm' },
+        meta: { cwd: h.root, ...(fork ? { parentSession: h.agent.id, isSeeded: true } : {}) },
+        ...(fork ? { seed: [], inheritedEventCount: SessionLogOffset(0) } : {}),
+      })
+      cleanups.push(() => original.dispose())
+      const id = await makeCold(h, original)
+      const created: SessionId[] = []
+      h.ctx.on('agent/created', ({ agent }) => { created.push(agent.id) })
+      expect(await h.invoke(method, { sessionId: id, ...(method === 'set' ? { connectionId: null, expectedRevision: 0 } : {}) }))
+        .toMatchObject({ selection: { connectionId: method === 'set' ? null : 'builtin:local', revision: method === 'set' ? 1 : 0 } })
+      expect(created).toEqual([id])
+      const restored = h.ctx.agents.get(id)!
+      expect(restored.id).toBe(id)
+      expect(restored.session.header.origin).toBeUndefined()
+      expect(await h.controller.resolveAgent(id)).toEqual({ agent: restored })
+      expect(restored.options).toMatchObject({ provider: 'fixture', model: 'm' })
+      if (method === 'get') await h.invoke('set', { sessionId: id, connectionId: null, expectedRevision: 0 })
+      expect(await h.pairings.list()).toEqual([{ provider: 'fixture', model: 'm', connectionId: null }])
+      expect(h.logs).toHaveLength(0)
+    }
+  })
+
+  it.each(['get', 'set'] as const)('preserves the real controller not-found response for a missing JSONL Session during %s', async method => {
+    const h = await host({ persistence: true, query: true })
+    const sessionId = SessionId('missing-session')
+    expect(await h.ctx.sessionPersistence.stat(sessionId)).toBeUndefined()
+    const found = await h.controller.resolveAgent(sessionId)
+    if (!('error' in found)) throw new Error('expected not-found')
+    expect(found.error.code).toBe('session/not-found')
+    const failure = await h.invoke(method, { sessionId, ...(method === 'set' ? { connectionId: null, expectedRevision: 0 } : {}) })
+      .then(() => { throw new Error('expected rejection') }, (error: unknown) => error)
+    expect(h.ctx.typertGateway.wireStream.failure(failure)).toEqual(h.ctx.typertGateway.wireStream.failure(found.error))
+    expect(h.ctx.agents.get(sessionId)).toBeUndefined()
+    expect(h.logs).toHaveLength(0)
+  })
+
+  it.each([false, true])('serializes concurrent cold child writes and rejects exactly one stale revision (fork=%s)', async fork => {
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    let descriptions = 0
+    const h = await host({ persistence: true, describe: async () => {
+      if (descriptions++ === 0) {
+        entered.resolve()
+        await release.promise
+      }
+      return []
+    } })
+    const { handle } = await child(h, 'contended-child', fork)
+    const id = await makeCold(h, handle)
+    // The first write is committed but its response is still in flight at the
+    // asynchronous capability-description seam when the second request arrives.
+    const first = h.invoke('set', { sessionId: id, connectionId: null, expectedRevision: 0 })
+    await entered.promise
+    const second = await h.invoke('set', { sessionId: id, connectionId: 'builtin:local', expectedRevision: 0 })
+      .then(value => ({ kind: 'accepted' as const, value }), (error: unknown) => ({ kind: 'rejected' as const, error }))
+    release.resolve()
+    const winner = await first
+    expect(second).toMatchObject({ kind: 'rejected', error: { code: namespace + '/conflict', details: {} } })
+    expect(winner).toMatchObject({ selection: { connectionId: null, revision: 1 }, source: 'session' })
+    expect(await h.invoke('get', { sessionId: id })).toEqual(winner)
+    expect(await h.pairings.list()).toEqual([])
+    expect(h.ctx.agents.get(id)).toBeUndefined()
+    expect(h.logs).toHaveLength(0)
+  })
+
+  it('falls back to the controller for writes when persistence is unavailable', async () => {
+    const h = await host()
+    const { handle } = await child(h, 'gone-child-write', false)
+    await handle.dispose()
+    expect(h.ctx.get('sessionPersistence')).toBeUndefined()
+    const found = await h.controller.resolveAgent(handle.agent.id)
+    if (!('error' in found)) throw new Error('expected a controller failure')
     const failure = await h.invoke('set', { sessionId: handle.agent.id, connectionId: null, expectedRevision: 0 })
-      .then(() => { throw new Error('expected rejection') }, (rejection: unknown) => rejection)
-    expect(failure).toBeInstanceOf(RemoteError)
-    expect(h.ctx.typertGateway.wireStream.failure(failure)).toEqual(h.ctx.typertGateway.wireStream.failure(error))
-    expect(await h.invoke('get', { sessionId: handle.agent.id })).toEqual(before)
+      .then(() => { throw new Error('expected rejection') }, (error: unknown) => error)
+    expect(h.ctx.typertGateway.wireStream.failure(failure)).toEqual(h.ctx.typertGateway.wireStream.failure(found.error))
+    expect(h.ctx.agents.get(handle.agent.id)).toBeUndefined()
     expect(h.logs).toHaveLength(0)
   })
 

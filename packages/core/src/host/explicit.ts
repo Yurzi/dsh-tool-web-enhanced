@@ -6,6 +6,7 @@ import type { EnhancedAccess, Explicit, ExplicitCall, ProviderListing, ProviderR
 import type { CapabilityErrors } from './errors.ts'
 import type { Plan } from './plans.ts'
 import { isSelectable } from './selectable.ts'
+import { nextModel } from './model.ts'
 
 type ReadyPlan<O> = Extract<Plan<O>, { kind: 'ready' }>
 type Prepared<S, O> = { readonly settings: S; readonly plan: ReadyPlan<O>; readonly ids: readonly string[] }
@@ -64,7 +65,7 @@ export function explicitAccess<S extends CapabilitySettings, O extends Record<st
       if (connection !== undefined) connections.set(id, { ...connection, disabled: false } as ConnectionOf<S>)
     }
     try {
-      const described = await errors.abortable(capability.describe({ ...prepared.settings, connections }, call.agent), call.signal)
+      const described = await errors.abortable(capability.describe({ ...prepared.settings, connections }, nextModel(ctx, call.agent)), call.signal)
       errors.throwIfAborted(call.signal)
       return new Map(described.map(view => [view.id, view]))
     } catch {

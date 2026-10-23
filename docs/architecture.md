@@ -194,10 +194,11 @@ search 与 fetch 共用一份 core 实现；两侧的差别只是目录数据与
 
 - **连接**：到某个后端的一种配置。`builtin:<键>` 来自插件目录，运维可做稀疏覆盖，目录项的 `optIn` 决定它缺省是否停用（[远程服务缺省停用](design.md#远程服务缺省停用)）；`custom:<name>` 由运维新建，建立时启用。连接与设置文档的字段见 [设计文档 · 配置文档](design.md#配置文档)。
 - **插件行设置**：一份两侧共用文法的文档（core `shared/settings.ts`），Host 与浏览器用同一个纯函数解析（插件的 `resolveSettings` 建在 core `resolveDocument` 上）。它决定会话**能**选什么，以及是否向新对话提供增强工具（`enhancedTools`）。
-- **会话选择**：`{ connectionId | null, revision, options }`，存在插件自己的存储域表 `selections`。同一会话的读写排队执行，写入按 revision 比较；core 拥有 `connectionId`、`revision`、`inherited`，会话参数由能力的 `OptionsCodec` 编码（search 有 `freshness`，fetch 没有）。
-- **模型记忆**：(provider, model) → 连接，存在表 `pairings`；选择落盘后才写记忆，记忆写失败只记日志。
+- **会话选择**：`{ connectionId | null, revision, options }`，存在插件自己的存储域表 `selections`。读写以会话为目标（core `SessionTarget`）：`live` 是有运行中 Agent 的会话，带着这个 Agent（`liveSession(agent)`）；`cold` 是不在运行的子 Agent 会话，只有会话 id 与会话头，读写不碰 Agent。同一会话的读写排队执行，写入按 revision 比较；core 拥有 `connectionId`、`revision`、`inherited`，会话参数由能力的 `OptionsCodec` 编码（search 有 `freshness`，fetch 没有）。
+- **会话来源**：core `sessionOrigin` 只读会话头的公开字段，返回判别联合：`top-level`、`fork`（有 `parentSession`：用户 fork）与 `subagent`（`origin === 'subagent'`：spawn 与 subagent_fork），各带 `seeded`（`isSeeded`）。`origin` 先于父会话判断，与 DSH 判断子 Agent 路由归属的依据一致。继承父会话的选择（有父会话且 `seeded`）、复制父会话的对话列表（有父会话）、[新建的判断](#增强工具的运行时)与是否写模型记忆都经它。
+- **模型记忆**：(provider, model) → 连接，存在表 `pairings`；选择落盘后才写记忆，记忆写失败只记日志。写不写由 `Sessions.change` 按会话决定，调用方不传参数：选了连接（不是只改会话参数）、会话来源不是 `subagent`、且知道下一次请求的模型时才写。
 
-未选择时由 core `Sessions` 解析出当前连接；选择来源、模型记忆与默认值的行为见[会话选择](design.md#会话选择)。
+未选择时由 core `Sessions` 解析出当前连接；选择来源、模型记忆与默认值的行为见[会话选择](design.md#会话选择)。下一次请求的模型（`nextModel`）只有 `live` 目标才有，`cold` 目标的模型为未知：默认来源不查模型记忆，连接视图也按未知描述——`Capability.describe(settings, model)` 与 core `credentialReadiness` 收的是这个模型而不是 Agent，跟随会话模型的连接为 `no-model`，native 只看 API key。
 
 **冻结、复查与重建**
 
@@ -227,7 +228,7 @@ flowchart LR
 - **状态、世代与提交点**：控制器持有注册世代与每个 Agent 的状态（对话列表有 / 无 / 未读到，选择 on / off / 未读到）及操作版本。所有异步读取记下世代与版本，只有仍是当前世代与版本、插件存活、Agent 未遗忘、注册条件仍成立时才提交；所有提交经同一个提交点，不用定时器。
 - **注册与注销**：注册条件变为成立时，同步注册两个定义，并在同一段同步代码里对 `ctx.agents.list()` 的每个 Agent 按已知状态装遮罩（不确定的遮住），再异步读取对话列表与选择，读到可见才撤遮罩。两个定义的注册是一次可回滚的提交：逐个记下 disposer，任一步抛错（如名字已被别的 owner 注册）就倒序撤销本次已注册的定义、不装遮罩、只记固定的 Host 日志，控制器仍是“未注册”，下一次重算可以恢复；从不撤销别的 owner 的定义。条件不再成立时同步注销定义（世代 +1，在途读取作废），再撤增强遮罩；原生遮罩按自己的规则处理，不读存储。
 - **增强组的生命周期**：增强组的注册与遮罩绑定在 `ctx.inject(['tools', 'agents'], …)` 的注入作用域上：两个服务都到位后才开始判断注册条件（并对已有的 Agent 补做），任一服务被替换或撤下时，该作用域的 effect 先注销、撤遮罩，服务恢复后用同一份定义重新注册。定义按安装只构建一次（`enhanced.tools(access)`），首次需要注册时才构建。
-- **同步时机**：`agent/created` 先同步把 Agent 记为未读到（已注册时同步遮住），再建立对话列表、捕获计划后提交；DSH 串行等待 created 监听器后才开始模型循环。`agent/request` 捕获计划后与 Remote 写入后同样同步；捕获失败时显式记为未读到并遮住增强工具，原生遮罩不动。捕获时只有已注册且注册条件成立才读对话列表（结果是 `ProviderListRead`：`read` 带记录，或 `unread`）；条件不成立（如开关关闭）时不读 `provider_lists`，记为未读到，注册后由重算（reconcile → refresh）去读。列表读取失败只记日志、记为 `unread`：该 Agent 的增强工具保持遮住，选择与原生计划照常；设置事件触发的重算同理。插件启动时对 `ctx.agents.list()` 里已有的 Agent 补做一遍。
+- **同步时机**：`agent/created` 先同步把 Agent 记为未读到（已注册时同步遮住），再建立对话列表、捕获计划后提交；DSH 串行等待 created 监听器后才开始模型循环。`agent/request` 捕获计划后同样同步；捕获失败时显式记为未读到并遮住增强工具，原生遮罩不动。选择写入落盘后，按那一刻 `agents.get(会话 id)` 里运行中的 Agent 同步（排队期间从冷变为运行中的目标也同步）；没有运行中的 Agent 就不同步，由它下一次的 `agent/created` / `agent/request` 按存储的选择计算。捕获时只有已注册且注册条件成立才读对话列表（结果是 `ProviderListRead`：`read` 带记录，或 `unread`）；条件不成立（如开关关闭）时不读 `provider_lists`，记为未读到，注册后由重算（reconcile → refresh）去读。列表读取失败只记日志、记为 `unread`：该 Agent 的增强工具保持遮住，选择与原生计划照常；设置事件触发的重算同理。插件启动时对 `ctx.agents.list()` 里已有的 Agent 补做一遍。
 - **`web` 行与插件行变化**：`settings/document-updated`（`ns = web` 或本插件行）时重算注册条件。原生组对已知 Agent 重算：路由离开时立即撤销、不读存储；回到本插件时用只读的 `peek` 读选择（不为没有记录的会话建记录）。
 - **卸载**：增强组在注入作用域的一个 effect 里同步完成“作废在途读取（世代 +1）→ 注销定义 → 撤增强遮罩”；原生遮罩由控制器自己的 effect 撤下，之后捕获返回失败的计划。定义与增强遮罩放在同一个 effect，是因为 Cordis 卸载时并行运行兄弟 effect，拆开会出现“遮罩已撤、定义仍在”的瞬间。
 - **生效边界**：保证落在同步提交完成后、正常模型循环的下一次工具组装。DSH 在 `agent/request` 之前已组装好本步的工具列表，所以变化从下一步生效；Native 模式下 DSH 在下一请求追加工具增删的 developer 消息，PTC 模式只改 SDK。已注销或已遮住的旧调用由 DSH 报 `UNKNOWN_TOOL`，不进工具体；已经发出的请求不因随后的变化撤回。公开 registry 的同步通知里能看到注册与遮罩之间的中间态，见[已知限制](design.md#已知限制)。
@@ -235,7 +236,13 @@ flowchart LR
 
 **Remote**
 
-浏览器经 `<ns>/get`、`<ns>/set`（带 `expectedRevision`）、`<ns>/provider`、`<ns>/pairings`、`<ns>/forgetPairing` 读写；契约由 core `selectionContract` 生成（两端都是严格 schema），服务由 core `createConnectionsService` 在工厂内声明带 `@Remote` 的类，每次安装一个新类。`get` / `set` 按被寻址的会话资源授权。`set` 只经 `sessionController.resolveAgent` 取 Agent（解析或恢复普通会话，子 Agent 路由的会话被拒为 `session/agent-busy`）；`get` 先取 `ctx.agents.get(sessionId)` 里已存在的 Agent，没有时才交给 `resolveAgent`，所以运行中的子 Agent 与 fork 可读其选择，之后同样经 `sessions.current()`（建记录与继承不变）。Remote 在此隔离服务异常：契约内的错误原样交出，其余一律改为固定消息、原异常只进 Host 日志；对浏览器的错误分类统一见[浏览器看到的错误](design.md#浏览器看到的错误)。
+浏览器经 `<ns>/get`、`<ns>/set`（带 `expectedRevision`）、`<ns>/provider`、`<ns>/pairings`、`<ns>/forgetPairing` 读写；契约由 core `selectionContract` 生成（两端都是严格 schema），服务由 core `createConnectionsService` 在工厂内声明带 `@Remote` 的类，每次安装一个新类，安装在 `sessionController`、`typert`、`agents` 的注入作用域里（dsh-TUI 没有 `sessionController`，不创建 Remote）。`get` / `set` 按被寻址的会话资源授权，用同一种取法得到 `SessionTarget`：
+
+1. `ctx.agents.get(sessionId)` 有运行中的 Agent（含子 Agent 与 subagent_fork）→ `live`。
+2. 否则读可选服务 `sessionPersistence` 的 `stat(sessionId)`（只读会话头，不读事件日志、不取得写入权）；会话来源为 `subagent` → `cold`，直接读写记录，不恢复 Agent：DSH 把这类会话留给子 Agent 路由，`resolveAgent` 会拒为 `session/agent-busy`。
+3. 其余（普通会话、会话不存在、没有 `sessionPersistence`）→ `sessionController.resolveAgent`，解析或恢复普通会话（写模型记忆要知道它下一次请求的模型），错误原样交出（如 `session/not-found`）。
+
+之后经 `sessions.current()` / `change()` 与 `connections()`（建记录与继承不变）；`set` 先按 `isSelectable` 检查连接，修订冲突改为 `<ns>/conflict`。Remote 在此隔离服务异常：契约内的错误原样交出，其余一律改为固定消息、原异常只进 Host 日志；对浏览器的错误分类统一见[浏览器看到的错误](design.md#浏览器看到的错误)。
 
 `provider` 只返回浏览器看不到的两项事实 `{ providerId, envProvider }`，路由由浏览器用同一个 `routeOf` 判断。连接视图不含凭据引用。
 
@@ -294,9 +301,9 @@ flowchart LR
 
 列表的内容与之后设置变化的影响见[设计文档 · 对话的 provider 列表](design.md#对话的-provider-列表)；结构上：
 
-- **新建的判断**（core `isNewConversation`）：`header.parentSession` 为空、不是 `header.isSeeded`、`firstLiveSeq === 0` 且 `firstLifecycleSeq === 0`。照 DSH `tool-subagent` 的 `selectForSession` 的语义，只用 Session 公开、未弃用的字段；不看事件序号，因为真实的 `sessionController.create` 在 `agent/created` 之前已经写入事件。恢复的非空会话不是新建；真正空的恢复会话两个字段都为 0，被当作新建（里面没有对话）。
+- **新建的判断**（core `isNewConversation`，经 `sessionOrigin`）：没有父会话（`header.parentSession` 为空）、不是 `header.isSeeded`、`firstLiveSeq === 0` 且 `firstLifecycleSeq === 0`。照 DSH `tool-subagent` 的 `selectForSession` 的语义，只用 Session 公开、未弃用的字段；不看事件序号，因为真实的 `sessionController.create` 在 `agent/created` 之前已经写入事件。恢复的非空会话不是新建；真正空的恢复会话两个字段都为 0，被当作新建（里面没有对话）。
 - **建立**：`agent/created` 时（`ProviderLists.create`）：已有记录就读它，从不改写（含空记录）；有父会话就复制父会话的记录；否则只对新建的会话写入一次——注册条件成立时写当时可选（`isSelectable`）的 id，不成立时写空数组。空记录读出来就是“没有列表”，它的作用是占住这个会话：同一进程里之后再为它创建 Agent 时不会在对话中途补建。建立失败只记日志；随后由捕获计划或重算再读列表（见[可见性控制器](#选择范式)的同步时机），读不到只把该 Agent 的增强工具记为未读到并遮住，原生计划照常。
-- **继承**：子会话（spawn 与 fork，Session header 的父会话）等父会话的队列落定后复制父会话的记录；父会话没有记录，子会话也没有。
+- **继承**：有父会话的会话（用户 fork、spawn 与 subagent_fork；`sessionOrigin` 的 `parent`）等父会话的队列落定后复制父会话的记录；父会话没有记录，子会话也没有。
 - **恢复**：读记录；没有记录（早于增强工具的会话）或记录为空（开关关闭时建立的对话）就没有列表。
 - **持久化**：表 `provider_lists`（会话 id → id 数组）与 `selections`、`pairings` 同在插件的存储域里，域的 version 仍是 1：新增的表对已有的域不需要迁移，旧域里它一开始是空的，所以升级前的会话都没有记录。每会话一条，写一次，不改写、不随设置迁移；读写与会话选择共用 `SessionStorage` 的每会话队列（`exclusive` / `settled`）与存储生命周期。
 

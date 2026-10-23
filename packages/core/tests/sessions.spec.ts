@@ -10,7 +10,7 @@ import Storage from '@deepseek-ai/dsh-storage'
 import * as StorageDomain from '@deepseek-ai/dsh-storage-domain'
 import * as StorageJson from '@deepseek-ai/dsh-storage-json'
 import { afterEach, expect, it } from 'vitest'
-import { Pairings, Sessions, SessionStorage, ToolRestriction, type OptionsCodec, type SessionChange } from '../src/host/index.ts'
+import { liveSession, Pairings, Sessions, SessionStorage, ToolRestriction, type OptionsCodec, type SessionChange } from '../src/host/index.ts'
 
 const cleanups: Array<() => Promise<unknown>> = []
 afterEach(async () => { for (const cleanup of cleanups.splice(0).toReversed()) await cleanup() })
@@ -37,6 +37,6 @@ it('supports a capability with no session options and isolates its storage from 
   const handle = await ctx.agents.create({ sessionId: SessionId('shared-session'), agentOptions: { provider: 'fixture', model: 'm' } })
   cleanups.push(() => handle.dispose())
   const change: SessionChange<Record<string, never>> = { connectionId: null }
-  expect(await one.change(handle.agent, change, 0)).toEqual({ source: 'session', selection: { connectionId: null, revision: 1, options: {} } })
-  expect(await two.current(handle.agent)).toEqual({ source: 'default', selection: { connectionId: 'builtin:local', revision: 0, options: {} } })
+  expect(await one.change(liveSession(handle.agent), change, 0)).toEqual({ source: 'session', selection: { connectionId: null, revision: 1, options: {} } })
+  expect(await two.current(liveSession(handle.agent))).toEqual({ source: 'default', selection: { connectionId: 'builtin:local', revision: 0, options: {} } })
 })

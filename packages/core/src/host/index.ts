@@ -18,6 +18,7 @@ export * from './route.ts'
 export * from './runtime.ts'
 export * from './selectable.ts'
 export * from './sessions.ts'
+export * from './session-origin.ts'
 export * from './storage.ts'
 export { containsSecret, secretMatcher, redactSecrets, redactJson, redactDiagnostic, type SecretMatcher } from './redaction.ts'
 // Provider wires share their capability vocabularies; protocol helpers stay module-internal.

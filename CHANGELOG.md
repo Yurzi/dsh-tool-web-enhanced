@@ -4,11 +4,15 @@
 
 ### dsh-web-search-enhanced, dsh-web-fetch-enhanced
 
-- Fix: the composer menu no longer shows "Read failed" in a subagent's or a forked conversation while that Agent is running ([#1](https://github.com/Yurzi/dsh-tool-web-enhanced/issues/1)). Reading the connection status now uses the running Agent, so the menu shows the choice its requests use (a fork's comes from the parent conversation). Changing the choice there is still refused by DSH (`session/agent-busy`) and leaves it unchanged; ordinary conversations, resuming and storage are unchanged.
+- Fix: a subagent's conversation (spawn or subagent_fork) no longer shows "Read failed" in the composer menu ([#1](https://github.com/Yurzi/dsh-tool-web-enhanced/issues/1)); its connection can be read and changed there like any conversation's, whether or not the subagent is running. A running subagent uses the new choice from its next model request step, and turning a capability Off hides the native tool right away; a subagent that is not running uses it the next time it runs (woken by its parent Agent or by a message in its conversation), and reading or changing the choice does not resume it. Choices made in a subagent's conversation do not write model memory. Top-level conversations and user forks (the Web's forked sessions) are unchanged and still write it.
+- While a subagent is not running, the model of its next request is unknown: search's conversation-model connection says so (reason `no-model`), native connections show readiness from the API key only, and a conversation that has neither chosen nor inherited a choice shows the default connection without looking up model memory; that is worked out again, with model memory, when the subagent runs.
+- search: the menu text for `no-model` now reads "The model for this conversation's next request isn't known yet" / "还不知道本会话下一次请求用哪个模型".
 
 ### dsh-tool-web-enhanced-core (private, not published)
 
-- `./host`: the connection Remote service's `get` takes an existing Agent from `ctx.agents.get(sessionId)` before falling back to `sessionController.resolveAgent`; `set` still resolves only through the controller.
+- `./host`: `sessionOrigin(header)` classifies a Session from public header fields as `top-level`, `fork` or `subagent` (`origin: 'subagent'` decides first, as in DSH's own subagent ownership rule); selection inheritance, provider-list copying, `isNewConversation` and the model-memory decision use it, with unchanged results for the first three.
+- `./host`: `Sessions` reads and writes a `SessionTarget` (`live` with its Agent via `liveSession(agent)`, or `cold` with only the Session id and header) instead of an Agent. `change` decides model memory itself (only a connection choice, never for a `subagent` Session, only with a known next-request model) and, once the write is durable, syncs tool masks for whichever Agent is running then. `Capability.describe` and `credentialReadiness` take the next request's model (`SessionModel | undefined`) instead of an Agent.
+- `./host`: the connection Remote service's `get` and `set` share one lookup: a running Agent from `ctx.agents.get`; else, for a subagent Session whose header `sessionPersistence.stat` returns, the stored record directly without resuming it; else `sessionController.resolveAgent`, whose errors pass through. The service is installed in the `sessionController` + `typert` + `agents` injection scope.
 
 ## v0.1.1 (2026-10-23)
 

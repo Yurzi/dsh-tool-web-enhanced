@@ -11,7 +11,8 @@ import Loader from '@deepseek-ai/cordis-plugin-loader'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import AgentPresets from '@deepseek-ai/dsh-agent-preset-registry'
-import { SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
+import { SessionId, SessionLogOffset, type SessionStore } from '@deepseek-ai/dsh-session'
+import * as SessionPersistenceJsonl from '@deepseek-ai/dsh-session-persistence-jsonl'
 import Projections from '@deepseek-ai/dsh-session-projection'
 import Storage from '@deepseek-ai/dsh-storage'
 import * as StorageDomain from '@deepseek-ai/dsh-storage-domain'
@@ -23,7 +24,7 @@ import { SEARCH, selectionContract, type ConnectionView } from '../src/shared/in
 import type { WebSearchRequest, WebSearchResult } from '@deepseek-ai/dsh-web'
 import { afterEach, expect, it, vi } from 'vitest'
 import { inertEnhanced } from './fixtures/enhanced.ts'
-import { installCapability, Pairings, Sessions, SessionStorage, ToolRestriction, selectionDomain, routeFacts, type Capability, type OptionsCodec } from '../src/host/index.ts'
+import { installCapability, liveSession, Pairings, Sessions, SessionStorage, ToolRestriction, selectionDomain, routeFacts, type Capability, type OptionsCodec } from '../src/host/index.ts'
 
 const domainName = 'core_restriction'
 const searchDomain = selectionDomain(domainName)
@@ -51,7 +52,7 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0).toReversed()) await cleanup()
 })
 
-async function presetHost() {
+async function presetHost(persistence = false) {
   let settings = initialSettings()
   const root = await mkdtemp(join(tmpdir(), 'search-agent-'))
   cleanups.push(() => rm(root, { recursive: true, force: true }))
@@ -67,6 +68,7 @@ async function presetHost() {
   await ctx.plugin(Storage)
   await ctx.plugin(StorageJson, { root })
   await ctx.plugin(StorageDomain, { backend: 'json' })
+  if (persistence) await ctx.plugin(SessionPersistenceJsonl, { root: join(root, 'sessions'), compression: 'none' })
   const domain = await ctx.storageDomain.open(searchDomain)
   await domain.table('selections').put('off', { connectionId: null, revision: 1 })
   await domain.table('selections').put('off-other', { connectionId: null, revision: 1 })
@@ -209,6 +211,84 @@ it('reads a known choice once before applying route-return visibility', async ()
   expect(ctx.tools.get('web_search', scopeOf(handle.agent.ctx))).toBeDefined()
 })
 
+it.each([false, true])('immediately hides the native tool after a child selection commits off (fork=%s)', async fork => {
+  const { ctx, plugin, create } = await presetHost()
+  const parent = await create('parent')
+  cleanups.push(() => parent.dispose())
+  const child = await ctx.agents.create({
+    sessionId: SessionId('child'), agentOptions: { provider: 'fixture', model: 'child' },
+    meta: { parentSession: parent.agent.id, origin: 'subagent', isSeeded: fork },
+    ...(fork ? { seed: [], inheritedEventCount: SessionLogOffset(0) } : {}),
+    setup: async agentCtx => { await ctx.agentPresets.mount(agentCtx) },
+  })
+  cleanups.push(() => child.dispose())
+  await plugin.dispose()
+  const storage = new SessionStorage(ctx, domainName, optionsCodec)
+  const pairings = new Pairings(storage)
+  const sessions = new Sessions(ctx, initialSettings, storage, pairings,
+    new ToolRestriction(ctx, { tool: 'web_search', routed: () => routeFacts(ctx, 'searchProvider', SEARCH.providerId).kind === 'this' }))
+  const scope = scopeOf(child.agent.ctx)
+  expect(ctx.tools.get('web_search', scope)).toBeDefined()
+  await sessions.change(liveSession(child.agent), { connectionId: null }, 0)
+  // No agent/request or other refresh runs between the commit and this assertion.
+  expect(ctx.tools.get('web_search', scope)).toBeUndefined()
+  expect(ctx.tools.get('web_search', scopeOf(parent.agent.ctx))).toBeDefined()
+  expect(await pairings.list()).toEqual([])
+})
+
+it.each([false, true].flatMap(fork => [null, 'builtin:test'].map(connectionId => ({ fork, connectionId }))))(
+  'syncs the restored Agent when a queued cold write commits (fork=$fork, next=$connectionId)', async ({ fork, connectionId }) => {
+    const { ctx, plugin, create } = await presetHost(true)
+    const parent = await create('race-parent')
+    cleanups.push(() => parent.dispose())
+    const original = await ctx.agents.create({
+      sessionId: SessionId('race-child'), agentOptions: { provider: 'fixture', model: 'child' },
+      meta: { parentSession: parent.agent.id, origin: 'subagent', isSeeded: fork },
+      ...(fork ? { seed: [], inheritedEventCount: SessionLogOffset(0) } : {}),
+      setup: async agentCtx => { await ctx.agentPresets.mount(agentCtx) },
+    })
+    const { id, header } = original.agent.session
+    await (ctx.sessions as unknown as SessionStore).flush(original.agent.session)
+    await original.dispose()
+    await plugin.dispose()
+    expect(ctx.agents.get(id)).toBeUndefined()
+    const storage = new SessionStorage(ctx, domainName, optionsCodec)
+    const pairings = new Pairings(storage)
+    const restriction = new ToolRestriction(ctx, { tool: 'web_search', routed: () => routeFacts(ctx, 'searchProvider', SEARCH.providerId).kind === 'this' })
+    const sessions = new Sessions(ctx, initialSettings, storage, pairings, restriction)
+    const previous = connectionId === null ? 'builtin:test' : null
+    await (await storage.domain()).table('selections').put(id, { connectionId: previous, revision: 1 })
+    const entered = Promise.withResolvers<void>()
+    const releaseWrite = Promise.withResolvers<void>()
+    const queued = storage.exclusive(id, async () => { entered.resolve(); await releaseWrite.promise })
+    await entered.promise
+    // The addressed target is cold and the change is already queued before restoration.
+    const changed = sessions.change({ kind: 'cold', id, header }, { connectionId }, 1)
+    const restored = await ctx.agents.resume({
+      resumeSessionId: id, agentOptions: { provider: 'fixture', model: 'child' },
+      setup: async agentCtx => { await ctx.agentPresets.mount(agentCtx) },
+    })
+    cleanups.push(() => restored.dispose())
+    restriction.created(restored.agent)
+    restriction.captured(restored.agent, restriction.begin(restored.agent), previous, { kind: 'unread' })
+    const staleCapture = restriction.begin(restored.agent)
+    const releaseCapture = Promise.withResolvers<void>()
+    const oldCapture = releaseCapture.promise.then(() => restriction.captured(restored.agent, staleCapture, previous, { kind: 'unread' }))
+    const scope = scopeOf(restored.agent.ctx)
+    expect(ctx.tools.get('web_search', scope) !== undefined).toBe(previous !== null)
+    releaseWrite.resolve()
+    await queued
+    await changed
+    expect(ctx.agents.get(id)).toBe(restored.agent)
+    const immediatelyVisible = ctx.tools.get('web_search', scope) !== undefined
+    releaseCapture.resolve()
+    await oldCapture
+    expect(immediatelyVisible).toBe(connectionId !== null)
+    expect(ctx.tools.get('web_search', scope) !== undefined).toBe(connectionId !== null)
+    expect(await pairings.list()).toEqual([])
+  },
+)
+
 it('applies a committed selection immediately when model-memory persistence fails', async () => {
   const { ctx, plugin, create } = await presetHost()
   const handle = await create('memory-failure')
@@ -217,7 +297,7 @@ it('applies a committed selection immediately when model-memory persistence fail
   const storage = new SessionStorage(ctx, domainName, optionsCodec)
   const sessions = new Sessions(ctx, initialSettings, storage, new Pairings(storage), new ToolRestriction(ctx, { tool: 'web_search', routed: () => routeFacts(ctx, 'searchProvider', SEARCH.providerId).kind === 'this' }))
   const domain = await storage.domain()
-  await sessions.current(handle.agent)
+  await sessions.current(liveSession(handle.agent))
   const diagnostics: unknown[][] = []
   ctx.logger.exporter({ levels: { default: 3 }, export: message => { diagnostics.push(message.args) } })
   let closing = Promise.resolve()
@@ -227,7 +307,7 @@ it('applies a committed selection immediately when model-memory persistence fail
       closing = domain.close()
     }
   })
-  const [changed] = await Promise.allSettled([sessions.change(handle.agent, { connectionId: null }, 0)])
+  const [changed] = await Promise.allSettled([sessions.change(liveSession(handle.agent), { connectionId: null }, 0)])
   await closing
   expect(ctx.tools.get('web_search', scopeOf(handle.agent.ctx))).toBeUndefined()
   expect(changed).toMatchObject({ status: 'fulfilled', value: { source: 'session', selection: { connectionId: null, revision: 1 } } })
