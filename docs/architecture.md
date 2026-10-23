@@ -235,7 +235,7 @@ flowchart LR
 
 **Remote**
 
-浏览器经 `<ns>/get`、`<ns>/set`（带 `expectedRevision`）、`<ns>/provider`、`<ns>/pairings`、`<ns>/forgetPairing` 读写；契约由 core `selectionContract` 生成（两端都是严格 schema），服务由 core `createConnectionsService` 在工厂内声明带 `@Remote` 的类，每次安装一个新类。`get` / `set` 按被寻址的会话资源授权。Remote 在此隔离服务异常：契约内的错误原样交出，其余一律改为固定消息、原异常只进 Host 日志；对浏览器的错误分类统一见[浏览器看到的错误](design.md#浏览器看到的错误)。
+浏览器经 `<ns>/get`、`<ns>/set`（带 `expectedRevision`）、`<ns>/provider`、`<ns>/pairings`、`<ns>/forgetPairing` 读写；契约由 core `selectionContract` 生成（两端都是严格 schema），服务由 core `createConnectionsService` 在工厂内声明带 `@Remote` 的类，每次安装一个新类。`get` / `set` 按被寻址的会话资源授权。`set` 只经 `sessionController.resolveAgent` 取 Agent（解析或恢复普通会话，子 Agent 路由的会话被拒为 `session/agent-busy`）；`get` 先取 `ctx.agents.get(sessionId)` 里已存在的 Agent，没有时才交给 `resolveAgent`，所以运行中的子 Agent 与 fork 可读其选择，之后同样经 `sessions.current()`（建记录与继承不变）。Remote 在此隔离服务异常：契约内的错误原样交出，其余一律改为固定消息、原异常只进 Host 日志；对浏览器的错误分类统一见[浏览器看到的错误](design.md#浏览器看到的错误)。
 
 `provider` 只返回浏览器看不到的两项事实 `{ providerId, envProvider }`，路由由浏览器用同一个 `routeOf` 判断。连接视图不含凭据引用。
 

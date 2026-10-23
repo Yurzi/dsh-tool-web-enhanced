@@ -65,7 +65,7 @@ export function createConnectionsService<O extends Record<string, unknown>, V ex
     async get(request: SelectionRequest): Promise<ConnectionsView<O, V>> {
       return boundary('get', async () => {
         const { sessionId } = parse(selectionRequest, request)
-        const agent = await this.agent(sessionId)
+        const agent = await this.readableAgent(sessionId)
         return this.view(agent, await spec.sessions.current(agent))
       })
     }
@@ -116,6 +116,15 @@ export function createConnectionsService<O extends Record<string, unknown>, V ex
       })
     }
 
+    /**
+     * Reads also reach a live child (spawn/fork) Agent, which the controller
+     * reserves for subagent routing; anything else resolves or resumes as usual.
+     */
+    private async readableAgent(sessionId: string): Promise<Agent> {
+      return this.ctx.agents.get(sessionId as SessionId) ?? this.agent(sessionId)
+    }
+
+    /** Ordinary Sessions only: writes to a child Session stay refused by the controller. */
     private async agent(sessionId: string): Promise<Agent> {
       const found = await this.ctx.sessionController.resolveAgent(sessionId as SessionId)
       if ('error' in found) throw found.error

@@ -7,7 +7,7 @@ import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-test
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import Gateway from '@deepseek-ai/dsh-api-gateway'
 import SessionController from '@deepseek-ai/dsh-api-session-controller'
-import { SessionId } from '@deepseek-ai/dsh-session'
+import { SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
 import Projections from '@deepseek-ai/dsh-session-projection'
 import Storage from '@deepseek-ai/dsh-storage'
 import * as StorageDomain from '@deepseek-ai/dsh-storage-domain'
@@ -233,18 +233,59 @@ describe('connection Remote failure boundary', () => {
     expect(h.logs).toHaveLength(0)
   })
 
-  it.each(['get', 'set'] as const)('preserves the real sessionController.resolveAgent failure during %s', async method => {
-    const h = await host()
-    const child = await h.ctx.agents.create({ sessionId: SessionId('owned-child'), meta: { origin: 'subagent' } })
-    cleanups.push(() => child.dispose())
-    const found = await h.controller.resolveAgent(child.agent.session.id)
-    expect(found).toHaveProperty('error')
+  async function child(h: Host, id: string, fork: boolean) {
+    const handle = await h.ctx.agents.create({
+      // Another model than the parent's: its memory, written by the parent's set, does not apply.
+      sessionId: SessionId(id), agentOptions: { provider: 'fixture', model: 'child' },
+      meta: { parentSession: h.agent.session.id, origin: 'subagent', isSeeded: fork },
+      ...(fork ? { seed: [], inheritedEventCount: SessionLogOffset(0) } : {}),
+    })
+    cleanups.push(() => handle.dispose())
+    // The controller reserves child Sessions for subagent routing.
+    const found = await h.controller.resolveAgent(handle.agent.session.id)
     if (!('error' in found)) throw new Error('expected session ownership rejection')
-    const failure = await h.invoke(method, {
-      sessionId: child.agent.id, ...(method === 'set' ? { connectionId: null, expectedRevision: 0 } : {}),
-    }).then(() => { throw new Error('expected rejection') }, (error: unknown) => error)
-    expect(h.ctx.typertGateway.wireStream.failure(failure)).toEqual(h.ctx.typertGateway.wireStream.failure(found.error))
+    expect(found.error.code).toBe('session/agent-busy')
+    return { handle, error: found.error }
+  }
+
+  it.each([false, true])('reads the connection status of a live child Agent (fork=%s) with the usual inheritance', async fork => {
+    const h = await host()
+    await h.invoke('set', { sessionId: h.agent.id, connectionId: null, expectedRevision: 0 })
+    const { handle } = await child(h, fork ? 'fork-child' : 'spawn-child', fork)
+    const view = await h.invoke('get', { sessionId: handle.agent.id })
+    // A fork copies the parent's selection; a spawned child starts from the default, as on the request path.
+    expect(view).toMatchObject(fork
+      ? { selection: { connectionId: null, revision: 0 }, source: 'inherited' }
+      : { selection: { connectionId: 'builtin:local', revision: 0 }, source: 'default' })
+    expect(view).toHaveProperty('connections')
+    const table = (await h.storage.domain()).table('selections')
+    expect(table.get(handle.agent.id)).toMatchObject({ connectionId: fork ? null : 'builtin:local', revision: 0 })
+    expect(await h.invoke('get', { sessionId: h.agent.id })).toMatchObject({ selection: { connectionId: null, revision: 1 }, source: 'session' })
+    expect(h.logs).toHaveLength(0)
+  })
+
+  it.each([false, true])('still refuses writes to a live child Agent (fork=%s) with the controller failure', async fork => {
+    const h = await host()
+    const { handle, error } = await child(h, 'owned-child', fork)
+    const before = await h.invoke('get', { sessionId: handle.agent.id })
+    const failure = await h.invoke('set', { sessionId: handle.agent.id, connectionId: null, expectedRevision: 0 })
+      .then(() => { throw new Error('expected rejection') }, (rejection: unknown) => rejection)
     expect(failure).toBeInstanceOf(RemoteError)
+    expect(h.ctx.typertGateway.wireStream.failure(failure)).toEqual(h.ctx.typertGateway.wireStream.failure(error))
+    expect(await h.invoke('get', { sessionId: handle.agent.id })).toEqual(before)
+    expect(h.logs).toHaveLength(0)
+  })
+
+  it('falls back to the controller once a child Agent is no longer live', async () => {
+    const h = await host()
+    const { handle } = await child(h, 'gone-child', false)
+    await handle.dispose()
+    expect(h.ctx.agents.get(handle.agent.session.id)).toBeUndefined()
+    const found = await h.controller.resolveAgent(handle.agent.session.id)
+    if (!('error' in found)) throw new Error('expected a controller failure')
+    const failure = await h.invoke('get', { sessionId: handle.agent.id })
+      .then(() => { throw new Error('expected rejection') }, (rejection: unknown) => rejection)
+    expect(h.ctx.typertGateway.wireStream.failure(failure)).toEqual(h.ctx.typertGateway.wireStream.failure(found.error))
     expect(h.logs).toHaveLength(0)
   })
 })

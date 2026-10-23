@@ -138,8 +138,10 @@ describe('fetchConnections real Host', () => {
     expect(await h.get()).toMatchObject({ selection: { revision: 1 }, source: 'session' })
     expect((await h.get(h.two)).selection.revision).toBe(0)
     const child = await h.add('owned-child', { meta: { origin: 'subagent' } })
-    await expect(h.get(child)).rejects.toMatchObject({ code: 'session/agent-busy' })
+    // A live child Agent is readable; writes stay with DSH's subagent routing.
+    expect(await h.get(child)).toMatchObject({ selection: { connectionId: 'builtin:local', revision: 0 }, source: 'default' })
     await expect(h.set({ connectionId: null, expectedRevision: 0 }, child)).rejects.toMatchObject({ code: 'session/agent-busy' })
+    expect((await h.get(child)).selection.revision).toBe(0)
   })
 
   it('rejects unavailable connections and all session options without changing revision', async () => {

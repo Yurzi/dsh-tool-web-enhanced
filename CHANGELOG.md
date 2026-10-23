@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### dsh-web-search-enhanced, dsh-web-fetch-enhanced
+
+- Fix: the composer menu no longer shows "Read failed" in a subagent's or a forked conversation while that Agent is running ([#1](https://github.com/Yurzi/dsh-tool-web-enhanced/issues/1)). Reading the connection status now uses the running Agent, so the menu shows the choice its requests use (a fork's comes from the parent conversation). Changing the choice there is still refused by DSH (`session/agent-busy`) and leaves it unchanged; ordinary conversations, resuming and storage are unchanged.
+
+### dsh-tool-web-enhanced-core (private, not published)
+
+- `./host`: the connection Remote service's `get` takes an existing Agent from `ctx.agents.get(sessionId)` before falling back to `sessionController.resolveAgent`; `set` still resolves only through the controller.
+
 ## v0.1.1 (2026-10-23)
 
 ### dsh-tool-web-enhanced-profile 0.1.1

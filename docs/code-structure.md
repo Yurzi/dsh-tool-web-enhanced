@@ -326,7 +326,7 @@ core 的测试夹具：[fixtures/enhanced.ts](<../packages/core/tests/fixtures/e
 | [providers-fetch.spec.ts](<../packages/core/tests/providers-fetch.spec.ts>) | 抓取 outcome、目标状态与服务失败说明。 |
 | [providers-search.spec.ts](<../packages/core/tests/providers-search.spec.ts>) | 搜索 API 错误信封与说明边界。 |
 | [redaction.spec.ts](<../packages/core/tests/redaction.spec.ts>) | 凭据检测、成功内容替换与安全诊断副本。 |
-| [remote.spec.ts](<../packages/core/tests/remote.spec.ts>) | Remote 契约错误、存储异常与固定内部错误。 |
+| [remote.spec.ts](<../packages/core/tests/remote.spec.ts>) | Remote 契约错误、存储异常与固定内部错误；运行中的 spawn / fork 子 Agent 可读连接状态（含继承）、写入仍被拒，不在运行时回到 controller 解析。 |
 | [restriction.spec.ts](<../packages/core/tests/restriction.spec.ts>) | 原生工具遮罩：路由返回、选择变化与卸载。 |
 | [row-visibility.spec.ts](<../packages/core/tests/row-visibility.spec.ts>) | 真实 Settings 行上的开关与 `web` 路由变化；真实 `sessionController` 建立的对话、空记录、JSONL 恢复的新建判断与子会话继承。 |
 | [selectable.spec.ts](<../packages/core/tests/selectable.spec.ts>) | 各连接类型的可选择条件。 |

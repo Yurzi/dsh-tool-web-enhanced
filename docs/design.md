@@ -652,6 +652,8 @@ native：按 DSH 的错误码给本插件的短消息，未知码一律 `WEB_PRO
 
 菜单、命令与设置页经 `searchConnections` / `fetchConnections` 读写选择：行设置无效报 `<ns>/invalid-settings`，选择已在别处改变报 `<ns>/conflict`，连接缺失或停用报 `<ns>/unavailable`，请求不合契约报 `gateway/bad-request`；其余异常一律 `gateway/internal` 加固定消息，原始异常只进 Host 日志。
 
+子 Agent 与 fork 出的会话（DSH 留给子 Agent 路由的会话）在菜单里可读不可写：读取取正在运行的那个 Agent，显示它请求步实际使用的选择（来源按[选择从哪里来](#选择从哪里来)，fork 为“来自父会话”）；改选择仍被 DSH 拒绝（`session/agent-busy`），选择不变。子 Agent 已经结束、不在运行时，读取与普通会话一样交给 DSH 解析，报 DSH 的错误。
+
 ## 从 profile 0.1.0 升级
 
 从已发布的 profile 0.1.0（search 0.2.0、fetch 0.2.0）升级时，设置文法与版本不变，已有文档照常读取；行为上的变化是[远程服务缺省停用](#远程服务缺省停用)与新增的[增强工具](#增强工具)。
