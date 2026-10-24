@@ -1,0 +1,4 @@
+- id: web
+  config:
+    searchProvider: deepseek
+    fetchProvider: fetch-enhanced

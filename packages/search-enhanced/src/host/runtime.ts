@@ -18,6 +18,7 @@ export function searchCapability(ctx: Context, settings: () => ResolvedSettings)
   return {
     identity: SEARCH, tool: 'web_search', field: 'searchProvider',
     remoteNamespace: 'searchConnections', storageDomain: 'web_search_enhanced', contract, optionsCodec, settings,
+    commandOptions: { freshness: options => options.freshness, changeFreshness: freshness => ({ freshness }) },
     describe: (current, model) => describeConnections(ctx, current, model),
     target: (connection, options, call) => {
       switch (connection.kind) {

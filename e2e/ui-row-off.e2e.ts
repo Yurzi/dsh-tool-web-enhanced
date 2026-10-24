@@ -66,11 +66,12 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Capability UI w
     const { page } = app
     const sessionId = await newSession(page)
     expect(await connectionButton(page).count()).toBe(0)
-    async function command(name: string, label: string, choice: string | RegExp) {
+    async function command(name: string, choice: string | RegExp) {
       const currentPage = app!.page
       const composer = currentPage.getByRole('textbox', { name: 'Describe what you want to build, / commands, @ files or sessions', exact: true })
       await composer.fill('/' + name)
-      await currentPage.getByRole('option', { name: new RegExp(label) }).click()
+      // Host discovery is English; the decorated chooser keeps its existing localized copy.
+      await currentPage.getByRole('option', { name: new RegExp('^' + name + '(?: |$)') }).click()
       const choices = currentPage.getByRole('listbox', { name: '/' + name + ' matches', exact: true })
       const option = choices.getByRole('option', { name: choice, exact: typeof choice === 'string' })
       await option.waitFor()
@@ -79,8 +80,8 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Capability UI w
       await choices.waitFor({ state: 'hidden' })
     }
 
-    await command('setup-search', searchText['command.label'], searchText['selector.offRow'])
-    await command('setup-fetch', fetchText['command.label'], fetchText['selector.offRow'])
+    await command('setup-search', searchText['selector.offRow'])
+    await command('setup-fetch', fetchText['selector.offRow'])
     await app.screenshot('ui-row-off-commands-off')
     expect(app.errors).toEqual([])
     await closeGui()
@@ -97,8 +98,8 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Capability UI w
     app = await openApp(server.url)
     // The same session is restored by the public GUI's persisted layout.
     await app.page.locator('[data-conversation-session="' + sessionId + '"]').waitFor()
-    await command('setup-search', searchText['command.label'], /^OpenAlex(?: |$)/)
-    await command('setup-fetch', fetchText['command.label'], fetchText['connection.local'] + ' ' + fetchText['access.local'])
+    await command('setup-search', /^OpenAlex(?: |$)/)
+    await command('setup-fetch', fetchText['connection.local'] + ' ' + fetchText['access.local'])
     await app.screenshot('ui-row-off-commands-restored')
     expect(app.errors).toEqual([])
     await closeGui()

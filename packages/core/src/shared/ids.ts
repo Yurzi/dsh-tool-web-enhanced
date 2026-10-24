@@ -33,6 +33,8 @@ export interface PluginIdentity extends RowIdentity {
   /** Provider id registered in `ctx.web`; the profile writes it into the `web` row. */
   readonly providerId: string
   readonly tools: EnhancedToolNames
+  /** Host command, without the slash, that shows or changes the Session's connection. */
+  readonly command: string
 }
 
 export const SEARCH: PluginIdentity = {
@@ -40,6 +42,7 @@ export const SEARCH: PluginIdentity = {
   rowId: 'web-search-enhanced',
   providerId: 'search-enhanced',
   tools: { action: 'web_search_enhanced', list: 'list_web_search_providers' },
+  command: 'setup-search',
 }
 
 export const FETCH: PluginIdentity = {
@@ -47,6 +50,7 @@ export const FETCH: PluginIdentity = {
   rowId: 'web-fetch-enhanced',
   providerId: 'fetch-enhanced',
   tools: { action: 'web_fetch_enhanced', list: 'list_web_fetch_providers' },
+  command: 'setup-fetch',
 }
 
 /** The browser-only row holding the shared composer connection menu. */

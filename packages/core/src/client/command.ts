@@ -1,10 +1,11 @@
-import type { CommandContribution, SelectOption, SelectOptionGroup } from '@deepseek-ai/dsh-client-ui-commands/client'
+import type { Context } from '@deepseek-ai/cordis'
+import type { CommandDecoration, SelectOption, SelectOptionGroup } from '@deepseek-ai/dsh-client-ui-commands/client'
 import type { RemoteFailure } from '@deepseek-ai/dsh-typert-protocol'
 import type { SelectionView } from '../shared/selection.ts'
 import type { ConnectionText, SelectionState, SelectionStore, SelectionUpdate } from './section.ts'
 
 export type ClientTranslate<K extends string = string> = (key: K, params?: Record<string, string | number>) => string
-export type CommandCopyKey = 'label' | 'description' | 'placeholder' | 'empty' | 'noResults' | 'readFailed' | 'current' | 'off'
+export type CommandCopyKey = 'placeholder' | 'empty' | 'noResults' | 'readFailed' | 'current' | 'off'
 export type CommandDetail = (hint: string | undefined, current: boolean) => { detail?: string }
 
 export interface CommandOptions<V extends SelectionView> {
@@ -14,8 +15,8 @@ export interface CommandOptions<V extends SelectionView> {
 }
 
 export interface SelectionCommandSpec<V extends SelectionView, K extends string> {
+  /** The capability's Host command (`PluginIdentity.command`). */
   readonly name: string
-  readonly icon: NonNullable<CommandContribution['icon']>
   readonly t: ClientTranslate<K>
   readonly keys: Readonly<Record<CommandCopyKey, K>>
   readonly groups: (view: V) => readonly { group: SelectOptionGroup; connections: readonly V['connections'][number][] }[]
@@ -32,11 +33,15 @@ export function parseSelectionCommandOption(id: string, parseOptions?: (id: stri
   return parseOptions?.(id)
 }
 
-/** A keyboard entry to the same per-session store the composer menu uses. */
+/**
+ * The browser's bare invocation of the capability's Host command: a popup over
+ * the same per-session store the composer menu uses. The Host command keeps its
+ * menu row and runs every line with arguments.
+ */
 export function selectionCommand<V extends SelectionView, K extends string>(
   selections: SelectionStore<V> & { current(sessionId: string): Promise<SelectionState<V>> },
   spec: SelectionCommandSpec<V, K>,
-): CommandContribution {
+): CommandDecoration {
   const t = (key: CommandCopyKey) => spec.t(spec.keys[key])
   const read = async (sessionId: string) => {
     const { view, readFailure } = await selections.current(sessionId)
@@ -45,9 +50,6 @@ export function selectionCommand<V extends SelectionView, K extends string>(
   }
   return {
     name: spec.name,
-    label: () => t('label'),
-    description: () => t('description'),
-    icon: spec.icon,
     available: () => true,
     ui: {
       kind: 'popupSelect',
@@ -87,4 +89,18 @@ export function selectionCommand<V extends SelectionView, K extends string>(
       },
     },
   }
+}
+
+/**
+ * Call `ran` after this browser ran the Host command `name` in a Session. A line
+ * with arguments (`/setup-search off`) writes on the Host without the selection
+ * store, so that Session's views must read again. DSH reports each Host command
+ * this browser executed with `command/executed`, without its arguments, so every
+ * run counts; runs from another browser or the TUI are not reported here.
+ * @returns the listener's disposer; it also ends with `ctx`'s fiber.
+ */
+export function followHostCommand(ctx: Context, name: string, ran: (sessionId: string) => void): () => void {
+  return ctx.on('command/executed', (sessionId, executed) => {
+    if (executed === name) ran(sessionId)
+  })
 }

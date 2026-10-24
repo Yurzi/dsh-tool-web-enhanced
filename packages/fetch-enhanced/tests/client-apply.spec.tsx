@@ -10,8 +10,9 @@ import * as primitives from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import type { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
-import type { CommandContribution } from '@deepseek-ai/dsh-client-ui-commands/client'
 import type { SettingsNamespaceView } from '@deepseek-ai/dsh-api-remotes/client'
+import type { CommandResult } from '@deepseek-ai/dsh-commands/types'
+import { commandUiHarness } from '../../core/tests/fixtures/client-command-ui.ts'
 import { createWebConnectionsService } from '../../ui/src/client/service.ts'
 import { PROFILE_PACKAGE, FETCH, WEB_ROW, rowConfigKey } from 'dsh-tool-web-enhanced-core/shared'
 import * as React from 'react'
@@ -61,6 +62,10 @@ function namespace(ns: string, value: SettingsNamespaceView['value']): SettingsN
   return { ns, value, base: {}, user: {}, revision: 1, autoGenerate: false, schema: { type: 'object', dict: {} }, applies: 'live', secrets: [] }
 }
 
+const FETCH_HOST_COMMAND = { name: FETCH.command, description: "Show or change this session's web fetch connection", input: { hint: '[off | <connection id>]' } }
+/** The Session's Host catalog: this plugin's command beside an unrelated one. */
+const HOST_COMMANDS = [FETCH_HOST_COMMAND, { name: 'permission', description: 'Switch the permission preset', input: { hint: '<preset>' } }]
+
 async function fixture(served = true) {
   const ctx = new cordis.Context()
   contexts.push(ctx)
@@ -80,9 +85,18 @@ async function fixture(served = true) {
     pairings: vi.fn(async () => ({ ok: true as const, value: { pairings: [{ provider: 'p', model: 'm', connectionId: null }] } })),
     forgetPairing: vi.fn(async () => ({ ok: true as const, value: { pairings: [] } })),
   }
+  // The Host command writes the Session's selection directly, as the Host does; only `off` is modelled.
+  const commandUi = commandUiHarness({ sessionId: 's1', commands: HOST_COMMANDS, execute(line): CommandResult {
+    if (line === '/' + FETCH.command + ' off') {
+      current = { ...current, source: 'session', selection: { ...current.selection, connectionId: null, revision: current.selection.revision + 1 } }
+      return { kind: 'success', text: 'Web fetch is off for this session from the next model request.' }
+    }
+    return { kind: 'success' }
+  } })
   const events = new Map<string, Set<() => void>>()
   const remote = {
     fetchConnections,
+    commands: commandUi.remote,
     settings: {
       describe: vi.fn(async () => ({ ok: true as const, value: { namespaces, writable: true, hasDocument: true } })),
       mutate: vi.fn(async (_ns: string, ops: { op: string; path: string[]; value?: unknown }[]) => {
@@ -131,18 +145,11 @@ async function fixture(served = true) {
     'plugins.row.config': { kind: 'keyed', scope: 'root' },
     'plugins.bundle.config': { kind: 'keyed', scope: 'root' },
   } }, ({ renderSlot }) => renderSlot('plugins.row.config', { view: 'page' }, { entryKey: rowConfigKey(FETCH) }))
-  const commands = new Map<string, CommandContribution>()
-  let commandRegistered!: () => void
-  const commandReady = new Promise<void>(resolve => { commandRegistered = resolve })
-  ctx.provide('commandUi', { register(command: CommandContribution) {
-    commands.set(command.name, command)
-    commandRegistered()
-    return () => { commands.delete(command.name) }
-  } })
+  await commandUi.mount(ctx)
   const fiber = await ctx.plugin(plugin)
-  await commandReady
+  await commandUi.registered
   return {
-    ctx, fiber, remote, fetchConnections, generation, commands,
+    ctx, fiber, remote, fetchConnections, generation, commands: commandUi.commands, commandUi,
     emit(event: string) { const listeners = events.get(event); if (listeners !== undefined) for (const listener of listeners) listener() },
     async served(next: boolean) {
       namespaces = [namespace(WEB_ROW, { fetchProvider: FETCH.providerId }), ...(next ? [namespace(FETCH.rowId, { version: 2 })] : [])]
@@ -310,5 +317,60 @@ describe('browser apply composition', () => {
     await unavailable
     expect(section.settings.getSnapshot()).toBeUndefined()
     expect(Object.keys(en)).toEqual(Object.keys(zh))
+  })
+
+  it('hangs its popup on the Host command of the same name, leaving the arguments to the Host command', async () => {
+    const h = await fixture()
+    const rows = await h.commandUi.rows()
+    expect(rows.filter(row => row.name === FETCH.command)).toEqual([expect.objectContaining({ name: FETCH.command, description: FETCH_HOST_COMMAND.description, hint: FETCH_HOST_COMMAND.input.hint })])
+    expect(rows.find(row => row.name === FETCH.command)).not.toHaveProperty('label')
+    expect(await h.commandUi.pick(FETCH.command)).toBe('handled')
+    const popup = await h.commandUi.popup()
+    expect(popup).toMatchObject({ command: FETCH.command, status: 'ready', searchLabels: { placeholder: en['command.placeholder'], empty: en['command.empty'], noResults: en['command.noResults'] } })
+    expect(popup.options.map(option => option.id)).toEqual(['off', 'connection:builtin:local'])
+    await h.commandUi.choose('off')
+    expect(h.fetchConnections.set).toHaveBeenCalledWith({ sessionId: 's1', connectionId: null, expectedRevision: 1 })
+    expect(await h.commandUi.enter('/' + FETCH.command)).toBe('handled')
+    expect(await h.commandUi.enter('/' + FETCH.command + ' builtin:local')).toMatchObject({ claim: { name: FETCH.command } })
+    expect(h.commandUi.executed).toEqual([])
+  })
+
+  it("re-reads the Session's views after this browser ran the Host command there", async () => {
+    const h = await fixture()
+    const ui = await mountUi(h.ctx)
+    const [section] = ui.sections.getSnapshot()
+    if (section === undefined) throw new Error('missing section')
+    const selection = section.selection.source('s1')
+    const stopSelection = selection.subscribe(() => {})
+    await section.selection.load('s1')
+    const pairings = h.page().hooks.pairings
+    const stopPairings = pairings.subscribe(() => {})
+    await h.page().refreshPairings()
+    const reads = () => ({ selection: h.fetchConnections.get.mock.calls.length, pairings: h.fetchConnections.pairings.mock.calls.length })
+    const before = reads()
+    await expect(h.commandUi.submit('/permission auto')).resolves.toEqual({ kind: 'success' })
+    expect(reads()).toEqual(before)
+    // Model memory is shared by every Session; only the Session the command ran in reads its selection again.
+    h.ctx.emit('command/executed', 's2' as never, FETCH.command, { kind: 'success' })
+    expect(reads()).toEqual({ selection: before.selection, pairings: before.pairings + 1 })
+
+    await expect(h.commandUi.submit('/' + FETCH.command + ' off')).resolves.toEqual({ kind: 'success' })
+    expect(h.commandUi.executed).toEqual(['/permission auto', '/' + FETCH.command + ' off'])
+    expect(reads().pairings).toBe(before.pairings + 2)
+    await when(selection, state => state.view?.selection.connectionId === null)
+    expect(selection.getSnapshot().view).toMatchObject({ source: 'session', selection: { revision: 2 } })
+    expect(h.fetchConnections.set).not.toHaveBeenCalled()
+    await when(pairings, state => state.state === 'ready')
+    stopPairings()
+    stopSelection()
+  })
+
+  it('leaves the Host command to itself once the plugin unloads', async () => {
+    const h = await fixture()
+    await h.fiber.dispose()
+    expect(await h.commandUi.pick(FETCH.command)).toMatchObject({ claim: { name: FETCH.command } })
+    const reads = h.fetchConnections.get.mock.calls.length
+    await expect(h.commandUi.submit('/' + FETCH.command + ' off')).resolves.toEqual({ kind: 'success' })
+    expect(h.fetchConnections.get.mock.calls.length).toBe(reads)
   })
 })

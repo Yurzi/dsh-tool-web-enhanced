@@ -21,10 +21,10 @@ const cleanups: Array<() => Promise<unknown>> = []
 afterEach(async () => { for (const cleanup of cleanups.splice(0).toReversed()) await cleanup() })
 
 type Options = { flavor: string }
-type Connection = { id: string; kind: 'adapter'; disabled: boolean; parameter: string }
+type Connection = { id: string; label: string; kind: 'adapter'; disabled: boolean; parameter: string }
 const initial = () => ({ defaultConnection: 'builtin:first', enhancedTools: false, flavor: 'initial', connections: new Map<string, Connection>([
-  ['builtin:first', { id: 'builtin:first', kind: 'adapter', disabled: false, parameter: 'initial' }],
-  ['builtin:second', { id: 'builtin:second', kind: 'adapter', disabled: false, parameter: 'other' }],
+  ['builtin:first', { id: 'builtin:first', label: 'First', kind: 'adapter', disabled: false, parameter: 'initial' }],
+  ['builtin:second', { id: 'builtin:second', label: 'Second', kind: 'adapter', disabled: false, parameter: 'other' }],
 ]) })
 type Settings = ReturnType<typeof initial>
 type Target = { connectionId: string; parameter: string; flavor: string }

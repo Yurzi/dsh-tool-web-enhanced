@@ -30,7 +30,9 @@ without depending on either provider row:
   and an upgrade check for 0.1.x leftovers.
 
 The row stays healthy with either plugin row, both, or neither enabled; the
-plugins' `/setup-*` commands and settings pages never depend on it.
+plugins' `/setup-*` Host commands (with their Web choosers) and settings
+pages never depend on it. The browser face is Web-only: in dsh-TUI the row
+mounts and does nothing.
 Interaction behavior is specified in
 [Session selection](../../docs/design.md#会话选择). Architecture:
 [docs/architecture.md](../../docs/architecture.md#浏览器面).

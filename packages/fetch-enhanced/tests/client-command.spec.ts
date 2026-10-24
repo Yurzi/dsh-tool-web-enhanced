@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
-import { fetchCommand, parseCommandOption } from '../src/client/command.ts'
+import { FETCH } from 'dsh-tool-web-enhanced-core/shared'
+import { FETCH_COMMAND, fetchCommand, parseCommandOption } from '../src/client/command.ts'
 import { FetchSelectionStore, type FetchConnectionsRemote } from '../src/client/selection.ts'
 import { describe as connectionText, sourceText, writeFailureText, type Translate } from '../src/client/connections.ts'
 import { en, zh } from '../src/client/locales.ts'
@@ -30,7 +31,9 @@ describe('/setup-fetch', () => {
   it('offers only off and ready connections, without a conversation parameter group', async () => {
     const { command, ui, session } = fixture()
     expect(command.name).toBe('setup-fetch')
-    expect(command.label?.()).toBe(zh['command.label'])
+    expect(FETCH_COMMAND).toBe(FETCH.command)
+    // A decoration of the Host command: the menu row is the Host command's own.
+    expect(Object.keys(command).toSorted()).toEqual(['available', 'name', 'ui'])
     const options = await ui.options(session, new AbortController().signal)
     expect(options.map(option => option.id)).toEqual(['off', 'connection:builtin:local'])
     expect(options[1]).toMatchObject({ active: true, label: zh['connection.local'], group: { name: 'services' } })

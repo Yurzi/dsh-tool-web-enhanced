@@ -1,7 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { WebError } from '@deepseek-ai/dsh-web'
 import type { ConnectionView } from '../shared/index.ts'
-import type { Capability, CapabilitySettings, ConnectionOf } from './capability.ts'
+import type { Capability, CapabilitySettings, ConnectionOf, LabeledConnection } from './capability.ts'
 import type { EnhancedAccess, Explicit, ExplicitCall, ProviderListing, ProviderReadiness, ReadyProviders, Rejection } from './enhanced.ts'
 import type { CapabilityErrors } from './errors.ts'
 import type { Plan } from './plans.ts'
@@ -12,7 +12,7 @@ type ReadyPlan<O> = Extract<Plan<O>, { kind: 'ready' }>
 type Prepared<S, O> = { readonly settings: S; readonly plan: ReadyPlan<O>; readonly ids: readonly string[] }
 const rejected = (reason: Rejection): Explicit<never> => ({ kind: 'rejected', reason })
 
-export function explicitAccess<S extends CapabilitySettings, O extends Record<string, unknown>, V extends ConnectionView, T, Q, R>(
+export function explicitAccess<S extends CapabilitySettings<LabeledConnection>, O extends Record<string, unknown>, V extends ConnectionView, T, Q, R>(
   ctx: Context, capability: Capability<S, O, V, T, Q, R>,
   runtime: {
     active(): boolean

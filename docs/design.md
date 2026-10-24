@@ -59,7 +59,7 @@ flowchart LR
 - **服务列表顶部**一行“远程服务默认关闭。” / “Remote services are off by default.”；没打开的服务行带“未启用” / “Off”标签。每个服务的接收方仍由它展开面板里的说明写（“搜索查询会发送给 {name}。”、“URL 会发送给 {name}，能否访问目标由对方决定。”），不另加同意语句，也不链接各服务的条款与隐私政策。
 - **菜单底部提示**：某个能力目录里的远程服务（`optIn` 的内置连接）全部停用时，该能力面板的底部显示“更多服务可在设置中打开” / “More services can be turned on in settings”，点击打开设置页。自定义连接不计；行设置还没读到或无效时不显示。
 - **首次启用提示**加一句：“远程服务默认关闭，需要时也在那里打开。” / “Remote services are off by default; turn them on there when you need them.”（接在“连接、密钥和默认值在插件设置里配置”之后，“那里”即插件设置）；只在升级预检没有发现问题时出现，有问题时整段换成预检提示（见[首次启用提示与组合包概览](#首次启用提示与组合包概览)）。
-- 从已发布的 profile 0.1.0 升级时的影响见[从 profile 0.1.0 升级](#从-profile-010-升级)。
+- 从已发布的 profile 0.1.1 升级时的影响见[从 profile 0.1.1 升级](#从-profile-011-升级)。
 
 ### 访问方式与就绪状态
 
@@ -111,7 +111,7 @@ flowchart LR
 
 ### 子 Agent 的会话
 
-子 Agent 的会话（spawn 与 subagent_fork，DSH 会话头的 `origin` 为 `subagent`）在菜单与 `/setup-*` 里与普通会话一样可读可写，与它的 Agent 是否在运行无关；来源按[选择从哪里来](#选择从哪里来)（subagent_fork 为“来自父会话”），写入不写模型记忆。用户 fork 是普通会话。
+子 Agent 的会话（spawn 与 subagent_fork，DSH 会话头的 `origin` 为 `subagent`）在输入框菜单里与普通会话一样可读可写，与它的 Agent 是否在运行无关；来源按[选择从哪里来](#选择从哪里来)（subagent_fork 为“来自父会话”），写入不写模型记忆。Host 命令在这类会话里执行时按同一规则写入；Web 的子 Agent 会话视图里没有 `/setup-*`（DSH 浏览器的命令目录对子 Agent 会话为空），用菜单即可。用户 fork 是普通会话。
 
 - **运行中**：新选择从它的下一个模型请求步生效，当前步仍按冻结的计划；原生工具的隐藏在写入后立即同步。
 - **不在运行**（已结束，或 Host 重启后还没被叫起）：读写存储的选择，不恢复它的 Agent；新选择从它下一次运行（被父 Agent 叫起，或在它的会话里发消息）时生效。这时不知道它下一次请求用哪个模型，菜单的显示因此有所不同，见[已知限制](#已知限制)。
@@ -130,11 +130,74 @@ flowchart LR
 
 ### /setup-search 与 /setup-fetch
 
-键盘入口，与菜单读写同一份选择，任一处修改另一处立即反映：
+两个 Host 命令，由两个插件各自注册，随插件行出现与消失（ui 行停用时照常可用），与输入框菜单读写同一份会话选择。Web GUI 与 dsh-TUI 都能执行；Host 没有界面语言，说明与输出是英文固定措辞。
 
-- `/setup-search`：列出“关闭”、所有就绪的连接，以及（所选连接支持时）三档实时性。
-- `/setup-fetch`：列出“关闭”与所有就绪的连接。
-- ui 行停用时两个命令照常可用。
+| 命令 | 说明 | 参数提示 |
+| --- | --- | --- |
+| `/setup-search` | Show or change this session's web search connection | `[off \| <connection id> \| freshness auto\|fresh\|realtime]` |
+| `/setup-fetch` | Show or change this session's web fetch connection | `[off \| <connection id>]` |
+
+**文法**（参数去首尾空白后按空白切分）：
+
+- 不带参数：显示，见下。
+- `off`：本会话关闭该能力。
+- 一个连接 id：先过连接 id 文法，再按可选性（存在且未停用）判断。
+- search 另有 `freshness auto|fresh|realtime`：只在当前所选的连接应用实时性时接受（与菜单只在这时列出实时性一致）。
+- `off`、`freshness` 与三档值不区分大小写；连接 id 区分大小写（`custom:CorpSearch` 写成 `custom:corpsearch` 即不可选）。其余输入都是用法错误。
+
+**不带参数的输出**：第一行是当前连接与来源（`chosen in this session`、`copied from the parent session`、`remembered for this model`、`the default connection`），search 附 `freshness: <值>`；关闭时为 `Off · <来源>`；所选连接已停用或删除时写 `<id> · <来源> · missing or turned off in the settings; web_search fails until another connection is chosen`（search 仍附实时性）。第二行是路由状态，之后列出启用的连接（顺序同设置），末行是关闭与实时性的用法：
+
+~~~text
+Exa (builtin:exa) · chosen in this session · freshness: fresh
+Routing: web_search goes to this plugin.
+Connections (/setup-search <id> chooses one):
+- builtin:deepseek-messages — DeepSeek Messages · ready
+- builtin:session-model — Session model · ready · queries go to the service behind the session model (deepseek-official)
+- builtin:exa — Exa · ready · current · applies freshness
+- custom:CorpSearch — Corp search · needs an API key · applies freshness · queries go to search.corp.example
+Turn off: /setup-search off · Freshness: /setup-search freshness auto|fresh|realtime (connections marked "applies freshness")
+~~~
+
+~~~text
+Local HTTP (builtin:local) · the default connection
+Routing: web_fetch goes to this plugin.
+Connections (/setup-fetch <id> chooses one):
+- builtin:local — Local HTTP · ready · current · fetches from this machine
+Turn off: /setup-fetch off
+~~~
+
+- 每行：id、名称、状态（`ready`、`needs an API key`、`needs DeepSeek sign-in`、`unavailable: <原因>`，原因与[列出工具](#列出工具)相同），所选的标 `current`，search 应用实时性的标 `applies freshness`；接收方与列出工具同一规则，与名称相同时不写，fetch `local` 写 `fetches from this machine`，其余写 `queries go to …` / `URLs go to …`。没有启用的连接时只有一行 `- (none; turn connections on in the row settings)`。状态按会话下一次请求的模型判断，与菜单相同。
+- 路由行：`Routing: web_search goes to this plugin.`；路由给别的 provider 时 `Routing: web_search goes to <provider>, so this selection has no effect until the web row routes it to search-enhanced.`；`web` 行没有指定时 `Routing: the web row pins no web_search provider, so this selection has no effect until it routes web_search to search-enhanced.`；读不到时 `Routing: the web row could not be read, so this selection may have no effect.`（fetch 换成 `web_fetch` 与 `fetch-enhanced`）。
+
+**写入**与菜单经 Remote `set` 的写入是同一套规则：只能选启用的连接；带命令开始时读到的修订号写入，期间被别处改过即拒绝；写入的是收到命令的会话，[子 Agent 的会话](#子-agent-的会话)可写、不写模型记忆；写入同一个连接也照常写。新选择从下一个模型请求步生效。成功时：
+
+- `Now using Exa (builtin:exa) for web search from the next model request.`（fetch 为 `… for web fetch …`）
+- `Web search is off for this session from the next model request.`
+- `Freshness is fresh from the next model request.`
+- `web` 行没有确认路由到本插件时，另起一行附上路由行。
+
+**错误**：
+
+| 情形 | 输出 |
+| --- | --- |
+| 用法错误 | `Unknown argument "<原文>". Usage: /setup-search [off \| <connection id> \| freshness auto\|fresh\|realtime]`（fetch 用自己的用法） |
+| 实时性值不对 | `Unknown freshness "<值>". Use auto, fresh or realtime.` |
+| 连接缺失或停用 | `<id> is missing or turned off in the settings. Run /setup-search to list the connections.` |
+| 所选连接不应用实时性 | `The current connection does not apply freshness. Choose one marked "applies freshness" first.` |
+| 修订号冲突 | `The selection changed while this command ran. Run /setup-search to see it, then try again.` |
+| 行设置无效 | `The web search settings are invalid; fix them in the Enhanced web search row settings.` |
+| 选择读不出或写不进（存储） | `The web search selection could not be read or saved; retry, or check the Host logs.` |
+| 其他意外异常 | 命令以 `The web search command failed; retry, or check the Host logs.` 失败，由 DSH 记为命令错误 |
+
+回显的用户原文压成一行，至多 64 字符（截断以 “…” 结尾，不切开代理对）。设置无效、存储失败与意外异常的原始异常以 warn 级记进 Host 日志（控制面日志，见 [Host 日志](#host-日志)），不进命令输出。fetch 的措辞换成 `web fetch`、`Web fetch` 与 `/setup-fetch`。
+
+**Web GUI**：
+
+- 斜杠菜单里这一行显示 Host 命令的名字与英文说明（见[已知限制](#已知限制)）。选中它，或不带参数回车，弹出选择框：列出“关闭”、所有就绪的连接，以及（search，所选连接支持时）三档实时性，选中即经 Remote `set` 写入；选项与文案按界面语言。
+- 命令名后输入空格进入参数输入；带参数的一行交给 Host 命令执行，输出留在会话里的命令卡上（折叠时整段压成一行、按宽度截断，第一行在最前；多行时可展开）。执行后本标签页重读该会话的选择与模型记忆，菜单随之更新。
+- [子 Agent 的会话](#子-agent-的会话)视图里没有这两个命令，用输入框菜单。
+
+**dsh-TUI**：两个命令照常列出与执行；已发布的 dsh-TUI 0.16.1 把输出压成一行通知（见[已知限制](#已知限制)）。参数有补全：命令名后列 `off`、本行启用的连接 id（附连接名称，按原样插入，如 `custom:MyEngine`）与 search 的 `freshness`；`freshness` 之后列 `auto`（Auto）、`fresh`（Within 24 hours）、`realtime`（Live）。补全只用当前设置能同步得出的事实：它拿不到会话，所以不标当前连接；就绪状态要异步读取，也不显示——这两项看不带参数的输出。行设置无效时只剩 `off`（search 另有 `freshness`）。
 
 ### 设置页
 
@@ -208,7 +271,7 @@ fetch 的 `local` 有专门的编辑器，见 [fetch local](#fetch-local白名�
 
 - **范围**：注册在 DSH 的全局工具层，所以四个 Web preset（含没有原生 web 工具的 minimal）与 base profile 的 Agent 都会得到它们；PTC preset 里它们出现在 `run_code` 的 SDK 中。插件行停用只少该能力的两个工具，ui 行与此无关；用户自己用 allowlist 限制工具的作用域里不保证可见。
 - **子 Agent 与 fork**：继承全局工具，不继承父 Agent 的隐藏；各自按自己的会话判断（列表按[继承](#对话的-provider-列表)规则），不拒绝子 Agent。
-- **何时重算**：`web` 行或本插件行的设置更新时重算注册条件；会话选择在菜单或命令里改变时同步隐藏；插件启动时对已有的 Agent 补做；插件卸载时一次撤下定义与隐藏。两个定义要么都注册、要么都不注册：第二个注册失败（例如名字已被别的插件占用）时撤销第一个，不提供工具，只记 Host 日志；下一次重算会再试。
+- **何时重算**：`web` 行或本插件行的设置更新时重算注册条件；会话选择在菜单或命令里改变时同步隐藏；插件启动时对已有的 Agent 补做；插件卸载时一次撤下定义与隐藏。两个定义要么都注册、要么都不注册：第二个注册失败（例如名字已被别的插件占用）时撤销第一个，不提供工具，只在 Host 日志记一条固定文字的 warn；下一次重算会再试。
 - **生效**：在同步提交完成后、正常模型循环的下一次工具组装生效。Native 模式下 DSH 在下一次请求里追加一条工具增删的 developer 消息；PTC 只改 SDK，没有这条消息。
 - **边界**：已经注销或已对该 Agent 隐藏的工具，模型仍去调用时由 DSH 报 `UNKNOWN_TOOL`，不进入工具体；已经发出的请求不因随后的变化撤回，取消仍按该次调用的取消信号。DSH 工具注册表的同步变更通知里可能看到注册与隐藏之间的中间态，见[已知限制](#已知限制)。
 - 注册世代、异步读取的提交与卸载顺序见[架构 · 增强工具的运行时](architecture.md#增强工具的运行时)。
@@ -303,7 +366,7 @@ custom:lab — Lab Tavily · needs an API key (ask the user) · queries go to se
 - 会话实时性不是 `auto` 时首行加 `The user asked for uncached (fresh) page content; only providers marked "uncached" apply it.`，支持的条目加 `· uncached`；`auto` 时不出现任何实时性信息。
 - 会话自己的连接现在不可选时末行加 `This session's selection, <id>, is turned off; web_search will fail until the user changes it.`（fetch 为 `web_fetch`）。
 - 标签、主机名与说明是运维数据：单行化、有界，不当作指令。
-- 就绪状态读不到时（凭据服务、账号服务等依赖抛出任何异常，包括 `WebError`），整次列出报固定的 `WEB_PROVIDER_ERROR` “provider availability could not be read; retry the request”；原消息、cause 与 stack 不给模型，Host 日志只记固定诊断，因为这些依赖不经过执行层的去敏。
+- 就绪状态读不到时（凭据服务、账号服务等依赖抛出任何异常，包括 `WebError`），整次列出报固定的 `WEB_PROVIDER_ERROR` “provider availability could not be read; retry the request”；原消息、cause 与 stack 不给模型，Host 日志也只记一条固定文字的 warn，因为这些依赖不经过执行层的去敏，异常可能带着密钥。
 - 调用前与每次等待之后检查取消，已取消报 `WEB_ABORTED`；底层的只读查询没有取消接口，在后台跑完、结果丢弃（见[已知限制](#已知限制)）。
 
 ### 增强工具的错误
@@ -426,7 +489,7 @@ connections:
 - **互斥参数**：Anthropic 只接受一个域名列表，所以自定义 Anthropic 连接与 `builtin:session-model` 不能同时设 `allowedDomains` 与 `blockedDomains`；设置页在两个字段上就地报错、都不写入。清空其中一项解除冲突时，清空操作与另一项暂存的有效草稿在同一次候选校验、同一个 revision 下原子保存，避免连续写入使用旧快照。
 - 错误消息点名字段路径；未知字段、未知 id 与参数错误附带 Reset 提示（“this release does not read 0.1.x settings; remove the field or use Reset on the settings page”）。
 
-校验在哪里发生：插件启动时校验一次（无效只记 Host 日志，插件照常激活以便修复）；写入前再校验，非法候选不落盘；每次调用读取当前文档，无效时调用报 `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`（“settings are invalid; ask the user to fix them on the settings page”），诊断不给模型。
+校验在哪里发生：插件启动时校验一次（无效时把诊断以 warn 级记进 Host 日志，插件照常激活以便修复）；写入前再校验，非法候选不落盘；每次调用读取当前文档，无效时调用报 `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`（“settings are invalid; ask the user to fix them on the settings page”），诊断不给模型。
 
 ### 版本与迁移
 
@@ -477,7 +540,7 @@ search 的会话参数 `freshness` 控制内容缓存的新旧，不是按发布
 | `fresh` | 24 小时内 | contents `maxAgeHours: 24` | 抓取 Markdown，`maxAge` 1 天 |
 | `realtime` | 实时 | `maxAgeHours: 0` | 抓取 Markdown，`maxAge: 0` |
 
-其他连接不支持，按 `auto` 发送；菜单在这类连接上注明“不支持此偏好”，`/setup-search` 不列出实时性选项。Firecrawl 抓取缺失时摘要就缺失，不拿旧的 SERP 描述冒充新内容。
+其他连接不支持，按 `auto` 发送；菜单在这类连接上注明“不支持此偏好”，`/setup-search` 的选择框不列出实时性选项，`/setup-search freshness …` 报错。Firecrawl 抓取缺失时摘要就缺失，不拿旧的 SERP 描述冒充新内容。
 
 ### fetch 的四个远程服务
 
@@ -653,24 +716,28 @@ native：按 DSH 的错误码给本插件的短消息，未知码一律 `WEB_PRO
 
 - **错误文字**（HTTP 错误体、MCP 错误、native 的 DSH 原文）检出凭据——完整或任意 8 字符片段，含一层 JSON 转义后的形式——即整段不附带，换成 “<label>'s response was withheld because it contained this request's credential.”（native 为 “DeepSeek's response …”）。错误体在 16 KiB 处截断时，先去掉末尾的凭据前缀残片。
 - **成功体**（含其中的逐 URL 失败说明与 search 信封、model 回答、抓到的页面、MCP 结果、native 结果）里的凭据替换为 `[redacted]`，其余原样。adapter 在服务解析后再次处理结果，覆盖从 JSON 键名还原出的文本（如 OpenAlex 倒排摘要）。
-- **Host 日志**只收到诊断的去敏副本：不带原 cause 与 stack，检出凭据的消息被隐去；解析失败只记不引用正文的固定诊断。
+- **Host 日志**：后端调用的诊断只以 debug 级的去敏副本记录，见 [Host 日志](#host-日志)。
 - **凭据解析失败**：adapter 与 model 后端向 DSH Credentials 或账号服务取凭据时，依赖抛出的任何异常都不可信——它可能在还没有可识别的凭据时就带着密钥原文，即使它是 `WebError`、带着像样的 `WEB_*` 码。这类异常一律按“其他意外异常”给出固定措辞，Host 日志只记固定诊断；只有调用确实已取消时报 `WEB_ABORTED`。
+
+### Host 日志
+
+Host 日志分两层，按是否可能经手本次请求的凭据区分：
+
+- **执行诊断**：后端调用（传输、MCP、`native`、model 后端与两侧执行层）的失败可能带着本次请求的凭据，只以 debug 级、core `redactDiagnostic` 的去敏副本进 Host 日志：不带原 cause 与 stack，检出凭据的消息被隐去；回复不是 JSON 时只记不引用正文的固定诊断；凭据解析失败只记固定诊断（见[凭据隐去](#凭据隐去)）。`local` 不经手凭据，它的意外异常照原样以 debug 级记录。
+- **控制面失败**：连接 Remote 服务、`/setup-*` Host 命令、行设置、选择存储、工具可见性与选择捕获从不经手请求凭据，以 warn 级连同原始错误记录；调用方（浏览器、命令输出、模型）只看到固定措辞。其中成对注册失败与对话 provider 列表读不出只记一条固定文字的 warn。
+- **列出工具读不到就绪状态**：只记一条固定文字的 warn，不带原始异常（见[列出工具](#列出工具)）。
 
 ### 浏览器看到的错误
 
-菜单、命令与设置页经 `searchConnections` / `fetchConnections` 读写选择：行设置无效报 `<ns>/invalid-settings`，选择已在别处改变报 `<ns>/conflict`，连接缺失或停用报 `<ns>/unavailable`，请求不合契约报 `gateway/bad-request`；会话不存在等 DSH 解析会话时的错误原样交出（如 `session/not-found`）；其余异常一律 `gateway/internal` 加固定消息，原始异常只进 Host 日志。
+菜单、`/setup-*` 的选择框与设置页经 `searchConnections` / `fetchConnections` 读写选择（带参数的 Host 命令不经它们，错误是命令输出里的固定英文，见 [/setup-search 与 /setup-fetch](#setup-search-与-setup-fetch)）：行设置无效报 `<ns>/invalid-settings`，选择已在别处改变报 `<ns>/conflict`，连接缺失或停用报 `<ns>/unavailable`，请求不合契约报 `gateway/bad-request`；会话不存在等 DSH 解析会话时的错误原样交出（如 `session/not-found`）；其余异常一律 `gateway/internal` 加固定消息，原始异常以 warn 级只进 Host 日志。
 
-## 从 profile 0.1.0 升级
+## 从 profile 0.1.1 升级
 
-从已发布的 profile 0.1.0（search 0.2.0、fetch 0.2.0）升级时，设置文法与版本不变，已有文档照常读取；行为上的变化是[远程服务缺省停用](#远程服务缺省停用)与新增的[增强工具](#增强工具)。
+从已发布的 profile 0.1.1（search 0.2.1、fetch 0.2.1、ui 0.1.1）升级时，设置文法与版本、会话选择、模型记忆与对话 provider 列表的存储都不变，已有文档与记录照常读取，没有 Breaking 变化。行为上的变化：
 
-**Breaking：远程服务缺省停用。**
-
-- 会话自己的选择或 `defaultConnection` 指向这些服务、而文档里没有为它写过 `disabled: false` 时，升级后调用报 `WEB_PROVIDER_CONFIGURED_UNAVAILABLE`，菜单显示该侧需要处理；运维在设置页打开该服务即恢复。
-- 模型记忆指向它们时，未选择的会话按[现有规则](#选择从哪里来)得到默认连接；服务打开后记忆再次生效。
-- 已经写过 `disabled: false` 的文档不受影响；Host 不改写文档，也不迁移会话选择与模型记忆。
-
-**增强工具**缺省关闭。打开后只有之后新建的对话有这些工具；升级前的对话没有 [provider 列表](#对话的-provider-列表)，看不到它们。
+- [子 Agent 的会话](#子-agent-的会话)可以在菜单里改选择，无论它是否在运行；这类会话里的选择不写模型记忆。
+- [`/setup-search` 与 `/setup-fetch`](#setup-search-与-setup-fetch) 改为 Host 命令：Web 里不带参数仍弹原来的选择框，斜杠菜单里这一行改为英文说明，也可以带参数直接执行；dsh-TUI 里可用，并有参数补全。Web 的子 Agent 会话视图里没有这两个命令，输入框菜单照常。
+- search 的 `no-model` 状态改为“还不知道本会话下一次请求用哪个模型”。
 
 ## 从 0.1.x 升级
 
@@ -696,27 +763,95 @@ native：按 DSH 的错误码给本插件的短消息，未知码一律 `WEB_PRO
 
 ## 已知限制
 
-- **`web` 行可被更晚的层覆盖**：其他 bundle 或用户层改写 `web` 行会压过 profile（只写一个字段时另一个也丢失）。路由提示与升级预检会说明，不做运行时自我修复。
-- **预检看不到停用的 `web-search-deepseek` 行上的覆盖**：浏览器只为运行中的行投影配置，所以无法提示把它的 `baseURL`、`model` 等迁到 `builtin:deepseek-messages`。
-- **dsh-TUI 里只有 Host 行为**：provider、增强工具与会话选择照常工作，但 TUI 不加载浏览器面，输入框菜单、`/setup-*`、行设置页与首次启用提示都不可用，行设置在 TUI 的 `/settings` 里只读；会话按[选择从哪里来](#选择从哪里来)得到连接。TUI 自带的“网页搜索”设置分区编辑的就是 `web` 行，在那里切换会让本插件收不到流量（同上一条）。终端入口见[计划 · M6](plan.md#m6-dsh-tui)。
-- **插件行未运行时浏览器无法得知 `DSH_WEB_*_PROVIDER`**：菜单的停用提示与概览只按 `web` 行的值判断路由。
-- **菜单、列出工具与本步可能不一致**：会话模型连接的状态（菜单与列出工具里的就绪状态）按会话下一次请求的模型判断，执行按发起本次调用的那次请求的路由；切换模型后的第一步里，两者可能已显示新模型的状态。
-- **不在运行的子 Agent 会话不知道下一次请求的模型**：菜单里跟随会话模型的连接显示“还不知道本会话下一次请求用哪个模型”，native 连接只按 API key 判断就绪（不看 DeepSeek 账号）。会话里还没选过、也没有从父会话继承时，菜单显示默认连接（来源“默认连接”），不查模型记忆；这样的会话每次读取都重新得出，子 Agent 再次运行时按它的模型与模型记忆重算，可能与菜单刚才显示的不同。在会话里选过之后以所选为准。
-- **跟随会话模型的范围**：能跟随哪些路由见[跟随会话模型](#跟随会话模型)，走 OAuth / 订阅的路由不支持；三种协议之外的厂商搜索（Gemini 原生、Kimi、智谱 / DashScope 的厂商字段、Perplexity）不支持；不能“跟随会话但换一个模型”，要用别的模型就建固定连接。
-- **Anthropic 缺省工具版本**：`web_search_20260318` 缺省经代码执行调用搜索，不支持程序化工具调用的模型会被拒（HTTP 400）；把 `allowedCallers` 设为 `direct` 或选较旧的工具版本。
-- **匿名路由的缺口**：部分服务没有匿名路由，或匿名时少几项参数与实时性，见[search 目录](#search-目录9-项)、[fetch 目录](#fetch-目录6-项)与[实时性](#实时性)。
-- **远程服务的行为由服务决定**：请求形状与结果映射依据服务的公开文档；有些情形没有真实样本，例如 Firecrawl 可能对目标 404 / 503 统一返回 HTTP 500，这时报 provider 错误而不是 404 结果。服务改了字段或错误形状时报“形状不对”，不猜测。
-- **native 随 DSH 变化**：它们直接使用上游类与原生行的解析规则，包括“不限 API 响应字节”的上限策略；给模型的说明只取 DSH 消息的第一段，依赖 DSH 的消息布局。
-- **上游说明只就地标注不可信**：DSH 的“不可信数据”提示只加在成功结果上，错误里附带的说明靠 `(untrusted)` 标注，服务仍可能写指令式文字，由 Agent 判断。
-- **凭据检测有边界**：只识别本次请求的凭据，完整或 ≥ 8 字符片段、至多一层 JSON 转义；多层编码或变形不识别。DSH 原生 provider 解析失败时，其错误第一段带 Node 的正文摘录，可能含短于 8 字符的凭据片段，检测不到，会随说明进入给模型的错误；彻底消除需要 DSH 提供不带正文摘录的结构化解析错误。
-- **不自动重试与回退**：一次失败不会自动换后端。增强工具打开时由 Agent 用列出工具选另一个 provider；关闭时只能由用户改会话选择。
-- **增强工具指向不存在的原生工具**：minimal preset 没有原生 `web_search` / `web_fetch`，增强工具描述里的 “Use web_search unless…” 与 `withdrawn` 拒绝的 “web_search_enhanced is unavailable now; use web_search.” 在那里都指向一个不存在的工具。
-- **增强工具不跟随 preset 里 tool-web 的配置**：查询数、来源数与抓取输出上限取 tool-web 导出的常量，用户在 preset 编辑器里改了这些值，增强工具不跟随。
-- **列出的取消只丢弃结果**：取消列出工具时立即报 `WEB_ABORTED`，但读取就绪状态的底层查询没有取消接口，在后台跑完后丢弃。
-- **折叠的失败行看不到换 provider 提示**：提示必须在不可信的上游说明之前，所以插在错误第一段的末尾；GUI 的折叠摘要只显示第一行且按宽度截断，第一段较长时（常见于 1280 宽，窄屏更甚）提示被省略号截掉，用户要展开才看得到。模型拿到的是完整文本，不受影响。
-- **增强工具显示为通用工具行**：GUI 只为原生工具画 web 卡片，增强工具的来源以文本显示，列出工具的摘要是 `{}`（见[展示](#展示)）。
-- **工具变更通知里的中间态**：注册与隐藏在一段同步代码里完成，但 DSH 每改一次工具注册表就同步发一次 `tools/change`；第三方在这个回调里重入工具组装时，可能拿到“已注册、尚未隐藏”的中间结果。正常模型循环在同步提交完成后才组装，不受影响。
-- **对话中途停用的连接仍可用**：[provider 列表](#对话的-provider-列表)在对话建立时固定，之后停用的连接在已有对话里仍能被增强工具使用；要立即收回，删除该连接（调用报“已被删除”），或关闭“增强工具”开关（所有对话立即去掉工具）。
-- **同 id 重建继承授权**：列表只记连接 id。删除自定义连接后再用同一个名字新建（可以换服务或端点），已有对话的列表照样接受它，查询或 URL 发往新的接收方；这与编辑连接无法区分。要让已有对话失去它，换一个名字新建。
-- **菜单底部提示不能直达服务列表**：DSH 的插件设置入口没有锚点或初始滚动位置，点击提示打开的是设置页顶部，服务列表在“默认值”与“增强工具”之后。
-- **native 后端的超时只靠工具超时**：`native` 后端没有本插件的截止时间（见 [native](#native)），经增强工具时只受 100 s / 130 s 的工具超时约束，超时的消息由 DSH 生成，不带换 provider 的提示。
+每条先写限制：用户能观察到的现象、影响范围与可行的变通；再写原因：上游行为、设计取舍或技术约束。上游的版本未另写时即本项目的 DSH 基线 `0.2.1-rc.2`。
+
+- **`web` 行可被更晚的层覆盖**
+  - 限制：其他 bundle 或用户层改写 `web` 行会压过 profile 的选择（只写一个字段时另一个也丢失），本插件随之收不到流量。路由提示与升级预检会说明；本插件不做运行时自我修复。
+  - 原因：DSH 的层叠语义：更晚的层覆盖更早的层，patch 整体替换目标行的 `config`、不做深合并（见[架构 · 组合](architecture.md#组合profile-patch)）。本仓库只有 profile 的 patch 写 `web` 行；更晚的层改写它也是退出本组合包的正常途径，所以不自我修复。
+- **升级预检看不到停用的 `web-search-deepseek` 行上的覆盖**
+  - 限制：预检无法提示把该行上的 `baseURL`、`model` 等覆盖迁到 `builtin:deepseek-messages` 的参数；要保留它们，按[从 0.1.x 升级](#从-01x-升级)的人工清单在升级前记下、升级后在设置页重新录入。
+  - 原因：上游 DSH 的 Settings（`dsh-settings`，浏览器侧 `dsh-client-ui-settings` 的 `configForms`）只为运行中的行投影配置，而 profile 停用了这一行（它的能力由 `builtin:deepseek-messages` 承接）。
+- **dsh-TUI 里只有 Host 行为**
+  - 限制：provider、增强工具、会话选择与 [`/setup-*`](#setup-search-与-setup-fetch)（含参数补全）照常工作，但没有输入框菜单、行设置页与首次启用提示；行设置在 TUI 的 `/settings` 里只读，要改需手编该 profile 的补丁（行设置写在各 profile 里，Web 与 dsh-TUI 各一份）。
+  - 原因：dsh-TUI 不加载插件的浏览器面，本项目的界面都在浏览器面上。TUI 的行设置区块（`tuiSettingsSections`）只有 text / number / boolean / select 与只写密钥，字典与数组没有编辑器，且直接写路径操作、不经本插件写入前的整份校验；设计取舍：本项目不注册它（见[候选](plan.md#候选与待定)）。
+- **dsh-TUI 0.16.1 只显示 `/setup-*` 输出的开头**
+  - 限制：dsh-TUI 里 `/setup-*` 的输出是一行、至多约 200 个字符的通知：不带参数时只看得到第一行摘要、路由行与列表的开头；写入的结果通常只有一句，路由不在本插件时附加的路由行可能被截掉。补全不受影响。Web 的命令卡显示完整的多行输出，但 Web 里不带参数时弹的是选择框，连接与状态在那里或输入框菜单里看。
+  - 原因：上游 dsh-TUI 0.16.1（`@deepseek-harness-tui/dsh-tui`）把插件 Host 命令的输出压成一行通知；dsh-TUI 主干在 0.16.1 之后已改为整段写进转录。
+- **TUI 的“网页搜索”设置分区会把流量引走**
+  - 限制：dsh-TUI 自带的“网页搜索”设置分区编辑的就是 `web` 行，在那里切换会让本插件收不到流量（同第一条）；`/setup-*` 不带参数时的路由行会说明。
+  - 原因：该分区在 DSH 的 `web-deepseek-api` 行运行时出现，切换即把路由移出本插件。profile 保留这一行作手动退路（见[架构 · 组合](architecture.md#组合profile-patch)）；在 profile 里停用它能让分区消失，但 Web 与 TUI 都会失去这一原生 provider 行。设计取舍：保留它（见[候选](plan.md#候选与待定)）。
+- **插件行未运行时浏览器无法得知 `DSH_WEB_*_PROVIDER`**
+  - 限制：插件行停用时，菜单的停用提示与组合包概览只按 `web` 行的值判断路由，不考虑 `DSH_WEB_SEARCH_PROVIDER` / `DSH_WEB_FETCH_PROVIDER`。
+  - 原因：这两个环境变量在 Host 的启动环境里（`web` 行的字段缺席时上游 `dsh-web` 的 `WebRuntime` 读它们），浏览器只能经运行中的插件得到（`<ns>/provider` 与 `registerRoute`）；插件行不运行就没有这一来源（见[架构 · 浏览器面](architecture.md#浏览器面)）。
+- **菜单、列出工具与本步可能不一致**
+  - 限制：会话模型连接在菜单与列出工具里的就绪状态，可能与本步实际执行的路由不同：切换模型后的第一步里，两者可能已显示新模型的状态，执行仍按发起本次调用的那次请求的路由。
+  - 原因：状态按会话下一次请求的模型判断（列出工具复用菜单的 `describe` 视图，不另设就绪函数）；执行取发起本次调用的那次请求已解析的路由（见[跟随会话模型](#跟随会话模型)）。
+- **不在运行的子 Agent 会话不知道下一次请求的模型**
+  - 限制：这类会话的菜单里，跟随会话模型的连接显示“还不知道本会话下一次请求用哪个模型”，native 连接只按 API key 判断就绪（不看 DeepSeek 账号）。会话里还没选过、也没有从父会话继承时，菜单显示默认连接（来源“默认连接”），不查模型记忆；这样的会话每次读取都重新得出，子 Agent 再次运行时按它的模型与模型记忆重算，可能与菜单刚才显示的不同。在会话里选过之后以所选为准。
+  - 原因：下一次请求的模型只有运行中的 Agent 才有。不在运行的子 Agent 会话按会话头直接读写存储、不恢复它的 Agent（DSH 把这类会话留给子 Agent 路由，`sessionController.resolveAgent` 会拒为 `session/agent-busy`），所以没有模型可依：会话模型连接无从推导，native 判断不了本次路由是否为 `deepseek-account`，按 (provider, model) 记的模型记忆也无从查起（见[架构 · 选择范式](architecture.md#选择范式)）。
+- **跟随会话模型的范围有限**
+  - 限制：能跟随哪些路由见[跟随会话模型](#跟随会话模型)：走 OAuth / 订阅的路由不支持；三种协议之外的厂商搜索（Gemini 原生、Kimi、智谱 / DashScope 的厂商字段、Perplexity）不支持；不能“跟随会话但换一个模型”。要用别的模型，就建[固定模型连接](#model-后端)。
+  - 原因：跟随只读 DSH 的公开模型目录与 Settings、不读凭据：DeepSeek 两条官方路由之外，凭据只能是路由的 `apiKeyEnv` 或目录声明的唯一一个非 OAuth 环境变量名，OAuth / 订阅路由没有这样的 API key。model 后端只实现 Anthropic Messages、OpenAI Responses 与 Chat Completions 三种协议的请求与解析。跟随的路由（端点、凭据与模型）整体取自会话，所以 `builtin:session-model` 只接受 `label`、`disabled`、`options`。
+- **Anthropic 缺省工具版本可能被拒**
+  - 限制：`web_search_20260318` 缺省经代码执行调用搜索，不支持程序化工具调用的模型会被拒（HTTP 400）；把 `allowedCallers` 设为 `direct`，或选较旧的工具版本。跟随 DeepSeek 路由时缺省是 `web_search_20250305`，不受影响。
+  - 原因：缺省跟随厂商当前的 API 标准（见[三种协议的缺省](#三种协议的缺省)），Messages 的缺省工具因此是 `web_search_20260318`；它缺省经代码执行调用，是上游 Anthropic Messages API 对这一工具版本的规定。
+- **匿名路由有缺口**
+  - 限制：部分服务没有匿名路由，或匿名时少几项参数与实时性（见[search 目录](#search-目录9-项)、[fetch 目录](#fetch-目录6-项)与[实时性](#实时性)）；需要时改用个人密钥。
+  - 原因：上游服务的匿名接口本身如此（例如 Semantic Scholar 与 Tinyfish 抓取只有 API key 路由，Tinyfish 没有有据可查的匿名抓取路由；Exa 的实时性只在 API key 路由上生效）；目录只写核实过的访问方式与参数。
+- **远程服务的行为由服务决定**
+  - 限制：有些情形没有真实样本，例如 Firecrawl 可能对目标 404 / 503 统一返回 HTTP 500，这时报 provider 错误而不是 404 结果；服务改了字段或错误形状时报“形状不对”，不猜测。
+  - 原因：请求形状与结果映射依据服务的公开文档；只有服务明确给出的状态码才成为结果的状态，不从文字标签推断（见[远程抓取的结果映射与上限](#远程抓取的结果映射与上限)）。
+- **native 随 DSH 变化**
+  - 限制：native 连接的行为与上限跟着 DSH 的原生 provider 走，包括“不限 API 响应字节”的上限策略；给模型的上游说明只取 DSH 消息的第一段，依赖 DSH 的消息布局。
+  - 原因：为与原生一致，native 直接实例化上游 `dsh-web-search-deepseek`、`dsh-web-deepseek-api` 导出的 provider 类，沿用原生行的解析规则；DSH 的错误消息在第一个空行之前是上游的报告，之后是它为自己内置行写的设置指引（见[上游说明](#上游说明)）。
+- **上游说明只就地标注不可信**
+  - 限制：错误里附带的上游说明只靠 `(untrusted)` 标注，服务仍可能写指令式文字，由 Agent 判断。
+  - 原因：上游 tool-web（`@deepseek-ai/dsh-tool-web`）的“不可信数据”提示只加在成功结果上，错误没有。
+- **凭据检测有边界**
+  - 限制：只识别本次请求的凭据，完整或 ≥ 8 字符片段、至多一层 JSON 转义；多层编码或变形不识别。DSH 原生 provider 解析失败时，其错误第一段带 Node 的正文摘录，可能含短于 8 字符的凭据片段，检测不到，会随说明进入给模型的错误。
+  - 原因：去敏只认得调用方交给它的凭据（`secretMatcher`），设计取舍：片段按 8 字符的窗口比对，JSON 转义只解一层、不追多层编码。正文摘录来自上游 `dsh-web-search-deepseek`、`dsh-web-deepseek-api` 的解析错误；彻底消除需要 DSH 提供不带正文摘录的结构化解析错误（见[候选](plan.md#候选与待定)）。
+- **不自动重试与回退**
+  - 限制：一次失败不会自动重试或换后端。增强工具打开时由 Agent 用列出工具选另一个 provider 再试；关闭时只能由用户改会话选择。
+  - 原因：设计取舍：与上游 `dsh-web` 的 `WebRuntime` 一样不做 fallback；会话用的始终是用户自己选的连接，换后端由 Agent 经增强工具显式指定（见[架构 · 定位](architecture.md#定位)）。
+- **增强工具在 minimal preset 里指向不存在的原生工具**
+  - 限制：minimal preset 没有原生 `web_search` / `web_fetch`，增强工具描述里的 “Use web_search unless…” 与 `withdrawn` 拒绝的 “web_search_enhanced is unavailable now; use web_search.” 在那里都指向一个不存在的工具。
+  - 原因：增强工具注册在 DSH 的全局工具层，所有 preset（含 minimal）都有；定义与拒绝措辞是静态的，不随 preset 变化（定义一变 DSH 就发工具变更消息并让前缀缓存失效，见[工具与输出](#工具与输出)）。
+- **增强工具不跟随 preset 里 tool-web 的配置**
+  - 限制：查询数、来源数与抓取输出上限取 tool-web 导出的常量，用户在 preset 编辑器里改了这些值，增强工具不跟随。
+  - 原因：读 preset 里 tool-web 的配置等于嗅探 DSH 的私有形状，所以只用 `@deepseek-ai/dsh-tool-web` 导出的常量（见[候选](plan.md#候选与待定)）。
+- **取消列出工具只丢弃结果**
+  - 限制：取消列出工具时立即报 `WEB_ABORTED`，但读取就绪状态的底层查询仍在后台跑完，结果丢弃。
+  - 原因：这些只读查询经上游 DSH Credentials（`dsh-credentials`）与账号服务（`dsh-deepseek-account`）读状态，它们没有取消接口。
+- **折叠的失败行看不到换 provider 提示**
+  - 限制：错误第一段较长时（常见于 1280 宽，窄屏更甚），GUI 折叠的失败行里提示被省略号截掉，用户要展开才看得到；模型拿到的是完整文本，不受影响。
+  - 原因：提示必须在不可信的上游说明之前，所以插在错误第一段的末尾；上游 DSH Web GUI 的工具行（`dsh-client-ui-tool`）折叠时只显示错误的第一行，并按宽度截断（见[展示](#展示)）。
+- **增强工具显示为通用工具行**
+  - 限制：增强工具没有原生工具那样的 web 卡片，来源以文本显示；列出工具的折叠摘要是 `{}`（见[展示](#展示)）。
+  - 原因：上游 DSH Web GUI（`dsh-client-ui-tool`）只按名字为 `web_search` / `web_fetch` 画 web 卡片、不读 Host 的展示回调，通用工具行的摘要取第一个字符串参数，列出工具没有参数。自己画卡片要拼 DSH 没有导出的行组件与卡片模型（见[候选](plan.md#候选与待定)）。
+- **工具变更通知里的中间态**
+  - 限制：第三方在 `tools/change` 回调里重入工具组装时，可能拿到“已注册、尚未隐藏”的中间结果；正常模型循环在同步提交完成后才组装，不受影响。
+  - 原因：注册与隐藏在一段同步代码里完成，但上游 DSH 工具注册表（`dsh-tools`）每改一次就同步发一次 `tools/change`；它的 `restrict` 只接受已注册的名字，所以隐藏只能排在注册之后（见[架构 · 选择范式](architecture.md#选择范式)）。
+- **对话中途停用的连接仍可用**
+  - 限制：对话开始后停用的连接，在已有对话里仍能被增强工具使用；要立即收回，删除该连接（调用报“已被删除”），或关闭“增强工具”开关（所有对话立即去掉工具）。
+  - 原因：[provider 列表](#对话的-provider-列表)在对话建立时固定，是对话开始时的授权；照 DSH 子 agent 路由授权的原则，运维的操作只影响新对话，停用不收回已授予的连接。
+- **同 id 重建继承授权**
+  - 限制：删除自定义连接后再用同一个名字新建（可以换服务或端点），已有对话的列表照样接受它，查询或 URL 发往新的接收方。要让已有对话失去它，换一个名字新建。
+  - 原因：列表只记连接 id，执行目标每次按当前设置重建；删除后同 id 重建与编辑连接无法区分。
+- **菜单底部提示不能直达服务列表**
+  - 限制：点击“更多服务可在设置中打开”打开的是设置页顶部，服务列表在“默认值”与“增强工具”之后。
+  - 原因：上游 DSH 的插件设置入口（`dsh-client-ui-plugin-manager` 的 `pluginNavigation.openBundle`）没有锚点或初始滚动位置。
+- **native 后端的超时只靠工具超时**
+  - 限制：`native` 连接经增强工具时只受 100 s / 130 s 的工具超时约束，超时的消息由 DSH 生成，不带换 provider 的提示。
+  - 原因：native 直接用 DSH 的 provider 类、保持原生行为，没有本插件的截止时间（见 [native](#native)）；DSH 的工具超时把整个结果换成它自己的固定消息（`tool call timed out after <N>ms`）。
+- **斜杠菜单里的 `/setup-*` 是英文**
+  - 限制：斜杠菜单里这一行显示 Host 命令的名字与英文说明，没有图标与本地化标题；输入命令名与空格后的参数提示（`[off | <connection id> | …]`）也是英文。选择框本身照常按界面语言显示。命令输出与 dsh-TUI 里的连接名称取设置里的英文名（如 `Session model`），浏览器菜单与选择框里是界面语言的名称（英文界面为“Conversation model”）。
+  - 原因：Host 没有界面语言，命令的说明、参数提示与输出是英文固定措辞。浏览器只给 Host 命令挂了 decoration（无参数时的选择框），而上游 `dsh-client-ui-commands` 的 decoration 没有行面；只有 DSH 内置命令有本地化的行面与参数提示。
+- **dsh-TUI 里参数提示多一层方括号**
+  - 限制：dsh-TUI 里参数提示显示为 `[[off | …`，并挤掉命令说明。
+  - 原因：上游 dsh-TUI 0.16.1 把参数提示包成 `[<提示>]`，而本插件的提示与 DSH 自带命令一样自带方括号；DSH 自带命令（如 `/goal`）在 TUI 里同样如此。
+- **Host 命令的写入只刷新本标签页**
+  - 限制：带参数的 `/setup-*` 执行后，只有执行它的浏览器标签页里该会话的视图立即重读；别的标签页，或在 dsh-TUI 里执行的命令，要等那里下次读取选择，与菜单写入在别的标签页的表现相同。
+  - 原因：带参数的命令在 Host 上直接写入、不经浏览器的选择 store；上游 `dsh-client-ui-commands` 的 `command/executed` 只向本浏览器报告它执行完的 Host 命令（见[架构 · 浏览器面](architecture.md#浏览器面)）。
+- **空会话首页盖住命令卡**
+  - 限制：Web 里在还没有对话的新会话执行带参数的 `/setup-*`，看不到命令卡；命令已执行，菜单也已更新。
+  - 原因：上游 DSH Web GUI 在会话还没有对话时，用空会话首页盖着会话区。

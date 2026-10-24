@@ -31,11 +31,11 @@ docs/orchestration-prompt.md：维护者维护的多 agent 开发任务说明（
 
 | 包目录 / manifest | npm 名称 | 版本 | exports 与 DSH 元数据 |
 | --- | --- | --- | --- |
-| [profile](<../packages/profile/package.json>) | dsh-tool-web-enhanced-profile | 0.1.1 | 导出 patch、locale、icon、package.json；dsh.bundle.patch 指向 patch。 |
+| [profile](<../packages/profile/package.json>) | dsh-tool-web-enhanced-profile | 0.1.2 | 导出 patch、locale、icon、package.json；dsh.bundle.patch 指向 patch。 |
 | [core](<../packages/core/package.json>) | dsh-tool-web-enhanced-core | 0.0.0 | private；./shared、./host、./client 直接指向源码；无 dsh 字段。 |
-| [search-enhanced](<../packages/search-enhanced/package.json>) | dsh-web-search-enhanced | 0.2.1 | 插件导出；dsh.client.platform = web。 |
-| [fetch-enhanced](<../packages/fetch-enhanced/package.json>) | dsh-web-fetch-enhanced | 0.2.1 | 插件导出；dsh.client.platform = web。 |
-| [ui](<../packages/ui/package.json>) | dsh-tool-web-enhanced-ui | 0.1.1 | 插件导出；dsh.client.platform = web。 |
+| [search-enhanced](<../packages/search-enhanced/package.json>) | dsh-web-search-enhanced | 0.2.2 | 插件导出；dsh.client.platform = web。 |
+| [fetch-enhanced](<../packages/fetch-enhanced/package.json>) | dsh-web-fetch-enhanced | 0.2.2 | 插件导出；dsh.client.platform = web。 |
+| [ui](<../packages/ui/package.json>) | dsh-tool-web-enhanced-ui | 0.1.2 | 插件导出；dsh.client.platform = web。 |
 
 三个插件共用 exports：`. → ./lib/index.js`、`./client → ./lib/client.cjs`，以及 locale JSON、icon SVG 与 package.json；均为 `sideEffects: false`，没有运行时 dependencies。profile 的 dependencies 是三个公开插件；core 只作为开发依赖参与内联。
 
@@ -65,7 +65,7 @@ src/
 
 | 模块 | 职责 |
 | --- | --- |
-| [ids.ts](<../packages/core/src/shared/ids.ts>) | 包、row、provider 身份，每个能力的两个增强工具名（`EnhancedToolNames`、`PluginIdentity.tools`）及 rowConfigKey。 |
+| [ids.ts](<../packages/core/src/shared/ids.ts>) | 包、row、provider 身份，每个能力的两个增强工具名（`EnhancedToolNames`、`PluginIdentity.tools`）与 Host 命令名（`PluginIdentity.command`：`setup-search` / `setup-fetch`）及 rowConfigKey。 |
 | [connections.ts](<../packages/core/src/shared/connections.ts>) | 连接标识与 id 文法（`isConnectionId`、`BUILTIN_CONNECTION_ID`）、访问方式、目录描述（含 `optIn`、`use`）与参数校验。 |
 | [settings.ts](<../packages/core/src/shared/settings.ts>) | 版本识别、迁移接口、文档 schema（含 `enhancedTools`）与 resolveDocument（内置连接的 `disabled` 缺省取目录 `optIn`）；标签单行化 `singleLine`。 |
 | [route.ts](<../packages/core/src/shared/route.ts>) | web 路由字段、环境变量名与纯路由判断。 |
@@ -76,7 +76,7 @@ src/
 
 | 模块 | 职责 |
 | --- | --- |
-| [capability.ts](<../packages/core/src/host/capability.ts>) · [runtime.ts](<../packages/core/src/host/runtime.ts>) | 能力参数（含 `enhancedTools` 与 `Capability.enhanced`）、选项 codec 与调用上下文类型；installCapability 连接会话选择、计划、对话列表、可见性控制器、显式入口、Remote 与 provider 注册。 |
+| [capability.ts](<../packages/core/src/host/capability.ts>) · [runtime.ts](<../packages/core/src/host/runtime.ts>) | 能力参数（含 `enhancedTools`、`Capability.enhanced`、可选的 `commandOptions` 与带标签的连接 `LabeledConnection`）、选项 codec 与调用上下文类型；installCapability 连接会话选择、计划、对话列表、可见性控制器、显式入口、Remote、Host 命令（`commands` 注入子作用域）、TUI 补全（独立的 `tuiCommandTrees` 注入子作用域）与 provider 注册。 |
 | [sessions.ts](<../packages/core/src/host/sessions.ts>) · [plans.ts](<../packages/core/src/host/plans.ts>) | 以会话为目标（`SessionTarget`：运行中的 `live` 或冷的 `cold`；`liveSession`）的会话选择解析（fork 继承、revision、按会话来源写模型记忆、写入后同步当时运行中的 Agent）；请求步快照（Snapshots）与选择计划。 |
 | [session-origin.ts](<../packages/core/src/host/session-origin.ts>) | 会话来源 `sessionOrigin`：只读会话头公开字段（`origin`、`parentSession`、`isSeeded`）得出 `top-level` / `fork` / `subagent`；`parentOf`。 |
 | [selectable.ts](<../packages/core/src/host/selectable.ts>) · [restriction.ts](<../packages/core/src/host/restriction.ts>) | 连接是否存在且启用；可见性控制器 `ToolRestriction`：原生工具遮罩，增强工具的注册（可回滚的成对注册、注册世代）、按 Agent 遮罩与有序撤下，路由与开关变化后的重算。 |
@@ -84,15 +84,18 @@ src/
 | [provider-lists.ts](<../packages/core/src/host/provider-lists.ts>) | 新建对话的判断 `isNewConversation`（经 `sessionOrigin`）；`ProviderLists`：对话 provider 列表的建立、继承、读取（空记录读作没有列表）。 |
 | [storage.ts](<../packages/core/src/host/storage.ts>) · [pairings.ts](<../packages/core/src/host/pairings.ts>) | 存储域（表 `selections`、`pairings`、`provider_lists`，version 1）、生命周期内存取与每会话队列；模型与连接的配对记录。 |
 | [model.ts](<../packages/core/src/host/model.ts>) · [route.ts](<../packages/core/src/host/route.ts>) | 下一模型与当前请求模型身份；公开设置与环境中的 Host 路由事实。 |
-| [settings-row.ts](<../packages/core/src/host/settings-row.ts>) · [remote.ts](<../packages/core/src/host/remote.ts>) | Volatile 设置行、候选文档校验与无效设置报告；连接 Remote 服务（`get` / `set` 共用的取法：运行中的 Agent → 冷的子 Agent 会话 → `resolveAgent`）及服务端异常隔离。 |
+| [settings-row.ts](<../packages/core/src/host/settings-row.ts>) · [remote.ts](<../packages/core/src/host/remote.ts>) | Volatile 设置行、候选文档校验与无效设置报告；连接 Remote 服务（`get` / `set` 共用的取法：运行中的 Agent → 冷的子 Agent 会话 → `resolveAgent`；`set` 经 `writeSelection`）及服务端异常隔离。 |
+| [selection-write.ts](<../packages/core/src/host/selection-write.ts>) | `writeSelection`：Remote `set` 与 Host 命令共用的可选性检查与带修订号的写入，结果 `written` / `unavailable` / `conflict`。 |
+| [command.ts](<../packages/core/src/host/command.ts>) | `registerCommand`：能力的 Host 命令（`/setup-search` / `/setup-fetch`）：文法、不带参数时的显示（来源、路由、启用的连接与接收方）、经 `writeSelection` 的写入、英文输出与异常边界。 |
+| [terminal.ts](<../packages/core/src/host/terminal.ts>) | dsh-TUI 补全：本地结构类型（`TuiCommandTreeProvider`、`CommandCompletionNode`）、`tuiCommandTrees` 的 Context 类型增补与 `registerTerminal`（按当前设置同步列出 `off`、启用的连接、`freshness` 与三档）。 |
 | [credentials.ts](<../packages/core/src/host/credentials.ts>) | API key、路由 key（无 Credentials 服务时回退启动环境）、账号 token 与就绪状态（按下一次请求的模型，未知时只看 API key）。 |
 | [errors.ts](<../packages/core/src/host/errors.ts>) · [native.ts](<../packages/core/src/host/native.ts>) | 能力错误类型、取消与错误工厂；包装 DSH 原生 provider 并重述错误。 |
 | [transport.ts](<../packages/core/src/host/transport.ts>) · [mcp.ts](<../packages/core/src/host/mcp.ts>) | 有界 HTTP 读写、统一期限与上游说明；一次工具调用内的 MCP 握手与 JSON / SSE 解析。 |
 | [adapter.ts](<../packages/core/src/host/adapter.ts>) | AdapterWire、目标、鉴权、mapWire 与 runAdapter。 |
-| [redaction.ts](<../packages/core/src/host/redaction.ts>) | 检测本次请求凭据，生成成功内容与诊断的脱敏副本。 |
+| [redaction.ts](<../packages/core/src/host/redaction.ts>) | 检测本次请求凭据，生成成功内容与诊断的去敏副本。 |
 | [enhanced-parts.ts](<../packages/core/src/host/enhanced-parts.ts>) | 两侧增强工具共用部件的出口，重导出下面三个模块。 |
 | enhanced-parts/[calls](<../packages/core/src/host/enhanced-parts/calls.ts>) · [wording](<../packages/core/src/host/enhanced-parts/wording.ts>) | 参数错误、未知字段、发起调用的 Agent、`provider` 文法与一次显式执行（`runOnProvider`）；`EnhancedVoice`、就绪子句、拒绝措辞与换 provider 提示的插入。 |
-| enhanced-parts/[listing](<../packages/core/src/host/enhanced-parts/listing.ts>) | 列出工具的规范值 schema、值与文本（单行化、有界），`UNSUPPORTED_REASON_TEXT`（search 执行层共用）。 |
+| enhanced-parts/[listing](<../packages/core/src/host/enhanced-parts/listing.ts>) | 列出工具的规范值 schema、值与文本（单行化、有界），`UNSUPPORTED_REASON_TEXT`（search 执行层共用）；`recipientText`、`oneLine`、`LABEL_MAX` 也供 Host 命令与补全使用。 |
 | [providers/search.ts](<../packages/core/src/host/providers/search.ts>) · [fetch.ts](<../packages/core/src/host/providers/fetch.ts>) | SearchInput / SearchOutcome 与行解析辅助；FetchInput / PageOutcome 与目标状态映射。 |
 | providers/[exa](<../packages/core/src/host/providers/exa.ts>)、[firecrawl](<../packages/core/src/host/providers/firecrawl.ts>)、[tavily](<../packages/core/src/host/providers/tavily.ts>)、[tinyfish](<../packages/core/src/host/providers/tinyfish.ts>) | 各导出 `<service>Search` 与 `<service>Fetch` wire。 |
 | providers/[openalex](<../packages/core/src/host/providers/openalex.ts>)、[semanticscholar](<../packages/core/src/host/providers/semanticscholar.ts>) | 只有搜索 wire：学术摘要字段与论文来源映射。 |
@@ -104,7 +107,7 @@ src/
 | --- | --- |
 | [section.ts](<../packages/core/src/client/section.ts>) | ConnectionSection（含 `remoteServicesOff`）、路由源、选择 store 与 WebConnectionsService 接口。 |
 | [remote-services.ts](<../packages/core/src/client/remote-services.ts>) | 菜单底部提示的事实 `remoteServicesOff` 与按设置快照缓存的 `remoteServicesOffSource`。 |
-| [selection.ts](<../packages/core/src/client/selection.ts>) · [command.ts](<../packages/core/src/client/command.ts>) | ConnectionSelectionStore：共享缓存、revision 写入与失效重读；能力无关的选择命令 selectionCommand。 |
+| [selection.ts](<../packages/core/src/client/selection.ts>) · [command.ts](<../packages/core/src/client/command.ts>) | ConnectionSelectionStore：共享缓存、revision 写入与失效重读（全部或单个会话 `invalidateSession`）；能力无关的 `selectionCommand`（挂在 Host 命令上的 decoration：无参数时的选择框）与 `followHostCommand`（`command/executed` 监听）。 |
 | [route.ts](<../packages/core/src/client/route.ts>) · [pairings.ts](<../packages/core/src/client/pairings.ts>) · [credentials.ts](<../packages/core/src/client/credentials.ts>) | 状态观察器：合并浏览器 web 设置与 Host provider 事实；按观察生命周期加载模型记忆；凭据配置状态（不读值）。 |
 | [use-observable.ts](<../packages/core/src/client/use-observable.ts>) | 经 useSyncExternalStore 订阅稳定的 observable。 |
 | settings/[model.ts](<../packages/core/src/client/settings/model.ts>) · [fields.ts](<../packages/core/src/client/settings/fields.ts>) · [connection-form.ts](<../packages/core/src/client/settings/connection-form.ts>) | 从目录推导连接名、凭据引用、参数字段与协议分组；编辑文本转换与标量 / 列表 / 互斥校验；自定义 adapter / model 连接草稿。 |
@@ -139,7 +142,7 @@ src/
 | [index.ts](<../packages/search-enhanced/src/index.ts>) · [seat.ts](<../packages/search-enhanced/src/seat.ts>) | 插件入口与设置行，安装搜索能力；交给 ctx.web 的搜索 provider 适配座。 |
 | [catalog.ts](<../packages/search-enhanced/src/catalog.ts>) · [contract.ts](<../packages/search-enhanced/src/contract.ts>) | 搜索目录、参数规则与 MODEL_PROTOCOLS；searchConnections Remote 与搜索选项 schema。 |
 | settings/[resolve](<../packages/search-enhanced/src/settings/resolve.ts>) · [types](<../packages/search-enhanced/src/settings/types.ts>) · [retired](<../packages/search-enhanced/src/settings/retired.ts>) · [version](<../packages/search-enhanced/src/settings/version.ts>) | 把共享文法结果转为搜索连接类型；设置文档与别名；只供诊断与 Reset 的退役字段；重导出共享版本常量。 |
-| [host/runtime.ts](<../packages/search-enhanced/src/host/runtime.ts>) | searchCapability（含 `enhanced`）、执行目标解析与 installSearch。 |
+| [host/runtime.ts](<../packages/search-enhanced/src/host/runtime.ts>) | searchCapability（含 `enhanced` 与实时性的 `commandOptions`）、执行目标解析与 installSearch。 |
 | host/[connections](<../packages/search-enhanced/src/host/connections.ts>) · [options](<../packages/search-enhanced/src/host/options.ts>) · [remote](<../packages/search-enhanced/src/host/remote.ts>) | 浏览器可显示的连接就绪事实；搜索会话选项 codec；Remote 服务类型与 Context 扩展。 |
 | [host/listing.ts](<../packages/search-enhanced/src/host/listing.ts>) | 列出工具的能力事实 `searchListing`：目录用途、接收方（运维端点取主机名）、是否应用实时性。 |
 | tools/[index](<../packages/search-enhanced/src/tools/index.ts>) · [definitions](<../packages/search-enhanced/src/tools/definitions.ts>) | `searchEnhanced`（能力的 `enhanced`）；`web_search_enhanced` 与 `list_web_search_providers` 的静态定义、参数校验、输出与超时。 |
@@ -152,7 +155,7 @@ src/
 | model/[types](<../packages/search-enhanced/src/model/types.ts>) · [bounds](<../packages/search-enhanced/src/model/bounds.ts>) | 模型路由、鉴权与支持状态类型；跨命名空间读取的路由字段约束。 |
 | model/[route](<../packages/search-enhanced/src/model/route.ts>) · [deepseek](<../packages/search-enhanced/src/model/deepseek.ts>) | 从固定连接或 Session 公共路由重建执行目标；集中推导 DeepSeek 路由与 Messages 方言。 |
 | model/[protocols](<../packages/search-enhanced/src/model/protocols.ts>) · [execute](<../packages/search-enhanced/src/model/execute.ts>) | 协议请求生成与回答、来源解析；解析本次鉴权并执行有界请求。 |
-| client/[index.tsx](<../packages/search-enhanced/src/client/index.tsx>) · [section](<../packages/search-enhanced/src/client/section.ts>) · [command](<../packages/search-enhanced/src/client/command.ts>) | 安装浏览器面、设置注入、命令与可选 UI section；搜索选择与 freshness 的菜单 section；/setup-search 与 freshness 选项。 |
+| client/[index.tsx](<../packages/search-enhanced/src/client/index.tsx>) · [section](<../packages/search-enhanced/src/client/section.ts>) · [command](<../packages/search-enhanced/src/client/command.ts>) | 安装浏览器面、设置注入、`/setup-search` 的 decoration 与 Host 命令执行后的重读、可选 UI section；搜索选择与 freshness 的菜单 section；/setup-search 选择框的选项（含 freshness）。 |
 | client/[connections](<../packages/search-enhanced/src/client/connections.ts>) · [credentials](<../packages/search-enhanced/src/client/credentials.ts>) · [locales](<../packages/search-enhanced/src/client/locales.ts>) | 连接、状态、来源与写入结果文案；凭据引用与共享状态观察器；中英文词典。 |
 | client/[selection](<../packages/search-enhanced/src/client/selection.ts>) · [route](<../packages/search-enhanced/src/client/route.ts>) · [pairings](<../packages/search-enhanced/src/client/pairings.ts>) · [injected](<../packages/search-enhanced/src/client/injected.ts>) | 把 core 的选择 store、路由状态、模型记忆绑定到搜索 Remote 与字段；设置页注入类型。 |
 | client/settings/[SettingsPage](<../packages/search-enhanced/src/client/settings/SettingsPage.tsx>) · [model](<../packages/search-enhanced/src/client/settings/model.ts>) | 组合设置页、文档诊断与 Reset；把目录与 model 协议转为设置页事实和文案。 |
@@ -191,7 +194,7 @@ src/
 | remote/[adapters/index](<../packages/fetch-enhanced/src/remote/adapters/index.ts>) · [types](<../packages/fetch-enhanced/src/remote/types.ts>) | 把 core 抓取 wire 绑定到目录；按目录约束 keyless 类型。 |
 | remote/[execute](<../packages/fetch-enhanced/src/remote/execute.ts>) · [http](<../packages/fetch-enhanced/src/remote/http.ts>) · [errors](<../packages/fetch-enhanced/src/remote/errors.ts>) | 构建 adapter 后端并执行；HTTP / MCP 传输参数与消息；抓取能力错误工厂。 |
 | [remote/page.ts](<../packages/fetch-enhanced/src/remote/page.ts>) | Page / PageFailure 转 WebFetchResult / WebError。 |
-| client/[index.tsx](<../packages/fetch-enhanced/src/client/index.tsx>) · [section](<../packages/fetch-enhanced/src/client/section.ts>) · [command](<../packages/fetch-enhanced/src/client/command.ts>) | 安装浏览器面、设置注入、命令与可选 UI section；抓取连接菜单 section；/setup-fetch。 |
+| client/[index.tsx](<../packages/fetch-enhanced/src/client/index.tsx>) · [section](<../packages/fetch-enhanced/src/client/section.ts>) · [command](<../packages/fetch-enhanced/src/client/command.ts>) | 安装浏览器面、设置注入、`/setup-fetch` 的 decoration 与 Host 命令执行后的重读、可选 UI section；抓取连接菜单 section；/setup-fetch 选择框的选项。 |
 | client/[connections](<../packages/fetch-enhanced/src/client/connections.ts>) · [locales](<../packages/fetch-enhanced/src/client/locales.ts>) | 就绪状态、URL 接收方与选择文案；中英文词典。 |
 | client/[selection](<../packages/fetch-enhanced/src/client/selection.ts>) · [route](<../packages/fetch-enhanced/src/client/route.ts>) · [injected](<../packages/fetch-enhanced/src/client/injected.ts>) | 把 core 的选择 store 与路由状态绑定到抓取 Remote 与字段；设置页注入类型。 |
 | [client/allowlist-lines.ts](<../packages/fetch-enhanced/src/client/allowlist-lines.ts>) | allowlist 物理行诊断与显式修复操作。 |
@@ -244,7 +247,8 @@ src/
 | [environment.ts](<../e2e/harness/environment.ts>) | 隔离环境、`dsh` 调用、`isolatedContext`（在本次运行下另建一套隔离目录，得到独立 home）、`addPlugins`（可选 profile 名）、`createBaseProfile`（经 `dsh-app-boot` 的 `initProfile` 建只有 base 的 profile）、`installUserFixture`（把夹具追加到真实的用户层 patch）、`composedRows`（读 `--dump-config`）。 |
 | [host.ts](<../e2e/harness/host.ts>) | 按 CLI 的步骤在进程内启动 Host（`dsh-app-boot` 的公开导出），叠加 `fixtures/host-plane.yml` 去掉 GUI 行，不绑定端口；可选 `profileName`（Web 或 base）；`prepare` 回调在插件初始化前接入观察者（如日志）。按 `dsh-cmdline` 公开的 `onReady` 契约提供“应用就绪”源：启动完成后通知已登记的监听者，之后登记的立即回调（HMR 的初始重载等它，否则 Settings 写入一直排队）；`dispose` 先 await 公开的 `hmr.runExclusive(async () => {})` 作为屏障，再处置根 fiber。 |
 | [web.ts](<../e2e/harness/web.ts>) | 启动 `dsh web`，监听 127.0.0.1 上 OS 分配的空闲端口（从不用 3080），输出写 `web.log`。 |
-| [browser.ts](<../e2e/harness/browser.ts>) | 无头 Chromium（Playwright），按 context 语言关闭首次启动的对话框（可选保留本组合包的首次启用提示以便截图），失败时记录可访问性快照与截图。 |
+| [browser.ts](<../e2e/harness/browser.ts>) | 无头 Chromium（Playwright），按 context 语言关闭首次启动的对话框（可选保留本组合包的首次启用提示以便截图），导航前可接入页面观察者（如记录请求与 WebSocket 帧），失败时记录可访问性快照与截图。 |
+| [terminal.ts](<../e2e/harness/terminal.ts>) · [terminal-pty.py](<../e2e/harness/terminal-pty.py>) | `startTerminal`：经 Python 标准库 `pty` 在真实伪终端里运行一条命令（如正式的 `dsh-tui` 入口，180×60，`DSH_TUI_LANG=en`），按输出事件等待文字（不计时），结束时把纯文本与 ANSI 原文存为证据。 |
 | [navigation.ts](<../e2e/harness/navigation.ts>)、[theme.ts](<../e2e/harness/theme.ts>)、[model-visuals.ts](<../e2e/harness/model-visuals.ts>) | 经公开界面打开插件页、设置页、新会话、连接菜单及其能力标签与主题设置。 |
 | [remote-fetch-api.ts](<../e2e/harness/remote-fetch-api.ts>)、[model-api.ts](<../e2e/harness/model-api.ts>)、[http.ts](<../e2e/harness/http.ts>) | 回环假远程服务 / 假模型 API（记录方法、路径、请求头与请求体，回复可替换或按请求生成）与本地抓取目标；`startAgentModelApi` 回放确定的 Messages SSE（第一步发出给定的工具调用，之后回答），驱动真实 Agent 循环，`startTextModelApi` 只回文本。 |
 | [enhanced-tool-review.ts](<../e2e/harness/enhanced-tool-review.ts>) | `captureEnhancedToolReview`：回环假模型与假服务驱动真实 Agent，同一回合调用原生 `web_search`、两个成功与失败的增强工具，经传输闸门拍下运行中（切到 Compact）、展开的来源、原生与增强并列、失败行折叠与展开，以及会话关闭后的拒绝。 |
@@ -260,6 +264,9 @@ src/
 | [fetch-allow-loopback.yml](<../e2e/fixtures/fetch-allow-loopback.yml>) / [fetch-native-route.yml](<../e2e/fixtures/fetch-native-route.yml>) | 显式允许回环的本地连接；把抓取路由切到原生 HTTP。 |
 | [remote-fetch.ts](<../e2e/fixtures/remote-fetch.ts>) / [search-model.ts](<../e2e/fixtures/search-model.ts>) | 自定义抓取连接与 Firecrawl 页响应；固定模型、Session 路由与协议响应。 |
 | [subagent-selection.ts](<../e2e/fixtures/subagent-selection.ts>) | 两侧各两个指向不同回环目的地的连接（固定模型搜索、Firecrawl 抓取）；回环模型：按队列给父 Agent 下发工具调用，可在子 Agent 的请求处暂停。 |
+| [setup-command-connections.yml](<../e2e/fixtures/setup-command-connections.yml>) | 命令与补全用的搜索连接：默认 OpenAlex、API key 访问的 Exa、大写 id 的自定义连接 `custom:MyEngine`。 |
+| [setup-command-invalid-settings.yml](<../e2e/fixtures/setup-command-invalid-settings.yml>) / [setup-command-other-route.yml](<../e2e/fixtures/setup-command-other-route.yml>) | 两行都写不受支持的 `version: 1`（设置无效）；`web` 行把搜索路由给 `deepseek`。 |
+| [tui-pty.yml](<../e2e/fixtures/tui-pty.yml>) / [tui-web-composition.yml](<../e2e/fixtures/tui-web-composition.yml>) / [disable-tui-frontend.yml](<../e2e/fixtures/disable-tui-frontend.yml>) | TUI profile 里 `dsh-tui` 行的设置（`provider: deepseek-official`、非全屏、不显示终端图片）并停用 `dsh-tui-webserver`；Web profile 叠入 TUI bundle 做服务级检查时，停用与 Web 行重复的 TUI 服务行；停用 TUI 的前端行（`dsh-tui`、`dsh-tui-webserver`）。 |
 
 下表“套件”指共用本次运行的隔离 home，“独立”指另用 `isolatedContext` 派生 home，均不是用户的 DSH home。
 
@@ -275,7 +282,7 @@ src/
 | [composer-menu.e2e.ts](<../e2e/composer-menu.e2e.ts>) | 搜索 Off 选择、持久化与工具恢复 | 是 | 独立 |
 | [fetch-menu.e2e.ts](<../e2e/fetch-menu.e2e.ts>) | 抓取选择、Off 与搜索的独立性 | 是 | 独立 |
 | [menu-rows-off.e2e.ts](<../e2e/menu-rows-off.e2e.ts>) | 单侧或双侧能力行停用后的菜单与说明 | 是 | 套件 |
-| [ui-row-off.e2e.ts](<../e2e/ui-row-off.e2e.ts>) | 无共享菜单时仍有设置页和 slash 命令 | 是 | 独立 |
+| [ui-row-off.e2e.ts](<../e2e/ui-row-off.e2e.ts>) | 无共享菜单时仍有设置页和 `/setup-*` 选择框（斜杠菜单行按 Host 命令名定位） | 是 | 独立 |
 | [fetch-remote-ui.e2e.ts](<../e2e/fetch-remote-ui.e2e.ts>) | 远程连接就绪、凭据与自定义端点设置 | 是 | 独立 |
 | [search-model-ui.e2e.ts](<../e2e/search-model-ui.e2e.ts>) | model 连接设置、选择持久化与响应式页面 | 是 | 功能组 / 视口独立 |
 | [search-model-visuals.e2e.ts](<../e2e/search-model-visuals.e2e.ts>) | 列表参数、互斥冲突恢复持久化、信任及 model 菜单状态 | 是 | 每例独立 |
@@ -289,41 +296,46 @@ src/
 | [enhanced-review-visuals.e2e.ts](<../e2e/enhanced-review-visuals.e2e.ts>) | 补拍的评审截图：工具行的真实结果、展开的远程服务说明、在 GUI 打开 Exa 前后同一会话的菜单、有无预检问题的首次启用提示（宽度 / 主题 / 语言矩阵） | 是 | 每例独立 |
 | [enhanced-write-race.e2e.ts](<../e2e/enhanced-write-race.e2e.ts>) | 同一轮里跨节的连续写入都保存且没有警告；本页读到 revision 之后的外部修改仍被拒 | 是 | 每例独立 |
 | [subagent-selection.e2e.ts](<../e2e/subagent-selection.e2e.ts>) | 回环模型让父 Agent 经 preset 的 `subagent` / `subagent_fork` 建两个子会话；在 Web 打开子会话，不在运行与运行中都经菜单改两侧连接，下一步（或父 Agent 用 `send_message` 再叫起时）请求发往新连接，模型记忆保持为空；Web 的分叉会话照常写两侧的模型记忆 | 是 | 独立 |
+| [setup-commands.e2e.ts](<../e2e/setup-commands.e2e.ts>) | 真实 Host 的 `CommandRuntime`：两个命令的说明与参数提示、不带参数的显示、`off` / 连接 id（含大写的 `custom:MyEngine`）/ 三档实时性的写入与 Remote `get` 一致；用法、不可选与实时性不适用的拒绝不改选择；设置无效的固定措辞；插件行停用时命令消失，ui 行停用时照常 | 否 | 套件 |
+| [setup-commands-ui.e2e.ts](<../e2e/setup-commands-ui.e2e.ts>) | 先跑一轮回环对话再在 Web 打开会话：斜杠菜单行与原来的选择框（截图）；带参数执行后命令卡显示输出、菜单与按钮反映新选择；展开命令卡看到路由警告；ui 行停用时选择框与带参数执行照常；插件行停用时命令与选择框一起消失。记录请求与 WebSocket 帧作证据 | 是 | 独立 |
+| [tui-completion.e2e.ts](<../e2e/tui-completion.e2e.ts>) | 已安装的 dsh-TUI（根 devDependency）与本 bundle：Web profile 叠入 TUI bundle、经 `bootHost` 检查真实 `tuiCommandTrees` 里两棵补全树与 Host 命令输出；独立的 TUI profile（dsh-base → dsh-tui → 本 bundle）里经真实 PTY 启动正式 `dsh-tui` 入口，Tab 补全插入原样的 `custom:MyEngine` 并执行，另一次不带参数执行看到连接列表与路由行 | 否（PTY） | 独立 |
 
-当前 e2e 基线为 24 个文件、161 个测试（最终 `pnpm run test:e2e`）。
+当前 e2e 基线为 27 个文件、175 个测试（最终 `pnpm run test:e2e`）。
 
 ## 测试清单
 
-当前测试基线为 **102 个文件、2190 个测试**（最终 `pnpm run check`，不含 e2e）；逐包数量如下，参数化用例按实际展开计数。每行对应一个测试文件；tests/fixtures/ 下的辅助模块不计入。
+当前测试基线为 **105 个文件、2236 个测试**（最终 `pnpm run check`，不含 e2e）；逐包数量如下，参数化用例按实际展开计数。每行对应一个测试文件；tests/fixtures/ 下的辅助模块不计入。
 
 | 包 | 测试文件 | 通过测试 |
 | --- | ---: | ---: |
-| core | 34 | 597 |
-| search-enhanced | 30 | 813 |
-| fetch-enhanced | 30 | 686 |
+| core | 37 | 637 |
+| search-enhanced | 30 | 816 |
+| fetch-enhanced | 30 | 689 |
 | ui | 7 | 86 |
 | profile | 1 | 8 |
 
-core 的测试夹具：[fixtures/enhanced.ts](<../packages/core/tests/fixtures/enhanced.ts>)（`inertEnhanced`：开关不打开的测试里，一旦构建或列出工具就报错）、[fixtures/web-settings.ts](<../packages/core/tests/fixtures/web-settings.ts>)（在一次性 profile 上挂真实的 Settings 与 `WebRuntime`）、[fixtures/shipped-preset.ts](<../packages/core/tests/fixtures/shipped-preset.ts>)（注册 DSH 自带的 standard / minimal / PTC Web preset，挂 PTC 运行时）、[fixtures/settings.ts](<../packages/core/tests/fixtures/settings.ts>)。
+core 的测试夹具：[fixtures/enhanced.ts](<../packages/core/tests/fixtures/enhanced.ts>)（`inertEnhanced`：开关不打开的测试里，一旦构建或列出工具就报错）、[fixtures/web-settings.ts](<../packages/core/tests/fixtures/web-settings.ts>)（在一次性 profile 上挂真实的 Settings 与 `WebRuntime`）、[fixtures/shipped-preset.ts](<../packages/core/tests/fixtures/shipped-preset.ts>)（注册 DSH 自带的 standard / minimal / PTC Web preset，挂 PTC 运行时）、[fixtures/settings.ts](<../packages/core/tests/fixtures/settings.ts>)、[fixtures/client-command-ui.ts](<../packages/core/tests/fixtures/client-command-ui.ts>)（`commandUiHarness`：在 vm 里按模块加载器协议执行发布的 `dsh-client-ui-commands` 客户端 bundle，得到真实的 `CommandUiRuntime`；只按结构伪造它消费的 `/` 输入源、会话层与 `remote.commands`，`execute` 跑测试给的 Host 处理；两侧 `client-apply` 用它）。
 
 ### core 测试
 
 | 文件 | 覆盖要点 |
 | --- | --- |
 | [adapter.spec.ts](<../packages/core/tests/adapter.spec.ts>) | 真实 HTTP 边界上的鉴权、keyless、期限、取消与 wire 映射；凭据解析器的任何异常在边界上固定化。 |
-| [client-capability.spec.ts](<../packages/core/tests/client-capability.spec.ts>) | 能力无关 store、命令、路由与凭据状态。 |
+| [client-capability.spec.ts](<../packages/core/tests/client-capability.spec.ts>) | 能力无关 store、命令 decoration（只有 `name`、`available`、`ui`）、路由与凭据状态。 |
 | [client-catalog.spec.ts](<../packages/core/tests/client-catalog.spec.ts>) | 目录派生字段、连接表单、凭据引用与端点信任。 |
 | [client-document.spec.ts](<../packages/core/tests/client-document.spec.ts>) | 原始层合并、候选验证与版本写回。 |
 | [client-fields.spec.ts](<../packages/core/tests/client-fields.spec.ts>) | 整数、URL、列表文本与互斥字段。 |
 | [client-migration.spec.tsx](<../packages/core/tests/client-migration.spec.tsx>) | 未来迁移的写回、revision 与失败状态。 |
 | [client-optin.spec.tsx](<../packages/core/tests/client-optin.spec.tsx>) | 服务开关在分层设置上的显示与稀疏写入矩阵、“未启用”与缺省停用说明；“增强工具”一节（同意语句、可访问组、写入）；菜单事实 `remoteServicesOff`；页面内连续写入的排队、外部修改被拒、keyless 切换按当下的快照保留参数。 |
 | [client-selection-types.spec.ts](<../packages/core/tests/client-selection-types.spec.ts>) | 无会话选项能力的类型与 UI 接口兼容。 |
-| [client-selection.spec.ts](<../packages/core/tests/client-selection.spec.ts>) | 读取失败分类、缓存保留与恢复。 |
+| [client-selection.spec.ts](<../packages/core/tests/client-selection.spec.ts>) | 读取失败分类、缓存保留与恢复；`invalidateSession` 只重读该会话（在途的旧读不显示、没有观察者时等下次加载、从未读过的不读）。 |
 | [client-settings.spec.tsx](<../packages/core/tests/client-settings.spec.tsx>) | 共享设置组件、目录服务与自定义连接交互；真实校验与 revision 下的互斥列表原子恢复；多行标签单行显示。 |
 | [enhanced-parts.spec.ts](<../packages/core/tests/enhanced-parts.spec.ts>) | 就绪子句（含读不到时）、拒绝措辞（unknown 才补“之后启用的 provider 只在新对话可用”）、换 provider 提示的位置与补句号、参数检查、一次显式执行；列出的规范值与文本（design 的例子逐行对照）。 |
 | [explicit.spec.ts](<../packages/core/tests/explicit.spec.ts>) | 显式入口的每种拒绝与检查顺序、目标按当前设置重建、不写选择与记忆、身份隔离、列出的异常边界与取消、对话列表的继承与恢复、`ReadyProviders`；对话列表记录读不出时原生计划照常。 |
 | [client-sparse.spec.ts](<../packages/core/tests/client-sparse.spec.ts>) | 稀疏写入、版本标记与 Reset。 |
-| [mcp.spec.ts](<../packages/core/tests/mcp.spec.ts>) | MCP JSON / SSE、分块边界、大小限制与错误脱敏。 |
+| [host-command.spec.ts](<../packages/core/tests/host-command.spec.ts>) | 两侧真实插件行加真实 `CommandRuntime`：说明与参数提示的原文、插件行停用后命令与补全注销；fetch 与 search 不带参数的全文（状态、`current`、`applies freshness`、接收方、末行，会话模型的 `needs DeepSeek sign-in`）；四种来源、所选连接被停用；`off` / 连接 id / 实时性的写入与修订号、写入同一连接、模型记忆（子 Agent 会话不写，seeded 与否）；用法、实时性值、不可选的拒绝（控制字符、换行、代理对与 64 字符截断）；关键字不区分大小写、连接 id 区分；路由在别处或未指定时的附加行；设置无效与存储写入失败的措辞；按结构实现的补全注册表：条目、大写 id 原样、设置变化后更新、设置无效时只剩固定项、没有注册表时命令照常。 |
+| [host-command-boundary.spec.ts](<../packages/core/tests/host-command-boundary.spec.ts>) | 直接 `installCapability`（search 能力）：没有 Settings 服务时的 `unknown` 路由行；补全注册抛错不影响命令；没有启用的连接与默认连接停用时的显示；deferred 卡住显示时的修订号冲突保留先到的写入；写入后 Remote `get` 与下一个请求步的计划反映新选择、当前步不变；存储写入失败与意外异常（含 `WebError`）的固定措辞，原始异常只进日志。 |
+| [mcp.spec.ts](<../packages/core/tests/mcp.spec.ts>) | MCP JSON / SSE、分块边界、大小限制与错误去敏。 |
 | [native.spec.ts](<../packages/core/tests/native.spec.ts>) | 共享原生鉴权、错误改写与成功内容处理。 |
 | [nested-remote.spec.ts](<../packages/core/tests/nested-remote.spec.ts>) | 运行时服务、插件行与传输各在非根 fiber 下（同 DSH loader）时，两侧 Remote 的 `get` / `set` 照常读写、Host 日志没有未注入服务的访问错误。 |
 | [plans.spec.ts](<../packages/core/tests/plans.spec.ts>) | 请求步冻结与当前连接复查。 |
@@ -342,6 +354,7 @@ core 的测试夹具：[fixtures/enhanced.ts](<../packages/core/tests/fixtures/e
 | [settings-optin.spec.ts](<../packages/core/tests/settings-optin.spec.ts>) | 内置连接按目录 `optIn` 缺省停用、写了的 `disabled` 优先、自定义连接缺省启用、不改写文档。 |
 | [snapshots.spec.ts](<../packages/core/tests/snapshots.spec.ts>) | 快照并发共享、失败重试与过期捕获。 |
 | [storage.spec.ts](<../packages/core/tests/storage.spec.ts>) | 卸载后排队任务不重开存储；`provider_lists` 加入已有的 version 1 域；对话列表与选择共用每会话队列、只写一次。 |
+| [terminal-contract.spec.ts](<../packages/core/tests/terminal-contract.spec.ts>) | `registerTerminal` 在 dsh-tui 真实的 `TuiCommandTreeRuntime` 上：注入子作用域满足它对插件调用方的要求，条目与描述（多行名称单行化）正确；卸载后注销（真实注册表拒绝重复的根，重新挂载成功即证明）。 |
 | [transport.spec.ts](<../packages/core/tests/transport.spec.ts>) | 有界上游说明、错误体截断、凭据隐去与诊断。 |
 | [visibility.spec.ts](<../packages/core/tests/visibility.spec.ts>) | 可见性控制器的时序（deferred promise）：同步注册与遮罩、世代与操作版本、遗忘与卸载、服务替换后重新注册、成对注册的回滚与恢复；只有对话列表的重读失败时原生选择照常提交。 |
 
@@ -353,9 +366,9 @@ core 的测试夹具：[fixtures/enhanced.ts](<../packages/core/tests/fixtures/e
 | [adapters.spec.ts](<../packages/search-enhanced/tests/adapters.spec.ts>) | wire 请求、keyless 路由与各服务响应解析；OpenAlex 属性名还原文本后的凭据去敏。 |
 | [agent.spec.ts](<../packages/search-enhanced/tests/agent.spec.ts>) | 真实 Agent / loop、fork、Off 与 Session 模型切换；standard、minimal 与 PTC preset 上的增强工具表，路由、开关与 Off 变化后的下一次请求，不补建旧对话，子会话继承列表，卸载只撤本侧。 |
 | [catalog.spec.ts](<../packages/search-enhanced/tests/catalog.spec.ts>) | 目录顺序、访问事实、freshness 与参数约束。 |
-| [client-apply.spec.tsx](<../packages/search-enhanced/tests/client-apply.spec.tsx>) | 浏览器注册、可选 UI 注入、设置页与状态生命周期。 |
-| [client-command.spec.ts](<../packages/search-enhanced/tests/client-command.spec.ts>) | /setup-search 选项、写入与失败提示。 |
-| [client-composition.spec.tsx](<../packages/search-enhanced/tests/client-composition.spec.tsx>) | 真实 UI × search 组合、菜单同步与激活预检。 |
+| [client-apply.spec.tsx](<../packages/search-enhanced/tests/client-apply.spec.tsx>) | 浏览器注册、可选 UI 注入、设置页与状态生命周期；在真实 `CommandUiRuntime` 上：选择框挂在同名 Host 命令上（菜单行是 Host 命令的，无参数弹框并经 Remote 写入，带参数交给 Host 命令）、本浏览器执行 Host 命令后只重读该会话并让模型记忆失效、卸载后交还 Host 命令。 |
+| [client-command.spec.ts](<../packages/search-enhanced/tests/client-command.spec.ts>) | /setup-search 的 decoration：选项、写入与失败提示。 |
+| [client-composition.spec.tsx](<../packages/search-enhanced/tests/client-composition.spec.tsx>) | 真实 UI × search 组合、菜单与命令选择框同步、激活预检。 |
 | [client-locales.spec.ts](<../packages/search-enhanced/tests/client-locales.spec.ts>) | 中英文键、插值与状态文案。 |
 | [client-route.spec.ts](<../packages/search-enhanced/tests/client-route.spec.ts>) | 浏览器路由观察与环境优先级。 |
 | [client-section.spec.tsx](<../packages/search-enhanced/tests/client-section.spec.tsx>) | 搜索 section、选项组与状态通知。 |
@@ -392,8 +405,8 @@ core 的测试夹具：[fixtures/enhanced.ts](<../packages/core/tests/fixtures/e
 | [catalog.spec.ts](<../packages/fetch-enhanced/tests/catalog.spec.ts>) | 目录、原生默认值与空选项契约。 |
 | [client-allowlist-lines.spec.ts](<../packages/fetch-enhanced/tests/client-allowlist-lines.spec.ts>) | 物理行诊断、警告、替换与追加。 |
 | [client-allowlist.spec.tsx](<../packages/fetch-enhanced/tests/client-allowlist.spec.tsx>) | allowlist 草稿、显式保存、修复与冲突状态。 |
-| [client-apply.spec.tsx](<../packages/fetch-enhanced/tests/client-apply.spec.tsx>) | 浏览器注册、可选 UI、设置页与注入。 |
-| [client-command.spec.ts](<../packages/fetch-enhanced/tests/client-command.spec.ts>) | /setup-fetch 选择、写入与提示。 |
+| [client-apply.spec.tsx](<../packages/fetch-enhanced/tests/client-apply.spec.tsx>) | 浏览器注册、可选 UI、设置页与注入；与 search 相同的 decoration、Host 命令执行后重读与卸载用例。 |
+| [client-command.spec.ts](<../packages/fetch-enhanced/tests/client-command.spec.ts>) | /setup-fetch 的 decoration：选择、写入与提示。 |
 | [client-locales.spec.ts](<../packages/fetch-enhanced/tests/client-locales.spec.ts>) | 中英文键、连接状态与服务说明。 |
 | [client-route.spec.ts](<../packages/fetch-enhanced/tests/client-route.spec.ts>) | 路由观察与环境值。 |
 | [client-selection.spec.ts](<../packages/fetch-enhanced/tests/client-selection.spec.ts>) | 选择缓存、revision 与并发失效。 |

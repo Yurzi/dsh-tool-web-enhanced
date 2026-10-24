@@ -9,7 +9,7 @@ row `web-fetch-enhanced` and selects its provider in the shared `web` row.
 | Row id | `web-fetch-enhanced` |
 | Provider id in `ctx.web` | `fetch-enhanced` |
 | Model surface | DSH's own `web_fetch` (tool-web), unchanged; with the row's Enhanced tools switch on, also `web_fetch_enhanced` and `list_web_fetch_providers` |
-| Per conversation | one connection or Off, from the composer menu or `/setup-fetch` |
+| Per conversation | one connection or Off, from the composer menu or the Host command `/setup-fetch` (Web GUI and dsh-TUI) |
 | Settings | row settings page on the Plugins page (`plugins.row.config`) |
 
 ## What it does
@@ -27,6 +27,12 @@ plus custom adapter connections such as a self-hosted endpoint.
   default) stays on; custom connections are on when created. When every remote
   service is off, the composer menu says more services can be turned on in
   settings.
+- **`/setup-fetch`.** A Host command, so it works in the Web GUI and in
+  dsh-TUI. `off` or a connection id changes the choice from the next model
+  request; dsh-TUI completes these arguments. Without arguments the Web GUI
+  opens the chooser, and dsh-TUI prints the current choice, routing and the
+  enabled connections (0.16.1 shows only the start of that, as a one-line
+  notice). Its description and output are English.
 - **Enhanced tools (optional).** With the row's Enhanced tools switch on (off
   by default; turning it on agrees that the URL goes to the service the Agent
   picks), the Agent also gets `web_fetch_enhanced` (`url` plus a required

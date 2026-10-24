@@ -1,6 +1,6 @@
 {
   "name": "dsh-tool-web-enhanced-ui",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "One composer menu for choosing the search and fetch connections of a DeepSeek Harness session; installed through dsh-tool-web-enhanced-profile",
   "keywords": [
     "deepseek-harness",

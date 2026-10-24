@@ -9,7 +9,7 @@ import * as primitives from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import type { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
-import type { CommandContribution } from '@deepseek-ai/dsh-client-ui-commands/client'
+import type { CommandDecoration } from '@deepseek-ai/dsh-client-ui-commands/client'
 import type { SettingsNamespaceView } from '@deepseek-ai/dsh-api-remotes/client'
 import * as uiPlugin from '../../ui/src/client/index.tsx'
 import { en as uiEn } from '../../ui/src/client/locales.ts'
@@ -176,11 +176,11 @@ async function fixture(holdSelection = false, envProvider: string | null = null)
   // The Plugins page navigation the ui package stores for its "open Plugins page" links.
   const openBundle = vi.fn()
   ctx.provide('pluginNavigation', { openBundle })
-  // The shell registration seam captures the real contribution, not a replacement command implementation.
-  let command!: CommandContribution
+  // The shell registration seam captures the real decoration, not a replacement command implementation.
+  let command!: CommandDecoration
   const registered = deferred<void>()
-  ctx.provide('commandUi', { register(contribution: CommandContribution) {
-    command = contribution
+  ctx.provide('commandUi', { decorate(decoration: CommandDecoration) {
+    command = decoration
     registered.resolve()
     return () => {}
   } })

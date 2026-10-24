@@ -11,3 +11,4 @@ coverage/
 .pnpm-home/
 .npm-cache/
 .xdg/
+__pycache__/

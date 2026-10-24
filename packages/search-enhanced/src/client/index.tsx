@@ -7,7 +7,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-commands/client'
 import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import { SEARCH, PROFILE_PACKAGE, WEB_ROW, rowConfigKey } from 'dsh-tool-web-enhanced-core/shared'
 import { contract } from '../contract.ts'
-import { remoteServicesOffSource, withRetiredSecretDiagnostics } from 'dsh-tool-web-enhanced-core/client'
+import { followHostCommand, remoteServicesOffSource, withRetiredSecretDiagnostics } from 'dsh-tool-web-enhanced-core/client'
 import { CATALOG } from '../catalog.ts'
 import { resolveSettings } from '../settings/resolve.ts'
 import { RETIRED_FIELDS } from '../settings/retired.ts'
@@ -99,7 +99,11 @@ export async function apply(ctx: Context): Promise<void> {
       }, 'search: composer section')
     })
     scope.inject(['commandUi'], command => {
-      command.effect(() => command.commandUi.register(searchCommand(selection, t)), 'search: /setup-search')
+      command.effect(() => command.commandUi.decorate(searchCommand(selection, t)), 'search: /setup-search')
+      followHostCommand(command, SEARCH.command, sessionId => {
+        selection.invalidateSession(sessionId)
+        pairings.invalidate()
+      })
     })
     const invalidate = () => {
       selection.invalidate()

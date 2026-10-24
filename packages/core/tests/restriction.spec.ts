@@ -28,7 +28,7 @@ import { installCapability, liveSession, Pairings, Sessions, SessionStorage, Too
 
 const domainName = 'core_restriction'
 const searchDomain = selectionDomain(domainName)
-const initialSettings = () => ({ defaultConnection: 'builtin:test', enhancedTools: false, connections: new Map([['builtin:test', { id: 'builtin:test', kind: 'native' as const, disabled: false }]]) })
+const initialSettings = () => ({ defaultConnection: 'builtin:test', enhancedTools: false, connections: new Map([['builtin:test', { id: 'builtin:test', label: 'Test', kind: 'native' as const, disabled: false }]]) })
 type SettingsValue = ReturnType<typeof initialSettings>
 const optionsCodec: OptionsCodec<Record<string, never>, SettingsValue> = { initial: () => ({}), fromRecord: () => ({}), toRecord: () => ({}) }
 

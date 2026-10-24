@@ -1,0 +1,7 @@
+- id: dsh-tui
+  config:
+    provider: deepseek-official
+    fullscreen: false
+    terminalImages: false
+- id: dsh-tui-webserver
+  disabled: true

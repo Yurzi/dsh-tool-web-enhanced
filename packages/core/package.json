@@ -26,6 +26,7 @@
     "@deepseek-ai/dsh-client-ui-session": "catalog:",
     "@deepseek-ai/dsh-client-ui-settings": "catalog:",
     "@deepseek-ai/dsh-client-ui-slots": "catalog:",
+    "@deepseek-ai/dsh-commands": "catalog:",
     "@deepseek-ai/dsh-credentials": "catalog:",
     "@deepseek-ai/dsh-deepseek-account": "catalog:",
     "@deepseek-ai/dsh-session": "catalog:",

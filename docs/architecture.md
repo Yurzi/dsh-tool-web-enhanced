@@ -89,10 +89,10 @@ flowchart TD
 | 包 | npm 名 · 行 id · provider id | 职责 |
 | --- | --- | --- |
 | profile | `dsh-tool-web-enhanced-profile` | 只有 patch、locale 与图标；依赖另外三个包 |
-| search | `dsh-web-search-enhanced` · `web-search-enhanced` · `search-enhanced` | 搜索目录、adapter 绑定与来源规范化、`native` 与 `model` 后端、实时性、设置解析、增强工具 `web_search_enhanced` / `list_web_search_providers`（`src/tools/`）、`/setup-search` 与行设置页 |
-| fetch | `dsh-web-fetch-enhanced` · `web-fetch-enhanced` · `fetch-enhanced` | 抓取目录、`local`（白名单、地址策略、解析器）、`native` 后端、远程 adapter 绑定与页面映射、白名单提示、增强工具 `web_fetch_enhanced` / `list_web_fetch_providers`（`src/tools/`）、`/setup-fetch` 与行设置页 |
+| search | `dsh-web-search-enhanced` · `web-search-enhanced` · `search-enhanced` | 搜索目录、adapter 绑定与来源规范化、`native` 与 `model` 后端、实时性、设置解析、增强工具 `web_search_enhanced` / `list_web_search_providers`（`src/tools/`）、Host 命令 `/setup-search`（浏览器挂选择框）与行设置页 |
+| fetch | `dsh-web-fetch-enhanced` · `web-fetch-enhanced` · `fetch-enhanced` | 抓取目录、`local`（白名单、地址策略、解析器）、`native` 后端、远程 adapter 绑定与页面映射、白名单提示、增强工具 `web_fetch_enhanced` / `list_web_fetch_providers`（`src/tools/`）、Host 命令 `/setup-fetch`（浏览器挂选择框）与行设置页 |
 | ui | `dsh-tool-web-enhanced-ui` · `tool-web-enhanced-ui` | 浏览器服务 `webConnections`、共用的输入框连接菜单、首次启用提示、bundle 概览与升级预检 |
-| core | `dsh-tool-web-enhanced-core`（private） | 选择范式与可见性控制器的唯一实现、增强工具的显式入口与共用部件、远程服务的 wire、设置文法、浏览器侧的选择存储与设置页骨架 |
+| core | `dsh-tool-web-enhanced-core`（private） | 选择范式与可见性控制器的唯一实现、`/setup-*` Host 命令与 dsh-TUI 补全、增强工具的显式入口与共用部件、远程服务的 wire、设置文法、浏览器侧的选择存储、命令 decoration 与设置页骨架 |
 
 依赖规则（由 `scripts/verify-packages.ts` 与评审守住）：
 
@@ -102,8 +102,9 @@ flowchart TD
 - search、fetch、ui 的 `src` 互不导入；共享代码只进 core。组合测试可以导入别的包的 `src` 来测真实接缝。
 - core 不导入插件，不持有模块级状态：每个插件各内联一份 core，模块级状态既无法共享，又会让两次安装互相影响。
 - 插件与 ui 之间只经浏览器服务 `webConnections` 相连，契约类型在 core。
+- `@deepseek-ai/dsh-commands` 与 `@deepseek-harness-tui/dsh-tui` 只是开发依赖：产品代码对前者只做 `import type`（`ctx.commands` 的类型增补、`CommandInvocation` / `CommandResult`），从不导入后者（TUI 的接口用 core 的本地结构类型），两者都不进插件的运行时产物。
 
-标识（含每个能力的两个增强工具名 `PluginIdentity.tools`）只在 `packages/core/src/shared/ids.ts` 定义一次；patch 是 YAML 无法导入，由 profile 的测试断言它与 `ids.ts` 一致。命名沿用 DSH 惯例：行 id = npm 名去掉 `dsh-` 前缀，Cordis 插件名与 Settings 命名空间都等于行 id；`web-*-enhanced` 是注册 provider 的插件族，`tool-web-enhanced-*` 是围绕 tool-web 的产品层。两个插件的存储域与 Remote 命名空间分别是 `web_search_enhanced` / `searchConnections` 与 `web_fetch_enhanced` / `fetchConnections`。
+标识（含每个能力的两个增强工具名 `PluginIdentity.tools` 与 Host 命令名 `PluginIdentity.command`）只在 `packages/core/src/shared/ids.ts` 定义一次；patch 是 YAML 无法导入，由 profile 的测试断言它与 `ids.ts` 一致。命名沿用 DSH 惯例：行 id = npm 名去掉 `dsh-` 前缀，Cordis 插件名与 Settings 命名空间都等于行 id；`web-*-enhanced` 是注册 provider 的插件族，`tool-web-enhanced-*` 是围绕 tool-web 的产品层。两个插件的存储域与 Remote 命名空间分别是 `web_search_enhanced` / `searchConnections` 与 `web_fetch_enhanced` / `fetchConnections`。
 
 ## 组合：profile patch
 
@@ -136,11 +137,11 @@ profile 对 base profile 只叠加一层 patch（[cordis.patch.yml](../packages/
 
 ## 运行时
 
-本节讲 Host 侧的结构：一次调用经过哪些层、选择范式与工具可见性在哪一层生效、增强工具怎样接进同一条管线、后端怎么分类、core 怎么分层。
+本节讲 Host 侧的结构：一次调用经过哪些层、选择范式与工具可见性在哪一层生效、`/setup-*` Host 命令与终端补全怎样接进同一套选择、增强工具怎样接进同一条管线、后端怎么分类、core 怎么分层。
 
 ### 一次调用的管线
 
-两个插件用同一条管线，由 core 的 `installCapability` 装配；插件只提供一个 `Capability` 对象（身份、工具名、`web` 字段、存储域、Remote 命名空间、会话参数编解码、`settings()`、`describe`、`target`、`execute`、`register`，以及增强工具的部分 `enhanced`）。
+两个插件用同一条管线，由 core 的 `installCapability` 装配；插件只提供一个 `Capability` 对象（身份、工具名、`web` 字段、存储域、Remote 命名空间、会话参数编解码、`settings()`、`describe`、`target`、`execute`、`register`、可选的命令参数 `commandOptions`，以及增强工具的部分 `enhanced`）。
 
 管线有两个入口：原生工具经 `ctx.web` 到 Seat，增强工具经显式入口（`EnhancedAccess`）。两者在“复查与目标”汇合，之后的目标、执行层、后端与传输完全相同。
 
@@ -196,7 +197,7 @@ search 与 fetch 共用一份 core 实现；两侧的差别只是目录数据与
 - **插件行设置**：一份两侧共用文法的文档（core `shared/settings.ts`），Host 与浏览器用同一个纯函数解析（插件的 `resolveSettings` 建在 core `resolveDocument` 上）。它决定会话**能**选什么，以及是否向新对话提供增强工具（`enhancedTools`）。
 - **会话选择**：`{ connectionId | null, revision, options }`，存在插件自己的存储域表 `selections`。读写以会话为目标（core `SessionTarget`）：`live` 是有运行中 Agent 的会话，带着这个 Agent（`liveSession(agent)`）；`cold` 是不在运行的子 Agent 会话，只有会话 id 与会话头，读写不碰 Agent。同一会话的读写排队执行，写入按 revision 比较；core 拥有 `connectionId`、`revision`、`inherited`，会话参数由能力的 `OptionsCodec` 编码（search 有 `freshness`，fetch 没有）。
 - **会话来源**：core `sessionOrigin` 只读会话头的公开字段，返回判别联合：`top-level`、`fork`（有 `parentSession`：用户 fork）与 `subagent`（`origin === 'subagent'`：spawn 与 subagent_fork），各带 `seeded`（`isSeeded`）。`origin` 先于父会话判断，与 DSH 判断子 Agent 路由归属的依据一致。继承父会话的选择（有父会话且 `seeded`）、复制父会话的对话列表（有父会话）、[新建的判断](#增强工具的运行时)与是否写模型记忆都经它。
-- **模型记忆**：(provider, model) → 连接，存在表 `pairings`；选择落盘后才写记忆，记忆写失败只记日志。写不写由 `Sessions.change` 按会话决定，调用方不传参数：选了连接（不是只改会话参数）、会话来源不是 `subagent`、且知道下一次请求的模型时才写。
+- **模型记忆**：(provider, model) → 连接，存在表 `pairings`；选择落盘后才写记忆，记忆写失败只以 warn 级记日志（带原始错误），不影响这次选择。写不写由 `Sessions.change` 按会话决定，调用方不传参数：选了连接（不是只改会话参数）、会话来源不是 `subagent`、且知道下一次请求的模型时才写。
 
 未选择时由 core `Sessions` 解析出当前连接；选择来源、模型记忆与默认值的行为见[会话选择](design.md#会话选择)。下一次请求的模型（`nextModel`）只有 `live` 目标才有，`cold` 目标的模型为未知：默认来源不查模型记忆，连接视图也按未知描述——`Capability.describe(settings, model)` 与 core `credentialReadiness` 收的是这个模型而不是 Agent，跟随会话模型的连接为 `no-model`，native 只看 API key。
 
@@ -216,7 +217,7 @@ flowchart LR
 - **每步冻结**：`agent/request` 时按 (Agent, turn, step) 捕获计划，`agent/created` 再捕获一次，让还没发过请求的 Agent 也有计划。同一步的并发捕获共享一次读取，只有失败的捕获可以在同一步重试。Seat 用 `ctx.agents.currentInitiator()` 找到发起调用的 Agent，从不从工具参数推断。
 - **每次复查**：可选性只有一条规则（core `isSelectable`：存在且未停用），模型记忆、Remote 写入、每次 Seat 调用的复查与对话列表的快照都用它。停用与重新启用因此从下一次调用生效，不必等下一步。显式入口是唯一的例外：对话列表里的连接停用后在该对话里仍可用，只要求它仍存在（列表是对话开始时的授权，见[对话的 provider 列表](design.md#对话的-provider-列表)）。
 - **每次重建**：`target` 用当前连接新建执行目标，四种后端一律如此。search 的 `model` 连接的路由（协议、端点、凭据引用）也在这里推导，不进计划；跟随会话模型时取发起本次调用的那次请求的已解析路由。
-- **设置无效**：`settings()` 由 core `settingsRow` 包装，当前文档无效时抛 `InvalidSettingsError`（码为 `WEB_PROVIDER_CONFIGURED_UNAVAILABLE` 的 `WebError` 子类），诊断只在启动校验与 Loader 的 `internal/config` 写入钩子里进 Host 日志。插件照常激活，以便设置页修复。
+- **设置无效**：`settings()` 由 core `settingsRow` 包装，当前文档无效时抛 `InvalidSettingsError`（码为 `WEB_PROVIDER_CONFIGURED_UNAVAILABLE` 的 `WebError` 子类），诊断只在启动校验（warn 级）与 Loader 的 `internal/config` 写入钩子里进 Host 日志。插件照常激活，以便设置页修复。
 - **会话之外的调用**：没有发起 Agent 时按当时的 `defaultConnection` 与能力的初始参数计划。
 
 **可见性控制器**
@@ -226,9 +227,9 @@ flowchart LR
 - **路由判断**：Host 用 Settings 的公开数据（`settings.describe()` 中 `ns = web` 的值）加环境变量判断路由（core `routeFacts` / `routeOf`），只有确认为 `this` 才算路由到本插件；`other`、`auto` 与 `unknown` 都不算。原生组只在确认路由时遮住关闭的会话；增强组只在确认路由、行设置有效且“增强工具”开关打开时注册到全局工具层（`ctx.tools.register`），否则注销。
 - **遮罩**：都用 `agent.ctx.tools.restrict({ deny })`，只对该 Agent 生效、只撤自己装的。原生组看 Agent 自己作用域的视图：Web profile 里 tool-web 由 agent preset 挂在 Agent 作用域的祖先上，根 ctx 上没有这两个工具，所以判断工具是否存在用 `tools.get(tool, scopeOf(agent.ctx))`。增强组不看视图：`tools.get` 返回被别人遮罩后的结果，不能当作“是否已注册”的事实；DSH 的 `restrict` 只接受已注册的名字（被别人遮住的也接受），所以增强遮罩总在注册之后、同一段同步代码里装上。增强组遮住的是没有对话列表、会话关闭、或选择尚未读到 / 读取失败的 Agent。
 - **状态、世代与提交点**：控制器持有注册世代与每个 Agent 的状态（对话列表有 / 无 / 未读到，选择 on / off / 未读到）及操作版本。所有异步读取记下世代与版本，只有仍是当前世代与版本、插件存活、Agent 未遗忘、注册条件仍成立时才提交；所有提交经同一个提交点，不用定时器。
-- **注册与注销**：注册条件变为成立时，同步注册两个定义，并在同一段同步代码里对 `ctx.agents.list()` 的每个 Agent 按已知状态装遮罩（不确定的遮住），再异步读取对话列表与选择，读到可见才撤遮罩。两个定义的注册是一次可回滚的提交：逐个记下 disposer，任一步抛错（如名字已被别的 owner 注册）就倒序撤销本次已注册的定义、不装遮罩、只记固定的 Host 日志，控制器仍是“未注册”，下一次重算可以恢复；从不撤销别的 owner 的定义。条件不再成立时同步注销定义（世代 +1，在途读取作废），再撤增强遮罩；原生遮罩按自己的规则处理，不读存储。
+- **注册与注销**：注册条件变为成立时，同步注册两个定义，并在同一段同步代码里对 `ctx.agents.list()` 的每个 Agent 按已知状态装遮罩（不确定的遮住），再异步读取对话列表与选择，读到可见才撤遮罩。两个定义的注册是一次可回滚的提交：逐个记下 disposer，任一步抛错（如名字已被别的 owner 注册）就倒序撤销本次已注册的定义、不装遮罩、只记一条固定文字的 warn 日志，控制器仍是“未注册”，下一次重算可以恢复；从不撤销别的 owner 的定义。条件不再成立时同步注销定义（世代 +1，在途读取作废），再撤增强遮罩；原生遮罩按自己的规则处理，不读存储。
 - **增强组的生命周期**：增强组的注册与遮罩绑定在 `ctx.inject(['tools', 'agents'], …)` 的注入作用域上：两个服务都到位后才开始判断注册条件（并对已有的 Agent 补做），任一服务被替换或撤下时，该作用域的 effect 先注销、撤遮罩，服务恢复后用同一份定义重新注册。定义按安装只构建一次（`enhanced.tools(access)`），首次需要注册时才构建。
-- **同步时机**：`agent/created` 先同步把 Agent 记为未读到（已注册时同步遮住），再建立对话列表、捕获计划后提交；DSH 串行等待 created 监听器后才开始模型循环。`agent/request` 捕获计划后同样同步；捕获失败时显式记为未读到并遮住增强工具，原生遮罩不动。选择写入落盘后，按那一刻 `agents.get(会话 id)` 里运行中的 Agent 同步（排队期间从冷变为运行中的目标也同步）；没有运行中的 Agent 就不同步，由它下一次的 `agent/created` / `agent/request` 按存储的选择计算。捕获时只有已注册且注册条件成立才读对话列表（结果是 `ProviderListRead`：`read` 带记录，或 `unread`）；条件不成立（如开关关闭）时不读 `provider_lists`，记为未读到，注册后由重算（reconcile → refresh）去读。列表读取失败只记日志、记为 `unread`：该 Agent 的增强工具保持遮住，选择与原生计划照常；设置事件触发的重算同理。插件启动时对 `ctx.agents.list()` 里已有的 Agent 补做一遍。
+- **同步时机**：`agent/created` 先同步把 Agent 记为未读到（已注册时同步遮住），再建立对话列表、捕获计划后提交；DSH 串行等待 created 监听器后才开始模型循环。`agent/request` 捕获计划后同样同步；捕获失败时显式记为未读到并遮住增强工具，原生遮罩不动。选择写入落盘后，按那一刻 `agents.get(会话 id)` 里运行中的 Agent 同步（排队期间从冷变为运行中的目标也同步）；没有运行中的 Agent 就不同步，由它下一次的 `agent/created` / `agent/request` 按存储的选择计算。捕获时只有已注册且注册条件成立才读对话列表（结果是 `ProviderListRead`：`read` 带记录，或 `unread`）；条件不成立（如开关关闭）时不读 `provider_lists`，记为未读到，注册后由重算（reconcile → refresh）去读。列表读取失败只记一条固定文字的 warn 日志、记为 `unread`：该 Agent 的增强工具保持遮住，选择与原生计划照常；设置事件触发的重算同理。插件启动时对 `ctx.agents.list()` 里已有的 Agent 补做一遍。
 - **`web` 行与插件行变化**：`settings/document-updated`（`ns = web` 或本插件行）时重算注册条件。原生组对已知 Agent 重算：路由离开时立即撤销、不读存储；回到本插件时用只读的 `peek` 读选择（不为没有记录的会话建记录）。
 - **卸载**：增强组在注入作用域的一个 effect 里同步完成“作废在途读取（世代 +1）→ 注销定义 → 撤增强遮罩”；原生遮罩由控制器自己的 effect 撤下，之后捕获返回失败的计划。定义与增强遮罩放在同一个 effect，是因为 Cordis 卸载时并行运行兄弟 effect，拆开会出现“遮罩已撤、定义仍在”的瞬间。
 - **生效边界**：保证落在同步提交完成后、正常模型循环的下一次工具组装。DSH 在 `agent/request` 之前已组装好本步的工具列表，所以变化从下一步生效；Native 模式下 DSH 在下一请求追加工具增删的 developer 消息，PTC 模式只改 SDK。已注销或已遮住的旧调用由 DSH 报 `UNKNOWN_TOOL`，不进工具体；已经发出的请求不因随后的变化撤回。公开 registry 的同步通知里能看到注册与遮罩之间的中间态，见[已知限制](design.md#已知限制)。
@@ -242,7 +243,7 @@ flowchart LR
 2. 否则读可选服务 `sessionPersistence` 的 `stat(sessionId)`（只读会话头，不读事件日志、不取得写入权）；会话来源为 `subagent` → `cold`，直接读写记录，不恢复 Agent：DSH 把这类会话留给子 Agent 路由，`resolveAgent` 会拒为 `session/agent-busy`。
 3. 其余（普通会话、会话不存在、没有 `sessionPersistence`）→ `sessionController.resolveAgent`，解析或恢复普通会话（写模型记忆要知道它下一次请求的模型），错误原样交出（如 `session/not-found`）。
 
-之后经 `sessions.current()` / `change()` 与 `connections()`（建记录与继承不变）；`set` 先按 `isSelectable` 检查连接，修订冲突改为 `<ns>/conflict`。Remote 在此隔离服务异常：契约内的错误原样交出，其余一律改为固定消息、原异常只进 Host 日志；对浏览器的错误分类统一见[浏览器看到的错误](design.md#浏览器看到的错误)。
+之后经 `sessions.current()` / `change()` 与 `connections()`（建记录与继承不变）；`set` 经与 Host 命令共用的 `writeSelection`（见 [Host 命令与终端补全](#host-命令与终端补全)）写入，结果 `unavailable` 改为 `<ns>/unavailable`、`conflict` 改为 `<ns>/conflict`。Remote 在此隔离服务异常：契约内的错误原样交出，其余一律改为固定消息、原异常以 warn 级只进 Host 日志（控制面日志，见[安全架构](#安全架构)）；对浏览器的错误分类统一见[浏览器看到的错误](design.md#浏览器看到的错误)。
 
 `provider` 只返回浏览器看不到的两项事实 `{ providerId, envProvider }`，路由由浏览器用同一个 `routeOf` 判断。连接视图不含凭据引用。
 
@@ -252,12 +253,31 @@ flowchart LR
 | --- | --- | --- |
 | 原生工具 · `web` 字段 | `web_search` · `searchProvider` | `web_fetch` · `fetchProvider` |
 | 增强工具 | `web_search_enhanced`、`list_web_search_providers` | `web_fetch_enhanced`、`list_web_fetch_providers` |
+| Host 命令 | `/setup-search`，另有 `freshness` 文法（`Capability.commandOptions`） | `/setup-fetch` |
 | 会话参数 | `freshness` | 无 |
 | 特有的后端种类 | `model` | `local` |
 | 远程后端的传输上限 | 2 MiB、90 s | 5 MB、120 s |
 | 能力特有的上下文 | 无 | `local` 白名单提示（系统提示的运行时上下文，只在本步计划用 `local`、白名单非空且确认路由到本插件时加入） |
 | 列出时的能力事实 | 用途、接收方、是否应用会话的实时性 | 用途、接收方、`local` 的白名单说明（主语为 “this provider”） |
 | 增强工具的组装 | 去重后的查询并发执行，复制 tool-web 的合并逻辑，先截到 `maxResults` 再合并 | 一次执行 |
+
+### Host 命令与终端补全
+
+`/setup-search` / `/setup-fetch` 是 Host 命令，Web GUI 与 dsh-TUI 都经 DSH 的 `CommandRuntime`（`ctx.commands` 的 `list(agent)` / `execute`）列出与执行，执行记录 `command/run` / `command/done` 归 DSH。命令的文法与输出见[设计文档 · /setup-search 与 /setup-fetch](design.md#setup-search-与-setup-fetch)。
+
+| 位置 | 负责 |
+| --- | --- |
+| core `host/command.ts`（`registerCommand`） | 文法、显示与写入、英文输出与异常边界；名称取 `identity.command` |
+| core `host/selection-write.ts`（`writeSelection`） | 可选性检查与带修订号的写入，Remote `set` 与 Host 命令共用；结果为 `written` / `unavailable` / `conflict`，其余异常上抛 |
+| core `host/terminal.ts`（`registerTerminal`） | dsh-TUI 的参数补全：本地声明的结构类型（`TuiCommandTreeProvider`、`CommandCompletionNode`）与注册 |
+| 能力参数 | 工具名与名词由 `Capability.tool` 得出；search 的 `commandOptions`（`freshness(options)`、`changeFreshness(value)`）打开实时性文法；连接的 `label`（`LabeledConnection`）；接收方经能力的 `enhanced.listing` 与列出工具同一个 `recipientText` |
+
+- **生命周期**：`installCapability` 在 `ctx.inject(['commands'], …)` 的子作用域里注册命令（`register` 的 disposer 交给 effect），随插件行起停；补全在另一个独立的 `ctx.inject(['tuiCommandTrees'], …)` 子作用域里注册。Web profile 没有 `tuiCommandTrees`，这个子作用域不激活；dsh-TUI 的 `register` 要求调用方是有活跃 activation 的插件上下文，注入子作用域满足这一点；注册抛错只让这个子作用域失败，插件行、provider 与命令照常。
+- **写入**：目标是 `liveSession(invocation.agent)`，即收到命令的会话的 Agent。先 `capability.settings()`（设置无效时不碰存储），再 `sessions.current` 取修订号，最后 `writeSelection`：与 Remote `set` 同一步骤，所以可选性、修订号冲突、子 Agent 会话不写模型记忆与写入后同步运行中 Agent 的遮罩都一样。实时性只在当前所选连接的视图 `freshness === true` 时接受。
+- **显示**：`sessions.current` / `connections`（状态按下一次请求的模型）、`routeFacts`（路由）与 `enhanced.listing`（接收方）；只列 `isSelectable` 的连接。
+- **异常边界**：`InvalidSettingsError` 与选择存储的读写失败各换成固定文字的 `kind: 'error'`；其他异常改抛固定消息的 Error，交 DSH 记为命令错误。三者的原始异常都以 warn 级记进 Host 日志、不进命令输出，与 Remote 的边界相同。
+- **补全**：`children(path)` 是同步的、不带会话，每次按 `capability.settings()` 现算：根路径列 `off`、启用的连接（名称单行化）与 search 的 `freshness`，`[root, 'freshness']` 列三档，其余为空；设置无效时只列固定项。拿不到会话与异步的就绪状态，所以不标当前、不显示就绪。不弹 `tuiDialogs`。
+- dsh-TUI 没有 `sessionController`，不创建连接 Remote；那里的入口只有 Host 命令与补全。浏览器在 Host 命令上挂的选择框见[浏览器面](#浏览器面)。
 
 ### 增强工具的运行时
 
@@ -295,14 +315,14 @@ flowchart LR
 
 **为什么要 `withInitiator`**：`native` 后端的账号令牌、原问题与请求记录取 ambient initiator（`currentInitiator()`），`model` 的会话路由取 `requestModel(call.agent)`。正常模型循环里二者一致，但入口的契约是 `call.agent`，所以目标与执行整段放进 `withInitiator(call.agent, …)`：外层是别的 Agent 时也不会取到它的令牌或原问题，嵌套返回后外层的异步链不受影响。原生 Seat 的 ambient 与无 Agent 时的语义不变。
 
-`list(call)` 做第 1–4 步与第 5 步的“有对话列表”，然后按列表顺序给出仍存在的连接：名称（同一次 `describe` 视图的标签）、就绪状态与 `listing` 事实；就绪状态按连接本身判断：`describe` 拿到的设置副本只含列表里仍存在的连接，且 `disabled` 一律为 `false`，视图再映射为 `ready`、`needs-credential`（`api-key` / 账号 `account`）或带原因的 `unsupported`，不给 `Capability` 加第二个就绪函数；`session` 给本步冻结的连接与它现在是否可选。`describe` 与 `listing` 不经执行层的去敏边界（它们会调用 Credentials 与账号服务），所以列出有自己的异常边界：任何异常（含依赖抛出的 `WebError`）一律变为固定的 `WEB_PROVIDER_ERROR`，原消息、cause 与 stack 不给模型，日志也只记固定诊断——异常可能发生在取得凭据之前，无法按本次凭据去敏。调用前与每次 `await` 后查 `call.signal`，已取消报 `WEB_ABORTED`；底层只读查询没有取消 API，在后台排空、结果丢弃。
+`list(call)` 做第 1–4 步与第 5 步的“有对话列表”，然后按列表顺序给出仍存在的连接：名称（同一次 `describe` 视图的标签）、就绪状态与 `listing` 事实；就绪状态按连接本身判断：`describe` 拿到的设置副本只含列表里仍存在的连接，且 `disabled` 一律为 `false`，视图再映射为 `ready`、`needs-credential`（`api-key` / 账号 `account`）或带原因的 `unsupported`，不给 `Capability` 加第二个就绪函数；`session` 给本步冻结的连接与它现在是否可选。`describe` 与 `listing` 不经执行层的去敏边界（它们会调用 Credentials 与账号服务），所以列出有自己的异常边界：任何异常（含依赖抛出的 `WebError`）一律变为固定的 `WEB_PROVIDER_ERROR`，原消息、cause 与 stack 不给模型，日志也只记一条固定文字的 warn——异常可能发生在取得凭据之前，无法按本次凭据去敏。调用前与每次 `await` 后查 `call.signal`，已取消报 `WEB_ABORTED`；底层只读查询没有取消 API，在后台排空、结果丢弃。
 
 **对话的 provider 列表**
 
 列表的内容与之后设置变化的影响见[设计文档 · 对话的 provider 列表](design.md#对话的-provider-列表)；结构上：
 
 - **新建的判断**（core `isNewConversation`，经 `sessionOrigin`）：没有父会话（`header.parentSession` 为空）、不是 `header.isSeeded`、`firstLiveSeq === 0` 且 `firstLifecycleSeq === 0`。照 DSH `tool-subagent` 的 `selectForSession` 的语义，只用 Session 公开、未弃用的字段；不看事件序号，因为真实的 `sessionController.create` 在 `agent/created` 之前已经写入事件。恢复的非空会话不是新建；真正空的恢复会话两个字段都为 0，被当作新建（里面没有对话）。
-- **建立**：`agent/created` 时（`ProviderLists.create`）：已有记录就读它，从不改写（含空记录）；有父会话就复制父会话的记录；否则只对新建的会话写入一次——注册条件成立时写当时可选（`isSelectable`）的 id，不成立时写空数组。空记录读出来就是“没有列表”，它的作用是占住这个会话：同一进程里之后再为它创建 Agent 时不会在对话中途补建。建立失败只记日志；随后由捕获计划或重算再读列表（见[可见性控制器](#选择范式)的同步时机），读不到只把该 Agent 的增强工具记为未读到并遮住，原生计划照常。
+- **建立**：`agent/created` 时（`ProviderLists.create`）：已有记录就读它，从不改写（含空记录）；有父会话就复制父会话的记录；否则只对新建的会话写入一次——注册条件成立时写当时可选（`isSelectable`）的 id，不成立时写空数组。空记录读出来就是“没有列表”，它的作用是占住这个会话：同一进程里之后再为它创建 Agent 时不会在对话中途补建。建立失败只记一条固定文字的 warn 日志；随后由捕获计划或重算再读列表（见[可见性控制器](#选择范式)的同步时机），读不到只把该 Agent 的增强工具记为未读到并遮住，原生计划照常。
 - **继承**：有父会话的会话（用户 fork、spawn 与 subagent_fork；`sessionOrigin` 的 `parent`）等父会话的队列落定后复制父会话的记录；父会话没有记录，子会话也没有。
 - **恢复**：读记录；没有记录（早于增强工具的会话）或记录为空（开关关闭时建立的对话）就没有列表。
 - **持久化**：表 `provider_lists`（会话 id → id 数组）与 `selections`、`pairings` 同在插件的存储域里，域的 version 仍是 1：新增的表对已有的域不需要迁移，旧域里它一开始是空的，所以升级前的会话都没有记录。每会话一条，写一次，不改写、不随设置迁移；读写与会话选择共用 `SessionStorage` 的每会话队列（`exclusive` / `settled`）与存储生命周期。
@@ -324,7 +344,7 @@ flowchart LR
 
 - search：`target` 产出 `adapter` / `native` / `model` 三种目标；`executeSearch` 跑 adapter 与 native，`executeModelSearch` 跑 model。所有来源（含 native 与 model）经同一个 `SourceList` 规范化。
 - fetch：`target` 直接产出一个 `WebFetchProvider`：`createLocalBackend`、`createNativeFetchBackend`、`createRemoteBackend`（`runAdapter` 之后由 `page.ts` 把页面映射为 `WebFetchResult` 或措辞失败）。
-- 共同顺序：先查取消；执行；`WebError` 原样交出；其余异常以去敏副本进诊断，改写为固定的 `WEB_PROVIDER_ERROR`；已取消时优先报 `WEB_ABORTED`。
+- 共同顺序：先查取消；执行；`WebError` 原样交出；其余异常以去敏副本进 debug 级诊断，改写为固定的 `WEB_PROVIDER_ERROR`；已取消时优先报 `WEB_ABORTED`。
 
 **为什么 `local` 是唯一做地址检查的后端**：只有经 HTTP(S) 直接访问目标的后端才需要、也才能检查目标地址。`local` 不重写传输，只注入解析器：直连请求校验完整 DNS 答案集与 NAT64，连接固定到已验证地址；IP 字面量在交给传输前先查（官方传输对它判为公网的字面量会直接交给代理）；经代理的域名由代理解析，规则无法约束，与上游一致。
 
@@ -364,9 +384,9 @@ core 是只有源码的私有包，`package.json` 的 `exports` 指向 `src`，�
 
 | 入口 | 运行位置 | 内容 |
 | --- | --- | --- |
-| `./shared` | Host 与浏览器（同构，不导入 Node、浏览器或 Host 包） | 同构契约与纯校验：身份（含增强工具名）、连接与设置文法（含连接 id 文法 `isConnectionId`）、路由判断、URL 校验、会话选择与 Remote 契约 |
-| `./host` | Host | 选择、执行与传输：选择范式、可见性控制器、增强工具的显式入口、对话列表与共用部件（类型在 `host/enhanced.ts`）、凭据、有界传输与去敏、MCP 客户端、adapter 骨架与各服务 wire |
-| `./client` | 浏览器 | 浏览器契约与组件骨架：分区契约、选择存储与状态观察器、`/setup-*` 命令工厂、目录驱动的设置页骨架 |
+| `./shared` | Host 与浏览器（同构，不导入 Node、浏览器或 Host 包） | 同构契约与纯校验：身份（含增强工具名与 Host 命令名）、连接与设置文法（含连接 id 文法 `isConnectionId`）、路由判断、URL 校验、会话选择与 Remote 契约 |
+| `./host` | Host | 选择、执行与传输：选择范式（含 Remote 与 Host 命令共用的写入）、`/setup-*` Host 命令与 dsh-TUI 补全、可见性控制器、增强工具的显式入口、对话列表与共用部件（类型在 `host/enhanced.ts`）、凭据、有界传输与去敏、MCP 客户端、adapter 骨架与各服务 wire |
+| `./client` | 浏览器 | 浏览器契约与组件骨架：分区契约、选择存储与状态观察器、`/setup-*` 的 decoration 工厂与 Host 命令执行后的重读（`followHostCommand`）、目录驱动的设置页骨架 |
 
 模块与导出位置见[代码结构 · core](code-structure.md#core)。
 
@@ -378,7 +398,8 @@ core 是只有源码的私有包，`package.json` 的 `exports` 指向 `src`，�
 
 | 槽位 / 入口 | 注册者 | 说明 |
 | --- | --- | --- |
-| `commandUi`：`/setup-search`、`/setup-fetch` | 各插件 | 由 core `selectionCommand` 生成；不依赖 ui，ui 停用时仍可用 |
+| `commandUi.decorate`：`/setup-search`、`/setup-fetch` 的选择框 | 各插件 | core `selectionCommand` 生成 decoration（`{ name, available, ui }`），挂在同名 Host 命令上：裸调用（菜单选中、不带参数回车）弹选择框，经 Remote `set` 写入；Host 命令声明了参数提示，带参数的一行交给它执行。菜单行是 Host 命令自己的（名字与英文说明，decoration 没有行面）。随插件行出现与消失，不依赖 ui |
+| `command/executed` 事件 | 各插件 | core `followHostCommand`：本浏览器执行完同名 Host 命令后，`ConnectionSelectionStore.invalidateSession(sessionId)` 让该会话的视图重读，并让模型记忆失效（`pairings.invalidate()`）；事件不带参数，所以每次执行都算 |
 | `plugins.row.config`（键 `dsh-tool-web-enhanced-profile#<行 id>`） | 各插件 | 行设置页，由 core 骨架按目录组成；只在本行运行时注册（`configForms.whileServed`）；写入前用本插件的 `resolveSettings` 校验写入后的完整文档；页面内的写入串行（见下） |
 | 浏览器服务 `webConnections` | ui | 分区与路由事实的注册表 |
 | `conversation.input.right` | ui | 两个能力共用的一个连接按钮与菜单；按钮读取输入栏为模型选择器设置的 `--dsh-composer-model-text-display` / `--dsh-composer-model-icon-display`，与它一起收起，不自设断点 |
@@ -392,7 +413,8 @@ flowchart LR
   subgraph plugin["search / fetch 的浏览器面"]
     STORE["ConnectionSelectionStore<br/>（经 ns Remote 读写）"]
     ROUTE["RouteStatus<br/>web 行 + ns/provider"]
-    CMD["/setup-*"]
+    CMD["/setup-* 选择框<br/>（Host 命令的 decoration）"]
+    EXEC["command/executed<br/>（本浏览器执行的 Host 命令）"]
     PAGE["行设置页"]
   end
   subgraph ui["ui 的浏览器面"]
@@ -401,6 +423,7 @@ flowchart LR
     OV["bundle 概览 · 首次启用提示"]
   end
   STORE --> CMD & PAGE
+  EXEC -- "invalidateSession" --> STORE
   STORE -- "ConnectionSection（showSelector 为 true 时）" --> SVC
   ROUTE -- "registerRoute（与分区无关）" --> SVC
   SVC --> MENU & OV
@@ -408,7 +431,7 @@ flowchart LR
 
 - 插件用可选注入 `ctx.inject(['webConnections'], …)` 注册分区（search `order: 10`，fetch `order: 20`），并随 `showSelector` 注册或注销；注销在注册者的 effect 里运行，随插件 fiber 释放。
 - 分区带上本能力的 `SelectionStore`、文案函数、可选的会话参数组件 `Options`（search 的实时性）、“打开设置”入口，以及布尔事实 `remoteServicesOff`（菜单底部的提示）：目录里 `optIn` 的内置服务全部停用时为真，自定义连接不计，行设置未读到或无效时为假；由 core `remoteServicesOffSource` 从浏览器的行设置快照用与 Host 同一个解析函数算出，快照变化时才重算。ui 只负责外壳与通用行（菜单只列未停用的连接，会话所选的停用连接除外）。新增一种会话参数不改 ui。
-- 命令、设置页与菜单读写同一个 `SelectionStore`，在任一处切换，另一处立即反映。
+- 选择框、设置页与菜单读写同一个 `SelectionStore`，在任一处切换，另一处立即反映。带参数的 Host 命令在 Host 上直接写入、不经 store，本浏览器经 `command/executed` 只让那个会话重读；别的标签页与 dsh-TUI 的写入要等下次读取（[已知限制](design.md#已知限制)）。
 - **路由事实与分区解耦**：插件另用 `registerRoute` 提供路由事实（含浏览器看不到的 `DSH_WEB_*_PROVIDER`），`showSelector: false` 只撤下分区。插件行未运行时没有条目，ui 只能按 `web` 行的值判断。
 - **插件行停用**：ui 用 `ids.ts` 的身份、`configForms.whileServed` 与 `configForms.get('web')` 自己发现“`web` 行仍指向已停用插件的 provider”，在菜单与概览里说明；这条信息不能依赖已经注销的分区。
 - **契约版本**：三个包同一节奏发布、profile 精确锁定版本，分区契约不需要跨版本兼容，变化时三个包一起改。
@@ -434,6 +457,7 @@ search、fetch、ui 三个插件共用构建定义；profile 直接发布 patch 
   - Client 面：清单导出 `./client` 时产出 `lib/client.cjs`，形如 `window.__ModuleLoader__.load({ id, factory })` 的 DSH 模块加载器脚本；只有 Web 壳模块表里的平台模块外置（`build/platform.ts`：React、Cordis、zod、`@tanstack/react-virtual`、`dsh-client-store`、`dsh-client-ui-slots` / `-primitives` / `-dockkit`），其他 DSH 浏览器能力经注入的服务使用、只导入类型。扩展名用 `.cjs` 是因为包为 `"type": "module"` 而产物是 CJS 形状。
   - `build/plugins.ts`：标准装饰器降级（DSH 的 `@Remote`，对内联的 core 同样生效）与 CSS Modules（每个样式表注入一个带 `data-plugin` 的 `<style>`），构建与 Vitest 共用。
 - **ui 的 Host 面是空插件**：DSH 只为已挂载的行加载浏览器面，所以 ui 也作为一行挂载。
+- **命令与 TUI 的依赖不进产物**：Host 命令只从 `@deepseek-ai/dsh-commands` 取类型（`import type`，构建时擦除），补全用 core 的本地结构类型，运行时经注入的 `ctx.commands` / `ctx.tuiCommandTrees` 使用；产物里没有 dsh-commands 与 dsh-tui 的代码。它们不是 peer，Host 产物若在运行时导入它们，`verify-packages` 会拒绝。
 - **打包边界**由 `verify-packages` 检查（`pnpm run check` 的最后一步）；四个可发布包（profile、search、fetch、ui）组成同一发布列车，profile 精确锁定插件版本。校验清单、版本操作与 CI 见[开发流程 · 发布与 CI](development.md#发布与-ci)。
 
 命令与 e2e 见[开发流程](development.md)；产物路径与形态见[代码结构 · 构建产物](code-structure.md#构建产物)。
@@ -455,7 +479,9 @@ search、fetch、ui 三个插件共用构建定义；profile 直接发布 patch 
 | 远程结果 | fetch 的远程正文一律为文本；服务没报告目标状态时记为请求的 URL 与 200（兼容映射），只有服务明确给出的状态码才成为非 2xx 结果；search 的来源只保留无用户信息的 http(s) URL（≤ 8192 字符），`native` 与 model 的结果同样过滤 | fetch `remote/page.ts`；search `sources.ts`、core `shared/url.ts` |
 | 会话与模型 | 会话只能在运维启用的连接之间选择；冻结的只是“哪个连接”，可选性与目标每次调用按当前设置判定；发起调用的会话来自 `currentInitiator()`；`available()` 只做本地判断 | core `installCapability`、`isSelectable` |
 | 显式调用 | 模型给的 `provider` 是不可信输入：工具代码先按连接 id 文法（1–128 字符且 `isConnectionId`）校验，不合文法不回显原值；只能落到本对话 provider 列表里仍存在的连接，之后一律使用列表里的 id；不能指定端点、凭据引用或参数。身份来自 `exec.agent`，目标与执行在 `withInitiator(call.agent)` 里；关闭与失败的计划照样拒绝；凭据、keyless、端点信任与去敏规则不变（同一执行层）；不写会话选择与模型记忆 | core 显式入口、两侧 `src/tools/` |
-| 列出与新增文本 | `describe` 与 `listing` 的任何异常都变为固定的 `WEB_PROVIDER_ERROR`，原消息、cause 与 stack 不给模型也不进日志。增强工具新增的文本（拒绝措辞、换 provider 提示、列出文本）只含固定措辞与列表里的 id；列出不含凭据引用、完整端点、请求头或内部错误，标签与说明是运维数据，单行化、有界，不当作指令 | core 显式入口与工具部件 |
+| 列出与新增文本 | `describe` 与 `listing` 的任何异常都变为固定的 `WEB_PROVIDER_ERROR`，原消息、cause 与 stack 不给模型也不进日志（日志只有一条固定文字的 warn）。增强工具新增的文本（拒绝措辞、换 provider 提示、列出文本）只含固定措辞与列表里的 id；列出不含凭据引用、完整端点、请求头或内部错误，标签与说明是运维数据，单行化、有界，不当作指令 | core 显式入口与工具部件 |
+| Host 命令 | 说明与输出是固定英文；回显的用户输入单行化、至多 64 字符；连接 id 先过文法再判可选性，写入与 Remote `set` 同一步骤；设置无效、存储失败与意外异常换成固定文字，原始异常以 warn 级只进 Host 日志 | core `host/command.ts`、`host/selection-write.ts` |
+| Host 日志 | 两层，按是否可能经手本次请求的凭据区分。执行诊断（后端调用：传输、MCP、`native`、model 后端与两侧执行层）只以 debug 级、`redactDiagnostic` 的去敏副本记录，不带原 cause 与 stack；凭据解析失败与非 JSON 回复只记固定诊断；`local` 不经手凭据，意外异常照原样以 debug 级记录。控制面失败（连接 Remote 服务、`/setup-*` Host 命令、行设置、选择存储、工具可见性与选择捕获）从不经手请求凭据，以 warn 级连同原始错误记录（`ctx.logger.warn('… %s', error)`），调用方只看到固定措辞；其中成对注册失败与对话列表读不出只记固定文字。用户可见的说明见[功能设计 · Host 日志](design.md#host-日志) | 执行诊断：core `redaction.ts`（`redactDiagnostic`）与各执行层的 `onDiagnostic`；控制面：core `remote.ts`、`command.ts`、`settings-row.ts`、`storage.ts`、`sessions.ts`、`restriction.ts`、`runtime.ts` |
 | 跨命名空间读取 | 跟随会话模型时读别的插件命名空间的路由配置，先按与设置文法同一组上限限制长度与条数，超出判为不支持且不回显原值 | search `model/bounds.ts` |
 
 **给模型的错误与去敏的位置**
@@ -471,4 +497,4 @@ search、fetch、ui 三个插件共用构建定义；profile 直接发布 patch 
 
 增强工具不新增去敏位置：显式调用的上游说明就是执行层已去敏的结果，换 provider 的提示插在原消息第一段末尾，即不可信说明之前，不会被读成上游文字。
 
-凭据由调用方经 `secretMatcher` 交给这些位置（adapter 与 model 交给传输，`native` 经 `nativeAuth` 记录本次交给 DSH 的值）；后端不自己拼上游文字。所有诊断（传输、MCP、`native`、两侧执行层、model 后端）只以 `redactDiagnostic` 的去敏副本进 Host 日志，不带原 cause 与 stack。
+凭据由调用方经 `secretMatcher` 交给这些位置（adapter 与 model 交给传输，`native` 经 `nativeAuth` 记录本次交给 DSH 的值）；后端不自己拼上游文字。这些执行诊断（传输、MCP、`native`、两侧执行层、model 后端）只以 debug 级、`redactDiagnostic` 的去敏副本进 Host 日志，不带原 cause 与 stack；控制面失败不经手请求凭据，以 warn 级带原始错误记录（见上表“Host 日志”）。

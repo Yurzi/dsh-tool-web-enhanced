@@ -2,7 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { WebError } from '@deepseek-ai/dsh-web'
 import type { ConnectionView } from '../shared/index.ts'
-import type { Capability, CapabilityCall, CapabilitySettings, ConnectionOf } from './capability.ts'
+import type { Capability, CapabilityCall, CapabilitySettings, ConnectionOf, LabeledConnection } from './capability.ts'
 import { capabilityErrors } from './errors.ts'
 import { explicitAccess } from './explicit.ts'
 import { isNewConversation, ProviderLists } from './provider-lists.ts'
@@ -14,6 +14,8 @@ import { providerView, routeFacts } from './route.ts'
 import { isSelectable } from './selectable.ts'
 import { liveSession, Sessions } from './sessions.ts'
 import { SessionStorage } from './storage.ts'
+import { registerCommand } from './command.ts'
+import { registerTerminal } from './terminal.ts'
 import { InvalidSettingsError } from './settings-row.ts'
 
 /** Read-only handles for capability-specific context (for example fetch's local allowlist notice). */
@@ -22,7 +24,7 @@ export interface CapabilityRuntime<O extends Record<string, unknown>> {
 }
 
 /** Install the sole Seat, session lifecycle, route-guarded restrictions and Remote service. */
-export function installCapability<S extends CapabilitySettings, O extends Record<string, unknown>, V extends ConnectionView, T, Q, R>(ctx: Context, capability: Capability<S, O, V, T, Q, R>): CapabilityRuntime<O> {
+export function installCapability<S extends CapabilitySettings<LabeledConnection>, O extends Record<string, unknown>, V extends ConnectionView, T, Q, R>(ctx: Context, capability: Capability<S, O, V, T, Q, R>): CapabilityRuntime<O> {
   const kind = capability.tool === 'web_search' ? 'search' : 'fetch'
   const errors = capabilityErrors(capability.identity.packageName, kind + ' aborted')
   const contextUnavailable = () => errors.error('WEB_PROVIDER_ERROR', 'the ' + kind + ' selection could not be read; retry the request')
@@ -98,6 +100,10 @@ export function installCapability<S extends CapabilitySettings, O extends Record
     ctx.logger.warn('%s: starting tool visibility failed: %s', capability.identity.rowId, error)
   })
   ctx.on('agent/disposed', ({ agent }) => { snapshots.forget(agent); restriction.forget(agent) })
+  ctx.inject(['commands'], scope => { registerCommand(scope, capability, sessions) })
+  ctx.inject(['tuiCommandTrees'], scope => {
+    registerTerminal(scope, capability.identity.command, 'web ' + kind, () => capability.settings(), capability.commandOptions !== undefined)
+  })
   ctx.inject(['sessionController', 'typert', 'agents'], scope => {
     createConnectionsService(scope, { namespace: capability.remoteNamespace, contract: capability.contract, sessions, pairings,
       providerView: () => providerView(capability.identity.providerId, capability.field) })

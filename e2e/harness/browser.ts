@@ -40,7 +40,7 @@ export interface App {
  * Launch Chromium, open the launch URL, and dismiss the dialogs a fresh home shows.
  * @param url - the one-time launch URL from `startWeb`.
  */
-export async function openApp(url: string, contextOptions: BrowserContextOptions = {}, activation: 'dismiss' | 'keep' = 'dismiss'): Promise<App> {
+export async function openApp(url: string, contextOptions: BrowserContextOptions = {}, activation: 'dismiss' | 'keep' = 'dismiss', observe?: (page: Page) => void): Promise<App> {
   if (chromiumPath === undefined) throw new Error('no Chromium found; set DSH_E2E_CHROMIUM')
   // Chromium's SingletonSocket must fit Linux's 108-byte Unix-socket path limit, which
   // any directory of a checkout under a long path (GitHub's /home/runner/work/<repo>/<repo>)
@@ -80,6 +80,7 @@ export async function openApp(url: string, contextOptions: BrowserContextOptions
         await dialog.getByRole('button', { name: copy['activation.later'], exact: true }).click()
       })
     }
+    observe?.(page)
     await page.goto(url)
     return {
       browser,

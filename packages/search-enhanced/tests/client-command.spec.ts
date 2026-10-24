@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { SelectOption } from '@deepseek-ai/dsh-client-ui-commands/client'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import type { SearchSelectionView as SelectionView } from '../src/contract.ts'
+import { SEARCH } from 'dsh-tool-web-enhanced-core/shared'
 import { parseCommandOption, searchCommand, SEARCH_COMMAND } from '../src/client/command.ts'
 import { SearchSelectionStore, type SearchConnectionsRemote } from '../src/client/selection.ts'
 import { zh, type LocaleKey } from '../src/client/locales.ts'
@@ -37,7 +38,9 @@ describe('/setup-search', () => {
   it('is a localized popup command', () => {
     const { command, ui } = fixture()
     expect(command.name).toBe(SEARCH_COMMAND)
-    expect(command.label?.()).toBe(tZh('command.label'))
+    expect(SEARCH_COMMAND).toBe(SEARCH.command)
+    // A decoration of the Host command: the menu row is the Host command's own.
+    expect(Object.keys(command).toSorted()).toEqual(['available', 'name', 'ui'])
     expect(ui.searchLabels?.()).toEqual({ placeholder: tZh('command.placeholder'), empty: tZh('command.empty'), noResults: tZh('command.noResults') })
   })
 

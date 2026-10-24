@@ -38,7 +38,7 @@ DSH 的 `web` 行为 `web_search` 与 `web_fetch` 各指定一个 provider，整
 dsh plugin --profile <profile> add dsh-tool-web-enhanced-profile
 ```
 
-`<profile>` 是要安装到的 DSH profile，例如 `web`。连接菜单、`/setup-search` / `/setup-fetch` 与设置页都在 DSH 的 Web 界面里（`dsh web`）。dsh-tui 的界面支持在[计划](docs/plan.md)中。
+`<profile>` 是要安装到的 DSH profile，例如 Web 界面（`dsh web`）的 `web`，或 [dsh-TUI](https://github.com/ccch1mneyyy/dsh-TUI) 的 `dsh-tui`；行设置写在各 profile 里，两边各配一份。连接菜单、首次启用提示与设置页只在 Web 界面里；`/setup-search` / `/setup-fetch` 是 Host 命令，Web 界面与 dsh-TUI 都能用，dsh-TUI 里还有参数补全（那里的行设置在 TUI 的 `/settings` 里只读）。
 
 安装后 profile 会：
 
@@ -62,7 +62,13 @@ dsh plugin --profile <profile> add dsh-tool-web-enhanced-profile
 
 菜单底部的标签在搜索与抓取之间切换。每个面板顶部写当前连接及其来源（本会话、来自父会话、该模型上次的选择、默认连接）和“设置”按钮；下面是“关闭”、已启用的连接（说明行写访问方式与接收方，如“无需密钥 · 查询会发送给 Exa”，未就绪的写原因），搜索面板另有内容实时性选项。某个能力的远程服务一个都没打开时，面板底部提示“更多服务可在设置中打开”，点击进入设置页。
 
-键盘入口：`/setup-search` 列出“关闭”、所有就绪的搜索连接，以及（所选连接支持时）三档实时性；`/setup-fetch` 列出“关闭”与所有就绪的抓取连接。命令与菜单读写同一份选择。
+键盘入口：`/setup-search` 与 `/setup-fetch`，与菜单读写同一份选择，说明与输出是英文。
+
+- 在 Web 界面里不带参数回车（或在斜杠菜单里选中），弹出选择框：“关闭”、所有就绪的连接，搜索另有（所选连接支持时）三档实时性。
+- 带参数直接切换，从下一个模型请求步生效：`/setup-search off`、`/setup-search builtin:exa`、`/setup-search freshness realtime`、`/setup-fetch builtin:local`。连接 id 区分大小写；Web 里的输出显示在命令卡上。
+- 在 dsh-TUI 里，参数可以用 Tab 补全（`off`、本行启用的连接 id 与 `freshness`）；不带参数时输出当前选择及来源、路由状态与启用的连接（dsh-TUI 0.16.1 把它压成一行、约 200 字符的通知，只看得到开头；完整的连接与状态在 Web 的选择框或连接菜单里）。
+
+详见[功能设计 · /setup-search 与 /setup-fetch](docs/design.md#setup-search-与-setup-fetch)。
 
 几条规则：
 
@@ -142,7 +148,7 @@ dsh plugin --profile <profile> add dsh-tool-web-enhanced-profile
   - **Fake-IP**：如果代理工具让系统 DNS 返回 Fake-IP 地址（常见于 `198.18.0.0/15`，以你的代理配置为准），这些地址不是公网地址，本机抓取会拒绝；需要时把该网段加入 `allowCidrs`，并可用 `allowHostnames` 收窄。
   - **HTTP 代理**：经代理访问的主机名由代理解析，白名单无法约束它们，与 DSH 上游行为一致。
   - `allowCidrs` 非空、本步使用 `本机 HTTP` 且确认 `web_fetch` 路由到本插件时，系统提示里会告诉模型运维放行了哪些范围。
-- **密钥不进入模型可见的内容**：本次请求交给上游的 API key 或账号令牌，在错误说明里检出（完整或任意 8 字符片段）即整段扣下，在成功结果里替换为 `[redacted]`；Host 日志只收到去敏副本。已知缺口：DSH 原生 provider 解析失败时，其错误可能带有短于 8 字符的凭据片段，检测不到。详见[凭据隐去](docs/design.md#凭据隐去)与[已知限制](docs/design.md#已知限制)。
+- **密钥不进入模型可见的内容**：本次请求交给上游的 API key 或账号令牌，在错误说明里检出（完整或任意 8 字符片段）即整段扣下，在成功结果里替换为 `[redacted]`；后端调用的诊断只以去敏副本（debug 级）进 Host 日志。已知缺口：DSH 原生 provider 解析失败时，其错误可能带有短于 8 字符的凭据片段，检测不到。详见[凭据隐去](docs/design.md#凭据隐去)与[已知限制](docs/design.md#已知限制)。
 - **密钥格式**：本项目实现的 adapter 与模型搜索会在发请求前拒绝含可见 ASCII 与空格以外字符的 API key；免密钥连接从不读取或发送密钥。带凭据的请求拒绝重定向。读取凭据时依赖抛出的错误不转述给模型，一律换成固定措辞。
 - **上游说明标为不可信**：错误里附带的服务原话以 `(untrusted)` 标注，至多 2000 字符。
 
@@ -178,10 +184,10 @@ dsh-web-search-enhanced 与 dsh-web-fetch-enhanced 的 0.1.x 版本原本各自�
 
 | 包 | 版本 | 作用 |
 | --- | --- | --- |
-| [dsh-tool-web-enhanced-profile](packages/profile/README.md) | 0.1.1 | 要安装的 bundle，不含代码：挂载下面三个包，并在 `web` 行选中两个插件的 provider |
-| [dsh-web-search-enhanced](packages/search-enhanced/README.md) | 0.2.1 | 行 `web-search-enhanced`，`web_search` 的 provider `search-enhanced`，内部切换搜索后端 |
-| [dsh-web-fetch-enhanced](packages/fetch-enhanced/README.md) | 0.2.1 | 行 `web-fetch-enhanced`，`web_fetch` 的 provider `fetch-enhanced`，内部切换抓取后端 |
-| [dsh-tool-web-enhanced-ui](packages/ui/README.md) | 0.1.1 | 行 `tool-web-enhanced-ui`：输入框的连接菜单、首次启用提示与插件页上的组合包概览；不依赖两个插件行 |
+| [dsh-tool-web-enhanced-profile](packages/profile/README.md) | 0.1.2 | 要安装的 bundle，不含代码：挂载下面三个包，并在 `web` 行选中两个插件的 provider |
+| [dsh-web-search-enhanced](packages/search-enhanced/README.md) | 0.2.2 | 行 `web-search-enhanced`，`web_search` 的 provider `search-enhanced`，内部切换搜索后端 |
+| [dsh-web-fetch-enhanced](packages/fetch-enhanced/README.md) | 0.2.2 | 行 `web-fetch-enhanced`，`web_fetch` 的 provider `fetch-enhanced`，内部切换抓取后端 |
+| [dsh-tool-web-enhanced-ui](packages/ui/README.md) | 0.1.2 | 行 `tool-web-enhanced-ui`：输入框的连接菜单、首次启用提示与插件页上的组合包概览；不依赖两个插件行 |
 
 `dsh-tool-web-enhanced-core` 是私有的共享源码，构建时内联进各插件，不发布。
 

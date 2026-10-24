@@ -8,7 +8,7 @@ export const THIS_MACHINE = 'this machine'
 const SESSION_MODEL = 'the service behind the session model'
 
 /** Operator data in the listing is one line and bounded; labels and service names share the settings label bound. */
-const LABEL_MAX = 200
+export const LABEL_MAX = 200
 const HOST_MAX = 253
 const NOTICE_MAX = 2000
 
@@ -170,7 +170,7 @@ function listedBase(entry: ProviderEntry): ListedBase {
   return { id: entry.id, name: oneLine(entry.name, LABEL_MAX), ...use === undefined ? {} : { use }, sendsTo: recipientText(recipient) }
 }
 
-function recipientText(recipient: Recipient): string {
+export function recipientText(recipient: Recipient): string {
   switch (recipient.kind) {
     case 'this-machine': return THIS_MACHINE
     case 'session-model': return recipient.provider === undefined ? SESSION_MODEL : `${SESSION_MODEL} (${oneLine(recipient.provider, LABEL_MAX)})`
@@ -187,7 +187,7 @@ function readiness(entry: ProviderEntry): Readiness {
 }
 
 /** Collapse line breaks, controls and runs of white space, then cut at `max` characters without splitting a surrogate pair. */
-function oneLine(value: string, max: number): string {
+export function oneLine(value: string, max: number): string {
   const flat = value.replace(/[\p{Cc}\p{Zl}\p{Zp}\s]+/gu, ' ').trim()
   if (flat.length <= max) return flat
   const last = flat.charCodeAt(max - 2)

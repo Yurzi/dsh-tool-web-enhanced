@@ -6,7 +6,7 @@
 
 - Node `^22.19.0` 或 `>=24.0.0`：脚本用 Node 的类型剥离直接运行 `.ts`；CI 在 22.19.0 与 24 上各跑一遍 `check`。
 - pnpm 12（根 `package.json` 的 `packageManager`：`pnpm@12.14.0`）。
-- e2e 另需 Chromium 或 Chrome；第一次跑 e2e 需要网络（安装被测 DSH）。
+- e2e 另需 Chromium 或 Chrome，以及 `python3`（TUI 规格用它的标准库 `pty` 驱动 dsh-TUI）；第一次跑 e2e 需要网络（安装被测 DSH）。
 
 在仓库根执行任何 pnpm / npm / vitest 命令前，先把它们的家目录指进仓库，免得读写你自己的 pnpm store、缓存与 XDG 状态：
 
@@ -59,6 +59,7 @@ export PNPM_HOME=$PWD/.pnpm-home \
 | 可见性与对话列表 | 可见性控制器 core `host/restriction.ts`（`ToolRestriction`：原生组与增强组）；对话列表 `host/provider-lists.ts`（新建判断、建立、继承）与 `host/storage.ts`（表 `provider_lists`、每会话队列）；显式入口 `host/explicit.ts`（`run` / `list` / `ready`）；三者在 `host/runtime.ts` 的 `installCapability` 里装配；能力装配在 `<pkg>/src/host/runtime.ts` | core `restriction`（原生组）、`visibility`、`row-visibility`（真实 Settings 行与 `sessionController`）、`explicit`、`storage`；两侧 `agent`（真实 Agent 与 Web preset 上的工具表）、`host`。时序用 deferred promise，不用 sleep |
 | 增强工具（定义、参数、输出、列出、错误措辞） | 定义、参数校验、输出与超时在 `<pkg>/src/tools/`（`index.ts` 的 `searchEnhanced` / `fetchEnhanced`、`definitions.ts`；search 另有复制的 `queries.ts`）；两侧共用的部件在 core `host/enhanced-parts/`（`calls.ts`：参数与一次显式执行；`wording.ts`：就绪子句、拒绝措辞、提示插入；`listing.ts`：规范值 schema、值与文本）；列出的能力事实在 `<pkg>/src/host/listing.ts`（fetch 的白名单说明经 `src/prompt.ts` 的 `allowlistNotice`）；契约类型在 core `host/enhanced.ts` | core `enhanced-parts`；两侧 `tools-search` / `tools-fetch`（定义、参数、与真实 tool-web 的逐字节与参数错误对照）、`enhanced-search` / `enhanced-fetch`（经真实 `WebRuntime` 与能力执行）、`enhanced-listing`、`enhanced-credentials`；改 `allowlistNotice` 时加 fetch `prompt`。定义定稿后不随手改：它进每个请求的 schema 与前缀缓存 |
 | 设置页 | 骨架在 core `client/settings/*`（“增强工具”一节在 `EnhancedToolsSection.tsx`）；页面内写入队列在 `client/settings/document.ts`：开关与逐项保存写成 `SettingsChange`（在当下的快照上计算，含依赖当前值的派生），编辑器类写操作数组（按显示的 revision）；插件经 `src/client/index.tsx` 注入 `readSettings`，只给目录、文案、服务说明（fetch `SERVICE_NOTES`）与按目录键注册的附加编辑器（fetch `LocalExtras`） | core `client-settings`、`client-optin`、`client-catalog`、`client-fields`；两侧 `client-settings`；ui `client-settings-appearance`；e2e `enhanced-write-race`、`enhanced-settings` |
+| `/setup-*` Host 命令与 dsh-TUI 补全 | 命令（文法、显示、输出措辞、异常边界）在 core `host/command.ts`；与 Remote `set` 共用的写入在 `host/selection-write.ts`；补全在 `host/terminal.ts`（本地结构类型，不导入 dsh-tui）；三者在 `host/runtime.ts` 的 `installCapability` 里装配；能力参数 `Capability.commandOptions`（search 在 `src/host/runtime.ts`）；身份 `PluginIdentity.command` 在 core `shared/ids.ts`。浏览器的选择框在 core `client/command.ts`（`selectionCommand`、`followHostCommand`）与两侧 `client/command.ts`、`client/index.tsx`；单会话重读在 `client/selection.ts`（`invalidateSession`） | core `host-command`、`host-command-boundary`、`terminal-contract`、`remote`、`client-capability`、`client-selection`；两侧 `client-command`、`client-apply`；search `client-composition`；e2e `setup-commands`、`setup-commands-ui`、`tui-completion`。输出措辞是用户可见的定稿文字，改动先同步 [功能设计](design.md#setup-search-与-setup-fetch) |
 | 输入框菜单、首次启用提示、概览与预检 | ui `src/client/*`；分区契约在 core `client/section.ts`（`remoteServicesOff` 由 core `client/remote-services.ts` 算出） | ui `client-components`、`client-service`、`client-pure`；search `client-composition`；core `client-optin` |
 | 界面文案 | 各包 `src/client/locales.ts`（zh 与 en 同键；键集的类型来源 search / fetch 取 `en`、ui 取 `zh`）；插件页标题与描述只在 `locale/{zh,en}.json` 的 `meta` | 各包 `client-locales`；`verify:package` 检查 `meta` |
 | 给模型的消息 | Host 代码里的英文 `WebError` 文案：传输与 MCP 在各能力的 `http.ts`，search 的畸形响应在 `src/search/adapter-result.ts`，fetch 的逐页失败在 `src/remote/page.ts`；增强工具的拒绝与提示在 `<pkg>/src/tools/` 与 core 工具部件（执行层原句里的 “connection” 保留）；core 的服务模块不写措辞 | 断言该消息的测试；规则见 [功能设计 · 错误与上游说明](design.md#错误与上游说明) 与 [增强工具的错误](design.md#增强工具的错误) |
@@ -69,7 +70,7 @@ export PNPM_HOME=$PWD/.pnpm-home \
 
 设置文档的版本规则：新增可选字段不提升版本；不兼容的变化提升 `CURRENT_SETTINGS_VERSION`，并在 `SETTINGS_MIGRATIONS` 加一个 N→N+1 的纯函数步骤和它的测试。不为 0.1.x 的格式写迁移（[功能设计 · 配置文档](design.md#配置文档)）。
 
-触碰 profile 的 patch、provider 或增强工具的注册与可见性、插件页相关的 `package.json` 字段或 locale、浏览器面、DSH 基线时，必须跑 e2e。
+触碰 profile 的 patch、provider 或增强工具的注册与可见性、Host 命令与补全、插件页相关的 `package.json` 字段或 locale、浏览器面、DSH 基线时，必须跑 e2e。
 
 ## 新增后端
 
@@ -120,6 +121,8 @@ export PNPM_HOME=$PWD/.pnpm-home \
 
 上游说明与诊断的去敏只认得交给它的凭据（core `host/redaction.ts`）。加新的请求头或令牌种类时，把这次请求实际发送的凭据放进 `Upstream.matcher`（`secretMatcher([凭据])`；adapter 在 `runAdapter`，model 后端在 `src/model/execute.ts`）；`native` 经调用级的 `nativeAuth(ctx, ref, secrets)` 记录交给 DSH 的凭据。漏交的凭据不会被去除。adapter 的服务解析结果也在 `runAdapter` 返回前去敏，不能只处理原始 JSON 的字符串值：OpenAlex 等协议会把属性名还原成正文。回归测试应经真实执行层覆盖这种形状。后端不自己拼上游文字，附带说明由 core 统一生成。
 
+新的日志按两层写（规则见[功能设计 · Host 日志](design.md#host-日志)）：可能经手本次请求凭据的后端把失败交给执行层的 `onDiagnostic`，只以 debug 级记 `redactDiagnostic` 的去敏副本；控制面（Remote、Host 命令、行设置、存储、可见性与捕获，从不经手请求凭据）用 `ctx.logger.warn('… %s', error)` 连同原始错误记录，调用方只得到固定措辞。
+
 ## 测试约定
 
 - **在接缝处用真实组合**：插件注册在真实 `WebRuntime` 里；profile 的 patch 用真实的 include 补丁算法（`@deepseek-ai/cordis-plugin-include`）叠加到 base 的 web 行上；会话行为在 `dsh-agent-loop-testkit` 与 `dsh-session-projection` 组装的真实 Agent 上测，`agent.spec.ts` 用真实的 Web preset 检查工具隐藏；fetch 的 `local` 用本地 HTTP 服务、本地代理和可替换的 DNS 查询（`AddressLookup`）。组合测试可以导入另一个包的 `src` 来测真实接缝（如 ui × search）。
@@ -131,6 +134,7 @@ export PNPM_HOME=$PWD/.pnpm-home \
 - **凭据边界**：凭据解析器抛出的异常（普通 Error 与伪装成合法码的 `WebError`，也包括没有真实取消却报 `WEB_ABORTED` 的）带着假密钥，断言它不出现在工具结果、结构化错误与日志里；真实取消仍为 `WEB_ABORTED`。新的凭据来源要在两侧 `enhanced-credentials` 加一例。
 - **设置页的连续写入**：用 deferred promise 卡住前一次写入，断言之后的开关在前一次落定后的文档上计算并保存、页面没读到的外部修改仍被拒；依赖当前值的派生（如 keyless 保留的参数）在排队期间变化时取新值。
 - **浏览器面**：测试文件第一行写 `// @vitest-environment jsdom`，渲染真实的 DSH 界面原语（`dsh-client-ui-primitives` 经 `server.deps.inline` 内联）。测试与构建共用 `build/plugins.ts` 的 `standardDecorators()`（降级 `@Remote`）与 `cssModules()`。
+- **Host 命令与补全**：命令在真实的 `CommandRuntime`（`@deepseek-ai/dsh-commands`）上经 `ctx.commands.execute(agent, line, …)` 执行，插件行、Settings 与存储都是真的（core `host-command.spec.ts`；直接装 `installCapability` 的边界用例在 `host-command-boundary.spec.ts`），输出断言全文；修订冲突用 deferred promise 卡住显示。补全在这两个文件里用按结构实现的 `tuiCommandTrees` 注册表；`terminal-contract.spec.ts` 用 dsh-tui 真实的 `TuiCommandTreeRuntime`，按模块名动态导入，免得 dsh-tui 的 Context 类型声明混进产品代码的本地结构类型。浏览器的选择框在发布的 `dsh-client-ui-commands` bundle 里的真实 `CommandUiRuntime` 上测（core 夹具 `client-command-ui.ts`），Host 命令的执行由测试给出。
 
 ### 测试环境的两处补丁
 
@@ -140,6 +144,8 @@ export PNPM_HOME=$PWD/.pnpm-home \
 两处都不要在没核对 DSH 发布包的情况下删除；升级基线时复查。
 
 **测试只从仓库依赖导入 DSH 包**，不读本机全局安装的 DSH（CI 上没有它）。真实 PTC 运行时（`dsh-fs-local`、`dsh-subprocess-local`、`dsh-sandbox-local`、`dsh-sandbox-policy`、`dsh-ptc-runtime-node`）、JSONL 会话持久化（`dsh-session-persistence-jsonl`）与默认模型（`dsh-agent-default-model`）因此是根 devDependencies，版本走 catalog。它们带来的 `node-pty` 用自带的预编译二进制，`pnpm-workspace.yaml` 的 `allowBuilds` 把它和 `dsh-subprocess-local` 的安装脚本关掉（与 `koffi` 相同），否则全新安装会因未登记的构建脚本失败。
+
+**命令与 TUI 的两个开发依赖**：`@deepseek-ai/dsh-commands`（根与 core 的 devDependency，版本走 catalog）给 Host 命令提供类型与组合测试用的 `CommandRuntime`：产品代码只能 `import type` 它（`ctx.commands` 的类型增补、`CommandInvocation` / `CommandResult`）。`@deepseek-harness-tui/dsh-tui`（根 devDependency，固定 0.16.1）只给 e2e 与 core 的 TUI 注册表测试用，产品代码不得导入它，TUI 的接口用 core `host/terminal.ts` 的本地结构类型。两者都不能进插件产物：`verify-packages` 拒绝对它们的运行时导入，但看不出内联进来的代码，改到命令或补全的导入后，构建并确认两侧 `lib/` 里没有这两个包的代码。
 
 ### 产物的 tree-shaking
 
@@ -179,8 +185,10 @@ export PNPM_HOME=$PWD/.pnpm-home \
 - 进程内 Host（`bootHost`）没有 CLI，harness 自己提供 `dsh-cmdline` 的“应用就绪”源：按公开的 `onReady` 契约，启动完成后通知已登记的监听者，之后登记的立即回调。DSH 的 HMR 初始重载占着 Settings 的独占队列等这个信号，不通知时 Settings 写入一直排队；不要把它换成空实现。
 - `bootHost` 的 `dispose` 先 await 公开的 `hmr.runExclusive(async () => {})` 作为屏障，再处置根 fiber：DSH rc.2 的 HMR 公开队列在一次调用被拒后可能仍在用根，直接处置会挂住（原生 Web profile、不装本仓库插件时同样复现）。不要去掉这道屏障，也不要改用超时或 sleep。
 - 子 Agent 会话：用回环模型让父 Agent 调 preset 的 `subagent` / `subagent_fork`，等 `subagents.waitForChildren` 收尾；Web 里经父会话的子 Agent 列表打开子会话，不在运行的子会话由父 Agent 的 `send_message` 再叫起（`subagent-selection.e2e.ts` 与它的 fixture）。
+- Host 命令：Host 一侧直接 `ctx.commands.execute(agent, '/setup-search …', …)`，与 Remote `get` 对照（`setup-commands.e2e.ts`）。Web 里带参数执行前先跑一轮回环对话：还没有对话的新会话里，DSH 的空会话首页盖住命令卡。斜杠菜单行按 Host 命令名定位（它没有本地化标题），选择框的选项照常用 `en` 字典的值。要看浏览器与 Host 之间的往来时，给 `openApp` 的第四个参数传观察者，在导航前挂上请求与 WebSocket 帧的监听。
+- dsh-TUI：在没有 TTY 的环境里，`harness/terminal.ts` 经 Python 标准库 `pty`（`terminal-pty.py`）启动正式的 `dsh-tui` 入口（`bin/dsh-tui.js`），按输出事件等待文字，不用 sleep；结束时把纯文本与 ANSI 原文存进 `.e2e/artifacts` 与评审目录。dsh-TUI 0.16.1 把 Host 命令的输出压成一行、至多 200 个字符的通知，所以 TUI 屏幕上只断言可见的摘要与路由片段（以及一句话的写入结果），完整文案由真实 `CommandRuntime` 逐字断言（core `host-command*` 与 e2e `setup-commands`）。TUI 用自己的 profile `dsh-tui`，链为 dsh-base → dsh-tui → 本 bundle（`createBaseProfile` 后改 `dsh.profile.bundles`，dsh-tui 以符号链接指向仓库安装的 devDependency，不另装一份）；把 `dsh` 的 PATH 指向隔离的 DSH 安装，启动器据此委托 `dsh --profile dsh-tui`；HOME 与 DSH_HOME 已由隔离环境指进 `.e2e/run`，`~/.dsh` 与 `~/.dsh-tui` 都不碰；启动器检查 npm 更新的请求也指向回环。**不要把 TUI bundle 叠进 Web profile 再启动 TUI**：DSH 的 typert 等行在 TUI 的根能力守卫下激活失败（`dsh-tui: root.effect is unavailable from a plugin activation`）。只做服务级组合检查（真实 `tuiCommandTrees` 里的补全树）时，才在 Web profile 里叠入 TUI bundle 并只经 `bootHost` 启动，停用与 Web 重复的 TUI 服务行和 TUI 前端行（`tui-web-composition.yml`、`disable-tui-frontend.yml`）。
 - 驱动真实 Agent 调用工具时用 `startAgentModelApi`：回环的 Messages SSE 第一步发出给定的工具调用，之后给出回答；只看请求的规格用 `startTextModelApi`。评审用的截图经 `harness/review.ts` 另存到 `.e2e/review/<日期-主题>/`，不被全局准备清空。要拍运行中的工具行时把 Work details 切到 Compact（DSH 缺省的 Detailed 平铺运行中的工具、没有分组标题），用传输闸门（deferred promise）停在运行中；要拍首次启用提示时 `openApp` 的第三个参数传 `'keep'`（不自动关掉它）。
-- 截图在断言之前保存。产物都在 `.e2e/artifacts`：`web.log`、`<name>.png`、`<spec>-failure.json` / `.png` / `.aria.txt`、`fetch-remote-wire-*.json`、`search-model-wire-*.json`、`search-model-host.log` 等。
+- 截图在断言之前保存。产物都在 `.e2e/artifacts`：`web.log`、`<name>.png`、`<spec>-failure.json` / `.png` / `.aria.txt`、`fetch-remote-wire-*.json`、`search-model-wire-*.json`、`search-model-host.log`、`m6-setup-ui-wire-*.txt`、`m6-tui-*.txt` / `.ansi.txt`、`m6-tui-service-evidence.json` 等。
 
 ### 常见失败与排查
 
@@ -193,6 +201,8 @@ export PNPM_HOME=$PWD/.pnpm-home \
 | `dsh web printed no launch URL in 90 s` | GUI 没起来 | 看 `.e2e/artifacts/web.log` |
 | 无外网时 pnpm 命令挂起不返回 | 本机 pnpm 与根 `packageManager` 的版本不同时，pnpm 会去下载指定版本；`pnpm install` 还要访问 registry | 设 `npm_config_manage_package_manager_versions=false`，安装用 `pnpm install --offline`（依赖已在 store 里时） |
 | 本地 GUI 规格全被跳过 | 找不到浏览器且没设 `CI` | 设置 `DSH_E2E_CHROMIUM` |
+| TUI 启动即退出：`startup failed`，plugin-manager、llm 等行报 `dsh-tui: root.effect is unavailable from a plugin activation` | TUI bundle 叠在 Web profile 上启动了 TUI，DSH 的 typert 行过不了 TUI 的根能力守卫 | 用独立的 TUI profile（dsh-base → dsh-tui → 本 bundle），见[写规格的约定](#写规格的约定) |
+| TUI 规格报 `spawn python3 ENOENT` 或等不到欢迎页 | 没有 `python3`，或 PATH 上的 `dsh` 不是隔离安装 | 装 `python3`；看 `.e2e/artifacts/m6-tui-*.txt` 的终端原文 |
 
 ## DSH 基线升级
 
@@ -217,8 +227,9 @@ export PNPM_HOME=$PWD/.pnpm-home \
     - DeepSeek 接受的 Messages 工具版本与 thinking：`deepseek.ts` 的 `DEEPSEEK_MESSAGES` 与 `DeepSeekSearchProvider` 的缺省一致。
 
     `model-route.spec.ts` 用夹具测这些规则，e2e `search-model` 的 pi-ai 与 DeepSeek 用例用真实 DSH，二者一起能发现字段变化。
-13. **e2e 积木**：`e2e/harness/host.ts` 用到的 `dsh-app-boot`、`dsh-cmdline`、`dsh-launch-environment` 导出，其中 `provideCmdline` 的 `ready.onReady` 契约（harness 按它实现应用就绪源，HMR 的初始重载等它；契约变了 Settings 写入会一直排队）；`createBaseProfile` 用的 `initProfile` 与 `DEFAULT_PROFILE_BUNDLES`；`hmr.runExclusive` 的公开语义，并确认新版 DSH 在“调用被拒后立即 dispose”时是否仍会挂住、`bootHost.dispose` 前的空事务屏障是否还需要（去掉后跑 `search-model` 与 `fetch-remote` 规格即可发现）；`fixtures/host-plane.yml` 里的行名，首次启动的对话框（`browser.ts` 的 locator handler），界面的可访问名称。
-14. `pnpm run check` 与 `pnpm run test:e2e` 都通过后，在 CHANGELOG 记下基线变化。
+13. **Host 命令、命令 decoration 与 TUI 补全**：`ctx.commands.register` 的定义（`name`、`description`、`input.hint`；`handler` 收到 `agent`、`rawInput`、`signal`，返回 `{ kind: 'success', text? }` 或 `{ kind: 'error', text }`，抛出的异常由 DSH 记成 `command/done` 的错误）、`list(agent)` / `execute` 与 `command/run` / `command/done` 记录；浏览器 `commandUi.decorate({ name, available, ui })` 挂在同名 Host 命令上的语义（裸调用走 decoration；Host 命令声明 `input` 时带参数的一行交给它，不声明则不当作命令；decoration 没有行面；同名的浏览器命令与 Host 命令冲突时报错）、`command/executed`（只报本浏览器执行完的 Host 命令，不带参数，`kind: error` 也报）、命令目录对子 Agent 会话为空、命令卡的折叠摘要取输出第一行；dsh-TUI 的 `tuiCommandTrees.register({ root, children })`（`children` 同步、不带会话，`path[0]` 是根命令名；调用方须是有活跃 activation 的插件；返回 disposer）、补全大小写不敏感地匹配但插入节点 `name` 原文、参数字符集覆盖全部连接 id，以及 TUI 怎样呈现插件命令的输出（0.16.1 压成一行、至多 200 个字符的通知；新版整段写进转录时，更新 design 的已知限制与 `tui-completion` 的断言）。core `host-command*`、`terminal-contract`，两侧 `client-apply`（真实 `CommandUiRuntime`），e2e `setup-commands*`、`tui-completion` 会发现变化。dsh-tui 单独固定版本（根 devDependency），升级它时同样过这一项。
+14. **e2e 积木**：`e2e/harness/host.ts` 用到的 `dsh-app-boot`、`dsh-cmdline`、`dsh-launch-environment` 导出，其中 `provideCmdline` 的 `ready.onReady` 契约（harness 按它实现应用就绪源，HMR 的初始重载等它；契约变了 Settings 写入会一直排队）；`createBaseProfile` 用的 `initProfile` 与 `DEFAULT_PROFILE_BUNDLES`；`hmr.runExclusive` 的公开语义，并确认新版 DSH 在“调用被拒后立即 dispose”时是否仍会挂住、`bootHost.dispose` 前的空事务屏障是否还需要（去掉后跑 `search-model` 与 `fetch-remote` 规格即可发现）；`fixtures/host-plane.yml` 里的行名，首次启动的对话框（`browser.ts` 的 locator handler），界面的可访问名称；dsh-TUI 启动器的委托方式（`$DSH_HOME/profiles/dsh-tui` 与 PATH 上的 `dsh`）、欢迎页与跳过设置的文字，以及 TUI 规格停用的 TUI 行名（`tui-*.yml`、`disable-tui-frontend.yml`）。
+15. `pnpm run check` 与 `pnpm run test:e2e` 都通过后，在 CHANGELOG 记下基线变化。
 
 ## 发布与 CI
 

@@ -1,0 +1,6 @@
+- id: web-search-enhanced
+  config:
+    version: 1
+- id: web-fetch-enhanced
+  config:
+    version: 1

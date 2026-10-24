@@ -1,6 +1,6 @@
 {
   "name": "dsh-web-fetch-enhanced",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "web_fetch provider for DeepSeek Harness with switchable fetch connections: local fetching with optional private-network access, the DeepSeek Fetch API, or remote reading services (Exa, Firecrawl, Tavily, Tinyfish); installed through dsh-tool-web-enhanced-profile",
   "keywords": [
     "deepseek-harness",

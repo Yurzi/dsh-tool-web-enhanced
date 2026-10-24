@@ -1,0 +1,15 @@
+# In this deliberately mixed Web/TUI profile, the official Web rows own these shared services.
+- id: dsh-tui-storage
+  disabled: true
+- id: dsh-tui-storage-json
+  disabled: true
+- id: dsh-tui-storage-domain
+  disabled: true
+- id: dsh-tui-workspace
+  disabled: true
+- id: dsh-tui-subagent-model-selection-settings
+  disabled: true
+- id: dsh-tui-cordis-host-runner
+  disabled: true
+- id: dsh-tui-agent-preset-registry
+  disabled: true

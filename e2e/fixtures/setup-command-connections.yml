@@ -1,0 +1,14 @@
+- id: web-search-enhanced
+  config:
+    defaultConnection: builtin:openalex
+    connections:
+      builtin:openalex:
+        disabled: false
+      builtin:exa:
+        disabled: false
+        access: api-key
+      custom:MyEngine:
+        kind: adapter
+        label: My Engine
+        adapter: openalex
+        credentialRef: M6_OPENALEX_KEY

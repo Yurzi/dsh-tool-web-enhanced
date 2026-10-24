@@ -9,7 +9,7 @@ row `web-search-enhanced` and selects its provider in the shared `web` row.
 | Row id | `web-search-enhanced` |
 | Provider id in `ctx.web` | `search-enhanced` |
 | Model surface | DSH's own `web_search` (tool-web), unchanged; with the row's Enhanced tools switch on, also `web_search_enhanced` and `list_web_search_providers` |
-| Per conversation | one connection or Off, from the composer menu or `/setup-search` |
+| Per conversation | one connection or Off, from the composer menu or the Host command `/setup-search` (Web GUI and dsh-TUI) |
 | Settings | row settings page on the Plugins page (`plugins.row.config`) |
 
 ## What it does
@@ -30,6 +30,13 @@ only their error messages are restated.
   queries go to it. DeepSeek Messages (the default) and the conversation model
   stay on; custom connections are on when created. When every remote service
   is off, the composer menu says more services can be turned on in settings.
+- **`/setup-search`.** A Host command, so it works in the Web GUI and in
+  dsh-TUI. `off`, a connection id or `freshness auto|fresh|realtime` change
+  the choice from the next model request; dsh-TUI completes these arguments.
+  Without arguments the Web GUI opens the chooser, and dsh-TUI prints the
+  current choice, routing and the enabled connections (0.16.1 shows only the
+  start of that, as a one-line notice). Its description and output are
+  English.
 - **Enhanced tools (optional).** With the row's Enhanced tools switch on (off
   by default; turning it on agrees that the query goes to the service the
   Agent picks), the Agent also gets `web_search_enhanced` (`queries` plus a

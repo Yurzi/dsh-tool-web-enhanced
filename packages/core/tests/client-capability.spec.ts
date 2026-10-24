@@ -7,9 +7,9 @@ import { clientRoute, type WebSelection } from '../src/client/route.ts'
 import { CredentialStatus } from '../src/client/credentials.ts'
 import { selectionCommand, type CommandOptions } from '../src/client/command.ts'
 
-const keys = { label: 'fetch.label', description: 'fetch.description', placeholder: 'fetch.placeholder', empty: 'fetch.empty', noResults: 'fetch.noResults', readFailed: 'fetch.readFailed', current: 'fetch.current', off: 'fetch.off' } as const
+const keys = { placeholder: 'fetch.placeholder', empty: 'fetch.empty', noResults: 'fetch.noResults', readFailed: 'fetch.readFailed', current: 'fetch.current', off: 'fetch.off' } as const
 const commandSpec = {
-  name: 'setup-fetch', icon: () => null, t: (key: string) => key, keys,
+  name: 'setup-fetch', t: (key: string) => key, keys,
   describe: (connection: SelectionView['connections'][number]) => ({ label: connection.label }),
   groups: (view: SelectionView) => [{ group: { name: 'connections', label: 'Fetch connections' }, connections: view.connections }],
   writeFailureText: () => 'Could not change selection',
@@ -46,7 +46,8 @@ describe('capability-neutral browser state and command', () => {
     const { store, writes } = fixture({})
     const command = selectionCommand(store, commandSpec)
     if (command.ui.kind !== 'popupSelect') throw new Error('popup expected')
-    expect(command.label?.()).toBe('fetch.label')
+    expect(command).toMatchObject({ name: 'setup-fetch', ui: { searchLabels: expect.any(Function) } })
+    expect(command.ui.searchLabels?.()).toEqual({ placeholder: 'fetch.placeholder', empty: 'fetch.empty', noResults: 'fetch.noResults' })
     const options = await command.ui.options(session, new AbortController().signal)
     expect(options.map(option => option.id)).toEqual(['off', 'connection:builtin:local'])
     expect(options[1]).toMatchObject({ active: true, detail: 'fetch.current' })

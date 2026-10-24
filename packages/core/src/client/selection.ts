@@ -101,10 +101,17 @@ export class ConnectionSelectionStore<V extends SelectionView> implements Select
    * read again, the others read on their next load.
    */
   invalidate(): void {
-    for (const entry of this.entries.values()) {
-      this.outdate(entry)
-      if (entry.observers > 0) void this.read(entry)
-    }
+    for (const entry of this.entries.values()) this.reread(entry)
+  }
+
+  /**
+   * The Session's selection changed without this store (its Host command ran):
+   * its views read again, at once when observed, otherwise on their next load.
+   * A read already in flight reads once more.
+   */
+  invalidateSession(sessionId: string): void {
+    const entry = this.entries.get(sessionId)
+    if (entry !== undefined) this.reread(entry)
   }
 
   private entry(sessionId: string): Entry<V> {
@@ -127,6 +134,11 @@ export class ConnectionSelectionStore<V extends SelectionView> implements Select
     }
     this.entries.set(sessionId, entry)
     return entry
+  }
+
+  private reread(entry: Entry<V>): void {
+    this.outdate(entry)
+    if (entry.observers > 0) void this.read(entry)
   }
 
   private outdate(entry: Entry<V>): void {

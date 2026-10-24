@@ -9,7 +9,8 @@ import { selectionRequest, providerRequest, pairingsRequest, forgetPairingReques
 import type { z } from 'zod'
 import type { HostContract } from './capability.ts'
 import type { Pairings } from './pairings.ts'
-import { liveSession, SelectionConflict, type CurrentSelection, type SessionChange, type SessionTarget } from './sessions.ts'
+import { liveSession, type CurrentSelection, type SessionChange, type SessionTarget } from './sessions.ts'
+import { writeSelection } from './selection-write.ts'
 import { sessionOrigin } from './session-origin.ts'
 import { InvalidSettingsError } from './settings-row.ts'
 
@@ -75,19 +76,15 @@ export function createConnectionsService<O extends Record<string, unknown>, V ex
       return boundary('set', async () => {
         const { sessionId, connectionId, options, expectedRevision } = parse(spec.contract.selectionChange, request)
         const target = await this.target(sessionId)
-        if (typeof connectionId === 'string' && !spec.sessions.selectable(connectionId)) {
-          // The capability contributes these names through ConnectionsRemoteErrors<NS>.
-          throw new RemoteError((spec.namespace + '/unavailable') as RemoteErrorCode, 'the connection is missing, disabled or unsupported', { connectionId })
+        const change = { ...options, ...(connectionId === undefined ? {} : { connectionId }) } as SessionChange<O>
+        const result = await writeSelection(spec.sessions, target, change, expectedRevision)
+        if (result.kind === 'unavailable') {
+          throw new RemoteError((spec.namespace + '/unavailable') as RemoteErrorCode, 'the connection is missing, disabled or unsupported', { connectionId: result.connectionId })
         }
-        let current: CurrentSelection<O>
-        try {
-          const change = { ...options, ...(connectionId === undefined ? {} : { connectionId }) } as SessionChange<O>
-          current = await spec.sessions.change(target, change, expectedRevision)
-        } catch (error) {
-          if (error instanceof SelectionConflict) throw new RemoteError((spec.namespace + '/conflict') as RemoteErrorCode, 'the selection changed elsewhere; re-read it and retry', {})
-          throw error
+        if (result.kind === 'conflict') {
+          throw new RemoteError((spec.namespace + '/conflict') as RemoteErrorCode, 'the selection changed elsewhere; re-read it and retry', {})
         }
-        return this.view(target, current)
+        return this.view(target, result.current)
       })
     }
 

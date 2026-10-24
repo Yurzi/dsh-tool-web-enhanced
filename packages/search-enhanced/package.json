@@ -1,6 +1,6 @@
 {
   "name": "dsh-web-search-enhanced",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "web_search provider for DeepSeek Harness with switchable search backends; installed through dsh-tool-web-enhanced-profile",
   "keywords": [
     "deepseek-harness",

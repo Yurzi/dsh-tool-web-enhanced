@@ -9,7 +9,7 @@ import { FETCH, PROFILE_PACKAGE, WEB_ROW, rowConfigKey } from 'dsh-tool-web-enha
 import { contract } from '../contract.ts'
 import type { FetchSettings } from '../settings/types.ts'
 import { fetchCommand } from './command.ts'
-import { CredentialStatus, PairingsStatus, editableSettings, remoteServicesOffSource } from 'dsh-tool-web-enhanced-core/client'
+import { CredentialStatus, PairingsStatus, editableSettings, followHostCommand, remoteServicesOffSource } from 'dsh-tool-web-enhanced-core/client'
 import { CATALOG } from '../catalog.ts'
 import { resolveSettings } from '../settings/resolve.ts'
 import { credentialRefs } from './settings/model.ts'
@@ -100,7 +100,11 @@ export async function apply(ctx: Context): Promise<void> {
       }, 'fetch: composer section')
     })
     scope.inject(['commandUi'], command => {
-      command.effect(() => command.commandUi.register(fetchCommand(selection, t)), 'fetch: /setup-fetch')
+      command.effect(() => command.commandUi.decorate(fetchCommand(selection, t)), 'fetch: /setup-fetch')
+      followHostCommand(command, FETCH.command, sessionId => {
+        selection.invalidateSession(sessionId)
+        pairings.invalidate()
+      })
     })
     const invalidate = () => {
       selection.invalidate()

@@ -1,10 +1,14 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { z } from 'zod'
-import type { ConnectionView, PluginIdentity, SelectionChange } from '../shared/index.ts'
+import type { ConnectionView, Freshness, PluginIdentity, SelectionChange } from '../shared/index.ts'
 import type { CapabilityEnhanced } from './enhanced.ts'
 import type { ConnectionBase } from './selectable.ts'
 import type { SessionModel } from './model.ts'
+
+export interface LabeledConnection extends ConnectionBase {
+  readonly label: string
+}
 
 /** The settings facts used by the selection mechanism; capabilities retain all other fields. */
 export interface CapabilitySettings<C extends ConnectionBase = ConnectionBase> {
@@ -13,7 +17,7 @@ export interface CapabilitySettings<C extends ConnectionBase = ConnectionBase> {
   readonly enhancedTools: boolean
   readonly connections: ReadonlyMap<string, C>
 }
-export type ConnectionOf<S extends CapabilitySettings> = S['connections'] extends ReadonlyMap<string, infer C extends ConnectionBase> ? C : never
+export type ConnectionOf<S extends CapabilitySettings> = NonNullable<ReturnType<S['connections']['get']>>
 
 /** Encodes only capability options, not connectionId, revision or inheritance metadata. */
 export interface OptionsCodec<O extends Record<string, unknown>, S> {
@@ -45,7 +49,7 @@ export type CapabilityInvoke<Q, R> = (request: Q, signal?: AbortSignal) => Promi
  * S is resolved settings, O session options, V the secret-free connection view,
  * T an ephemeral execution target, Q/R the native DSH request/result types.
  */
-export interface Capability<S extends CapabilitySettings, O extends Record<string, unknown>, V extends ConnectionView, T, Q, R> {
+export interface Capability<S extends CapabilitySettings<LabeledConnection>, O extends Record<string, unknown>, V extends ConnectionView, T, Q, R> {
   readonly identity: PluginIdentity
   readonly tool: 'web_search' | 'web_fetch'
   readonly field: 'searchProvider' | 'fetchProvider'
@@ -53,6 +57,10 @@ export interface Capability<S extends CapabilitySettings, O extends Record<strin
   readonly storageDomain: string
   readonly contract: HostContract<O>
   readonly optionsCodec: OptionsCodec<O, S>
+  readonly commandOptions?: {
+    freshness(options: O): Freshness
+    changeFreshness(value: Freshness): Partial<O>
+  }
   /** Resolve the current operator policy; errors must be safe model-facing WebErrors. */
   settings(): S
   /** Describe local readiness without leaking credential references or secrets. */

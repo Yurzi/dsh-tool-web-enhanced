@@ -3,7 +3,7 @@ export type {
 } from './section.ts'
 export { useObservable } from './use-observable.ts'
 export { remoteServicesOffSource } from './remote-services.ts'
-export { selectionCommand, parseSelectionCommandOption, type ClientTranslate, type CommandCopyKey, type CommandDetail, type CommandOptions, type SelectionCommandSpec } from './command.ts'
+export { selectionCommand, followHostCommand, parseSelectionCommandOption, type ClientTranslate, type CommandCopyKey, type CommandDetail, type CommandOptions, type SelectionCommandSpec } from './command.ts'
 export { ConnectionSelectionStore, type SelectionRemote, type CapabilitySelectionUpdate } from './selection.ts'
 export { RouteStatus, clientRoute, type WebSelection, type ProviderRemote } from './route.ts'
 export { PairingsStatus, type PairingsState, type PairingsRemote } from './pairings.ts'

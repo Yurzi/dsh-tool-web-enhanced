@@ -1,0 +1,4 @@
+- id: dsh-tui
+  disabled: true
+- id: dsh-tui-webserver
+  disabled: true
