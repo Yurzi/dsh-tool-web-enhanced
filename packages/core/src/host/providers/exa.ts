@@ -2,6 +2,7 @@
 import type { Freshness } from '../../shared/search.ts'
 import { apiKeyHeader, isRecord, postJson, type KeylessWire } from '../adapter.ts'
 import { toolTexts, type McpToolResult } from '../mcp.ts'
+import { bodyDetail } from '../transport.ts'
 import { MAX_BODY_CHARS, reportedTarget, statusPage, type FetchWire, type PageOutcome } from './fetch.ts'
 import { count, mapRows, MAX_SNIPPET_LENGTH, rowsAt, text, type SearchFailure, type SearchOutcome, type SearchRow, type SearchWire } from './search.ts'
 import { toolRows } from './tool-rows.ts'
@@ -123,7 +124,7 @@ export const exaFetch: KeylessWire<FetchWire> = {
         if (target !== undefined) return { kind: 'page', page: statusPage(target) }
         const tag = status.error.tag
         const failure = tag === 'CRAWL_TIMEOUT' || tag === 'CRAWL_LIVECRAWL_TIMEOUT' ? 'timeout' : 'failed'
-        const detail = [tag, status.error.message].filter(value => typeof value === 'string' && value.trim() !== '').join(': ') || undefined
+        const detail = bodyDetail([tag, status.error.message].filter(value => typeof value === 'string' && value.trim() !== '').join(': '))
         return { kind: 'failure', failure, detail }
       }
     }
@@ -152,7 +153,7 @@ function textPage(content: string): PageOutcome {
 function parseFetchTool(result: McpToolResult): PageOutcome {
   const meta = result['_meta']
   if (isRecord(meta) && meta['ai.exa/rateLimited'] === true) {
-    return { kind: 'failure', failure: 'rate-limited', detail: toolTexts(result).join('\n\n') || undefined }
+    return { kind: 'failure', failure: 'rate-limited', detail: bodyDetail(toolTexts(result).join('\n\n')) }
   }
   const content = result.content
   if (!Array.isArray(content) || content.length > MAX_TOOL_BLOCKS) return { kind: 'failure', failure: 'invalid', detail: undefined }

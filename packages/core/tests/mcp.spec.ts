@@ -205,7 +205,7 @@ describe('MCP failure details through local HTTP', () => {
     }
   })
 
-  it.each(['json', 'sse'] as const)('passes bounded text or whole-withheld tool and RPC explanations via %s', async format => {
+  it.each(['json', 'sse'] as const)('passes complete text or whole-withheld tool and RPC explanations via %s', async format => {
     const payloads = [
       { result: { isError: true, content: [{ type: 'text', text: ' first secret ' }, { type: 'image', text: 'ignored' }, { type: 'text', text: 'second' }] } },
       { error: { code: -32000, message: ' RPC secret ' } },
@@ -233,7 +233,7 @@ describe('MCP failure details through local HTTP', () => {
           url: 'http://127.0.0.1:' + address.port, tool: 'fixture', arguments: {}, handshake: false,
         }, signal, { label: 'Fixture', access: 'api-key', matcher: secretMatcher(['secret']) }))).rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR' })
       }
-      expect(details).toEqual([{ kind: 'withheld' }, { kind: 'withheld' }, undefined, { kind: 'text', text: 'x'.repeat(1999) + '…' }])
+      expect(details).toEqual([{ kind: 'withheld' }, { kind: 'withheld' }, undefined, { kind: 'text', text: 'x'.repeat(2001) }])
     } finally {
       server.closeAllConnections()
       await new Promise<void>((resolve, reject) => server.close(error => { if (error === undefined) resolve(); else reject(error) }))

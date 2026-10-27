@@ -2,7 +2,7 @@ import { WebError } from '@deepseek-ai/dsh-web'
 import { redactDiagnostic, redactJson, secretMatcher, type SecretMatcher } from './redaction.ts'
 import type { CapabilityErrors, OnDiagnostic } from './errors.ts'
 import type { McpClient, McpToolCall, McpToolResult } from './mcp.ts'
-import type { HttpRequest, Transport } from './transport.ts'
+import type { FailureResponse, HttpRequest, Transport, Upstream, UpstreamDetail } from './transport.ts'
 
 export type Auth =
   | { readonly kind: 'keyless' }
@@ -13,9 +13,18 @@ export interface McpRoute<I, O> extends Omit<McpToolCall, 'arguments'> {
   parse(result: McpToolResult, input: I): O
 }
 
+export type FailureVerdict<O> =
+  | { readonly kind: 'status'; readonly detail: UpstreamDetail }
+  | { readonly kind: 'outcome'; readonly outcome: O }
+
+/** The default: generic wording with the generic explanation, as today. */
+export const statusVerdict = <O>(response: FailureResponse): FailureVerdict<O> => ({ kind: 'status', detail: response.explanation })
+
 export interface AdapterWire<I, O> {
   request(input: I, endpoint: string, auth: Auth): HttpRequest
   parse(payload: unknown, input: I): O
+  /** Classify a non-2xx answer on REST routes (api-key and keyless 'rest'); absent means statusVerdict. */
+  parseFailure?(response: FailureResponse, input: I): FailureVerdict<O>
   readonly keyless?: 'rest' | McpRoute<I, O>
 }
 
@@ -35,9 +44,16 @@ export type KeylessWire<W extends AdapterWire<never, unknown>> = KeylessBound<{ 
 export function mapWire<I, A, B>(wire: KeylessWire<AdapterWire<I, A>>, map: (outcome: A) => B): KeylessWire<AdapterWire<I, B>>
 export function mapWire<I, A, B>(wire: AdapterWire<I, A>, map: (outcome: A) => B): AdapterWire<I, B>
 export function mapWire<I, A, B>(wire: AdapterWire<I, A>, map: (outcome: A) => B): AdapterWire<I, B> {
+  const parseFailure = wire.parseFailure === undefined ? undefined : wire.parseFailure.bind(wire)
   const mapped: AdapterWire<I, B> = {
     request: (input, endpoint, auth) => wire.request(input, endpoint, auth),
     parse: (payload, input) => map(wire.parse(payload, input)),
+    ...(parseFailure === undefined ? {} : {
+      parseFailure(response: FailureResponse, input: I): FailureVerdict<B> {
+        const verdict = parseFailure(response, input)
+        return verdict.kind === 'status' ? verdict : { kind: 'outcome', outcome: map(verdict.outcome) }
+      },
+    }),
   }
   const route = wire.keyless
   if (route === undefined) return mapped
@@ -97,7 +113,7 @@ export function runAdapter<I, O>(io: AdapterIO, wire: AdapterWire<I, O>, target:
           return route.parse(result, input)
         }
         const request = wire.request(input, target.endpoint, { kind: 'keyless' })
-        return wire.parse(await io.transport.requestJson(request, deadline, upstream), input)
+        return await runRest(io, wire, request, input, deadline, upstream)
       }
       const stored = storedApiKey(await adapterCredential(io, target.credentialRef, deadline))
       if (stored.kind === 'missing') throw io.errors.error('WEB_PROVIDER_CREDENTIAL_MISSING', io.credentialMissing(target.credentialRef))
@@ -105,15 +121,28 @@ export function runAdapter<I, O>(io: AdapterIO, wire: AdapterWire<I, O>, target:
       matcher = secretMatcher([stored.key])
       const upstream = { label: target.label, access: target.access, onDiagnostic: io.onDiagnostic, matcher }
       const request = wire.request(input, target.endpoint, { kind: 'api-key', key: stored.key })
-      const result = wire.parse(await io.transport.requestJson(request, deadline, upstream), input)
-      // Parsers can turn JSON property names into text (OpenAlex inverted abstracts).
-      return redactJson(result, matcher)
+      return await runRest(io, wire, request, input, deadline, upstream)
     } catch (error) {
       if (error instanceof WebError) throw error
       // Unknown failures reach outer diagnostic callbacks only as safe copies.
       throw redactDiagnostic(error, matcher === undefined ? secretMatcher([]) : matcher)
     }
   })
+}
+
+async function runRest<I, O>(io: AdapterIO, wire: AdapterWire<I, O>, request: HttpRequest, input: I, signal: AbortSignal, upstream: Upstream & { readonly matcher: SecretMatcher }): Promise<O> {
+  const exchange = await io.transport.exchangeJson(request, signal, upstream)
+  if (exchange.kind === 'ok') {
+    // Parsers can turn JSON property names into text (OpenAlex inverted abstracts).
+    return redactJson(wire.parse(exchange.payload, input), upstream.matcher)
+  }
+  const verdict = wire.parseFailure === undefined
+    ? statusVerdict<O>(exchange.response)
+    : wire.parseFailure(exchange.response, input)
+  if (verdict.kind === 'status') throw io.transport.statusFailure(exchange.response.status, upstream, verdict.detail)
+  // Failure explanations have already been screened against the whole body. Other
+  // fields must be trusted tags or redacted JSON values; do not rewrite their tags.
+  return verdict.outcome
 }
 
 async function adapterCredential(io: AdapterIO, ref: string, signal: AbortSignal): Promise<string | undefined> {

@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.1.3 (2026-10-27)
+
+### dsh-tool-web-enhanced-profile 0.1.3
+
+- Mounts dsh-web-search-enhanced 0.2.3, dsh-web-fetch-enhanced 0.2.3 and dsh-tool-web-enhanced-ui 0.1.3; the patch itself is unchanged.
+
+### dsh-tool-web-enhanced-ui 0.1.3
+
+- Released with the profile; no behaviour change of its own.
+
+### dsh-web-search-enhanced 0.2.3
+
+- New: built-in connection `builtin:anysearch` (AnySearch web search over REST, `POST https://api.anysearch.com/v1/search`), listed after Tinyfish and off by default like every remote service. It takes a personal API key only (`ANYSEARCH_API_KEY`, the same credential name as AnySearch's own plugin): the service has an anonymous tier, but this plugin offers no anonymous access, and custom AnySearch connections use a key too. Two connection options, set on the row settings page for built-in and custom connections: `zone` (`cn` or `intl`) and `language` (a language tag such as `zh-CN` or `en`). Up to 10 results; a source's summary is the service's `snippet`, or its `content` when there is none. HTTP 402 gives only the generic HTTP 402 message, the body ignored. Do not install it together with `@anysearch/anysearch-dsh`: that bundle's profile layer writes both fields of the `web` row as `anysearch`, so routing leaves this plugin.
+- Changed: upstream explanations are worded in one place (core `upstreamSuffix`); model-facing text for the existing services is unchanged.
+
+### dsh-web-fetch-enhanced 0.2.3
+
+- New: built-in connection `builtin:anysearch` (AnySearch extract over REST, `POST https://api.anysearch.com/v1/extract`), listed after Tinyfish, off by default, personal API key only (`ANYSEARCH_API_KEY`), without options: the request body is only `{ url }`. Results are text for the requested URL with HTTP 200 (AnySearch reports neither the target status nor a final URL), without the title; a body of 50,000 characters or more is marked truncated, since AnySearch cuts long HTML and plain text there without saying so. Failures are classified by AnySearch's `error_code`, in a 2xx answer or an HTTP 400 or 422: `invalid_extract_url` → `WEB_INVALID_URL`, `extract_target_blocked` → `WEB_BLOCKED_URL` ("… refused to read the URL because the service blocks this target; try another URL or fetch connection"), `extract_unsupported_content` → `WEB_UNSUPPORTED_CONTENT_TYPE` ("… cannot read this content type (for example PDF or other binary files); try another fetch connection"), `extract_content_too_large` → `WEB_FETCH_TOO_LARGE`, `extract_timeout` → `WEB_FETCH_TIMEOUT`; any other 422 → "could not read the page". An HTTP 400 without a known code, 401, 403, 429 and other statuses keep the generic HTTP wording; 402 gives only the generic message, the body ignored. The settings page's service note says what AnySearch receives, what its privacy policy and terms say it keeps, and what it reads. The plugin-page and package descriptions list AnySearch among the remote reading services. The same caution about `@anysearch/anysearch-dsh` applies.
+- Changed: as for search, upstream explanations are worded in one place; model-facing text for the existing services is unchanged.
+
+### dsh-tool-web-enhanced-core (private, not published)
+
+- `./host`: an `AdapterWire` may classify a non-2xx answer on its REST routes with an optional `parseFailure(response, input)` returning a `FailureVerdict`: `status` (the generic wording for the HTTP status, with a given explanation or none) or `outcome` (a service outcome, mapped and worded like a 2xx one); `statusVerdict` (generic wording, generic explanation) is the default. `mapWire` maps outcome verdicts and passes status verdicts through. The transport knows no service: `exchangeJson` returns the redacted 2xx payload or a `FailureResponse` (`status`; `json`, the first 16 KiB parsed with credential-bearing string values redacted, for classification only; the generic `explanation`; `explain(value)`; both explanations are withheld whenever the raw body carries this request's credential), and `statusFailure` gives the generic status wording. `runAdapter` redacts a 2xx outcome after `parse` as before and returns a non-2xx outcome as is.
+- `./host`: upstream explanations in outcomes (`SearchFailure` `api`, `PageOutcome` failures) are `UpstreamDetail`, branded on the text value so only the transport builds them (`bodyDetail` for 2xx bodies, `upstreamDetail`, `FailureResponse`); they keep the whole screened text, and `upstreamSuffix` trims and bounds it to 2000 characters when wording it, withholding any detail without a `text` property.
+- `./host`: `anysearchSearch` and `anysearchFetch`; `SearchInvalidReason` adds `code-number` and `data-results-array`, `PageFailure` adds `blocked` and `unsupported`.
+
+### Development
+
+- Tests: the `enhanced-write-race` e2e spec collects only responses to requests issued after the reload commits. A request of the old document could get its response while that document was torn down, and its body never settled, so the case timed out.
+- Tests: the e2e browser harness no longer counts DSH's `Sidebar Session opening failed: … Session reference "…" is released` console message as a page error. DSH's right Sidebar logs it when a conversation is selected before the previously selected one has finished opening, which made GUI specs that switch conversations right after load (`setup-commands-ui`) fail occasionally; other opening failures are still collected.
+
 ## v0.1.2 (2026-10-24)
 
 ### dsh-tool-web-enhanced-profile 0.1.2

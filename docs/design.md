@@ -25,7 +25,7 @@ flowchart LR
 
 后端有四种：`native`（直接使用 DSH 导出的 provider）、`adapter`（本项目实现的远程服务协议）、`model`（让带服务端搜索的模型搜一次，仅 search）、`local`（本机抓取，仅 fetch）。它们在系统里的位置见[架构](architecture.md)。
 
-### search 目录（9 项）
+### search 目录（10 项）
 
 | 连接 | 种类 | 缺省 | 访问方式 | 说明 |
 | --- | --- | --- | --- | --- |
@@ -36,10 +36,11 @@ flowchart LR
 | `builtin:firecrawl` | adapter | 停用 | keyless（缺省）/ `FIRECRAWL_API_KEY` | 网页搜索，可附抓取的正文 |
 | `builtin:tavily` | adapter | 停用 | keyless（缺省）/ `TAVILY_API_KEY` | 网页搜索 |
 | `builtin:tinyfish` | adapter | 停用 | keyless（缺省）/ `TINYFISH_API_KEY` | 网页、新闻、论文搜索 |
+| `builtin:anysearch` | adapter | 停用 | 仅 API key `ANYSEARCH_API_KEY` | 网页搜索（服务有匿名档，本插件只用个人 key） |
 | `builtin:openalex` | adapter | 停用 | keyless（缺省）/ `OPENALEX_API_KEY` | 学术文献（OpenAlex works） |
 | `builtin:semanticscholar` | adapter | 停用 | 仅 API key `SEMANTIC_SCHOLAR_API_KEY` | 学术文献（Semantic Scholar） |
 
-### fetch 目录（6 项）
+### fetch 目录（7 项）
 
 | 连接 | 种类 | 缺省 | 访问方式 | 说明 |
 | --- | --- | --- | --- | --- |
@@ -49,17 +50,18 @@ flowchart LR
 | `builtin:firecrawl` | adapter | 停用 | keyless（缺省）/ `FIRECRAWL_API_KEY` | Firecrawl scrape |
 | `builtin:tavily` | adapter | 停用 | keyless（缺省）/ `TAVILY_API_KEY` | Tavily extract |
 | `builtin:tinyfish` | adapter | 停用 | 仅 API key `TINYFISH_API_KEY` | Tinyfish fetch（没有有据可查的匿名路由） |
+| `builtin:anysearch` | adapter | 停用 | 仅 API key `ANYSEARCH_API_KEY` | AnySearch extract（服务有匿名档，本插件只用个人 key） |
 
 ### 远程服务缺省停用
 
-上两表“缺省”为停用的是远程服务（目录数据 `optIn`）：search 的六个 adapter 与 `deepseek-search-api`，fetch 的四个 adapter 与 `deepseek-fetch-api`。运维打开某个服务即同意把查询或 URL 发给它；打开后会话选择与 Agent 的增强工具都能用它，不另设“允许 Agent 使用”的标记。保持启用的是两个缺省连接 `builtin:deepseek-messages` 与 `builtin:local`（等同 DSH 原生行为，停用会让开箱即用的搜索与抓取没有连接），以及 `builtin:session-model`（查询发往会话本来就在用的模型服务商，不多出新的接收方）。
+上两表“缺省”为停用的是远程服务（目录数据 `optIn`）：search 的七个 adapter 与 `deepseek-search-api`，fetch 的五个 adapter 与 `deepseek-fetch-api`。运维打开某个服务即同意把查询或 URL 发给它；打开后会话选择与 Agent 的增强工具都能用它，不另设“允许 Agent 使用”的标记。保持启用的是两个缺省连接 `builtin:deepseek-messages` 与 `builtin:local`（等同 DSH 原生行为，停用会让开箱即用的搜索与抓取没有连接），以及 `builtin:session-model`（查询发往会话本来就在用的模型服务商，不多出新的接收方）。
 
 - **解析**：内置连接写了 `disabled` 就用它，没写时取目录缺省（远程服务为停用）；自定义连接（adapter 与 model）没写时为启用，运维新建即可用。Host 与浏览器用同一个解析函数，可选性规则（存在且未停用）不变；Host 从不改写已有文档，设置文法与版本不因此变化。
 - **设置页的启用开关**：显示有效值（覆盖的 `disabled`，没写时取目录缺省），写入按[设置页](#设置页)的开关规则，继承层没写时以目录缺省为准：缺省情形下打开写 `disabled: false`、关闭删除该字段；继承层已写 `disabled: false` 时，关闭写 `disabled: true`。
 - **服务列表顶部**一行“远程服务默认关闭。” / “Remote services are off by default.”；没打开的服务行带“未启用” / “Off”标签。每个服务的接收方仍由它展开面板里的说明写（“搜索查询会发送给 {name}。”、“URL 会发送给 {name}，能否访问目标由对方决定。”），不另加同意语句，也不链接各服务的条款与隐私政策。
 - **菜单底部提示**：某个能力目录里的远程服务（`optIn` 的内置连接）全部停用时，该能力面板的底部显示“更多服务可在设置中打开” / “More services can be turned on in settings”，点击打开设置页。自定义连接不计；行设置还没读到或无效时不显示。
 - **首次启用提示**加一句：“远程服务默认关闭，需要时也在那里打开。” / “Remote services are off by default; turn them on there when you need them.”（接在“连接、密钥和默认值在插件设置里配置”之后，“那里”即插件设置）；只在升级预检没有发现问题时出现，有问题时整段换成预检提示（见[首次启用提示与组合包概览](#首次启用提示与组合包概览)）。
-- 从已发布的 profile 0.1.1 升级时的影响见[从 profile 0.1.1 升级](#从-profile-011-升级)。
+- 从已发布的 profile 0.1.2 升级时的影响见[从 profile 0.1.2 升级](#从-profile-012-升级)。
 
 ### 访问方式与就绪状态
 
@@ -71,7 +73,7 @@ flowchart LR
 
 ### 自定义连接
 
-两侧都可以新建 `kind: adapter` 的自定义连接：选目录里的一个 adapter（search 六项、fetch 四项），配自己的标签、凭据名称、可选的自建端点和参数，总是用 API key。search 另可新建 `kind: model` 的固定模型连接：选三种协议之一，写模型 id、端点与凭据名称（见 [model 后端](#model-后端)）。
+两侧都可以新建 `kind: adapter` 的自定义连接：选目录里的一个 adapter（search 七项、fetch 五项），配自己的标签、凭据名称、可选的自建端点和参数，总是用 API key。search 另可新建 `kind: model` 的固定模型连接：选三种协议之一，写模型 id、端点与凭据名称（见 [model 后端](#model-后端)）。
 
 自建端点、以及固定模型连接，都必须写 `trustedEndpoint: true`：查询与密钥会发往运维给的地址，所以要显式确认。规则见[配置文档](#配置文档)。
 
@@ -206,7 +208,7 @@ Turn off: /setup-fetch off
 1. **路由提示**：`web` 行没有选中本插件时说明原因与恢复方法。
 2. **默认值**：`defaultConnection`（指向不存在的连接时提示）；search 还有新会话的缺省实时性。
 3. **增强工具**：一个开关、说明与同意语句，见[开关与同意](#开关与同意)。
-4. **服务列表**：顶部一行说明远程服务默认关闭；每个目录项一行，启用开关（缺省见[远程服务缺省停用](#远程服务缺省停用)，没打开的带“未启用”标签）；目录同时有 keyless 与 API key 时可切换访问方式；凭据名称与只写的密钥输入；`url` 参数与“信任此地址”开关；其余参数的自动保存表单（boolean 为“默认 / 开 / 关”三态，“默认”即不写）。展开面板写明查询或 URL 会发送给谁；fetch 的四个远程服务另有缓存与数据保留说明。
+4. **服务列表**：顶部一行说明远程服务默认关闭；每个目录项一行，启用开关（缺省见[远程服务缺省停用](#远程服务缺省停用)，没打开的带“未启用”标签）；目录同时有 keyless 与 API key 时可切换访问方式；凭据名称与只写的密钥输入；`url` 参数与“信任此地址”开关；其余参数的自动保存表单（boolean 为“默认 / 开 / 关”三态，“默认”即不写）。展开面板写明查询或 URL 会发送给谁；fetch 的五个远程服务另有缓存与数据保留说明。
 5. **自定义连接**：增删改；每行写明接收方（服务名，自建端点附主机名）。
 6. **模型记忆**：列出并可逐条清除。
 7. **Reset**：确认后清除本行用户层的全部字段；DSH Credentials 里的密钥与会话选择不受影响。
@@ -515,7 +517,7 @@ connections:
 - 原生 provider 读 API 响应不设字节上限，模型可见的输出由 tool-web 的结果数与 `fetchMaxOutputChars`（增强工具用同样的常量）兜底；search 结果与 adapter 一样经来源过滤。
 - 原生 provider 也没有本插件的截止时间：经原生工具时由 tool-web 的工具超时兜底，经增强工具时只有它们的工具超时（search 100 s、fetch 130 s）。
 
-### search 的六个远程服务
+### search 的七个远程服务
 
 都是一次 API 请求（或一次托管 MCP `tools/call`），`redirect: 'error'`，响应至多 2 MiB，整体截止 90 s（含读凭据与 MCP 握手）。结果数取 tool-web 请求的数目，再受服务上限约束。
 
@@ -525,6 +527,7 @@ connections:
 | Firecrawl | POST `api.firecrawl.dev/v2/search`，Bearer | 同端点，不带鉴权 | `country`、`location`、`safe` | ≤ 100 条；实时性非 auto 时附带抓取的 Markdown 作摘要 |
 | Tavily | POST `api.tavily.com/search`，Bearer | 同端点加 `x-tavily-access-mode: keyless` | `search_depth`、`topic` | ≤ 20 条；不要服务生成的答案；`published_date` 是估计值，不报告 |
 | Tinyfish | GET `api.search.tinyfish.ai`，`x-api-key` | 托管 MCP `agent.tinyfish.ai` 的 `search` | `location`、`language`、`purpose`、`domain_type`（research_paper 仅 API key） | 没有数目参数，由 tool-web 截取 |
+| AnySearch | POST `api.anysearch.com/v1/search`，Bearer | 无 | `zone`（`cn` / `intl`）、`language`（如 `zh-CN`、`en`） | ≤ 10 条；摘要取 `snippet`，没有时取 `content`；回复没有日期字段 |
 | OpenAlex | GET `api.openalex.org/works`，key 作查询参数 | 同端点 | `sort`、`filter`、`is_oa`、`mailto` | ≤ 100 条；缺省带一个 polite pool 邮箱；摘要由引用数、作者、开放获取 PDF 与重建的摘要组成 |
 | Semantic Scholar | GET `…/graph/v1/paper/search`，`x-api-key` | 无 | `year`、`fieldsOfStudy`、`publicationTypes` | ≤ 100 条；摘要由 TL;DR、引用数、作者、PDF 与摘要组成 |
 
@@ -542,7 +545,7 @@ search 的会话参数 `freshness` 控制内容缓存的新旧，不是按发布
 
 其他连接不支持，按 `auto` 发送；菜单在这类连接上注明“不支持此偏好”，`/setup-search` 的选择框不列出实时性选项，`/setup-search freshness …` 报错。Firecrawl 抓取缺失时摘要就缺失，不拿旧的 SERP 描述冒充新内容。
 
-### fetch 的四个远程服务
+### fetch 的五个远程服务
 
 URL 原样交给服务（不规范化、不解码），目标能否访问由服务决定，本项目不做地址检查。每个请求先展开参数、再写固定字段，参数改不了 URL 与格式。
 
@@ -552,15 +555,16 @@ URL 原样交给服务（不规范化、不解码），目标能否访问由服�
 | Firecrawl | POST `api.firecrawl.dev/v2/scrape`，Bearer，Markdown | 同端点，不带鉴权 | `onlyMainContent`、`maxAge`、`storeInCache`、`timeout`（1 000–110 000 ms）、`waitFor`、`proxy` |
 | Tavily | POST `api.tavily.com/extract`，Bearer | 同端点加 keyless 头 | `extract_depth`、`format`、`timeout`（1–60 s） |
 | Tinyfish | POST `api.fetch.tinyfish.ai`，`x-api-key`，Markdown | 无 | `ttl`（秒）、`per_url_timeout_ms`（1–110 000） |
+| AnySearch | POST `api.anysearch.com/v1/extract`，Bearer | 无 | 无：请求体只有 `url` 一个字段 |
 
-设置页对每个服务说明缓存与数据去向：Exa 的匿名请求经其托管 MCP 并带本插件名称与版本，内容可能来自缓存；Firecrawl 缺省可能返回 2 天内的缓存并把结果存入其缓存与索引（关掉 `storeInCache` 可避免）；Tavily 声称零数据保留，但隐私政策写保留到提供服务所需的期限；Tinyfish 可能返回缓存，其服务条款允许用这些数据训练模型。
+设置页对每个服务说明缓存与数据去向：Exa 的匿名请求经其托管 MCP 并带本插件名称与版本，内容可能来自缓存；Firecrawl 缺省可能返回 2 天内的缓存并把结果存入其缓存与索引（关掉 `storeInCache` 可避免）；Tavily 声称零数据保留，但隐私政策写保留到提供服务所需的期限；Tinyfish 可能返回缓存，其服务条款允许用这些数据训练模型；AnySearch 的隐私政策称回复后不保存请求与结果，服务条款却写终止服务后仍保留 30 天，API 调用日志保留 12 个月，它不读 PDF 等二进制文件，较长的页面可能在 50 000 字符处截断。
 
 ### 远程抓取的结果映射与上限
 
 - 正文一律是文本（`body.kind: 'text'`，服务给的 Markdown 或纯文本），标题不拼进正文。
-- **状态码**：服务没报告目标状态时，结果是请求的 URL 与 200——兼容映射，与 DSH 的 DeepSeek Fetch API 相同，200 表示“服务取到了页面”。只有服务明确给出的 100–599 整数状态码才成为结果的状态（Firecrawl 的 `metadata.statusCode`、Tinyfish 与 Exa REST 逐 URL 错误里的状态码）：服务说目标回了 404，结果就是 404 加空正文，与 DSH“非 2xx 是结果不是错误”一致；不从文字标签推断状态码。最终 URL 取服务报告的（Firecrawl、Tinyfish），不可用时用请求的 URL。
+- **状态码**：服务没报告目标状态时，结果是请求的 URL 与 200——兼容映射，与 DSH 的 DeepSeek Fetch API 相同，200 表示“服务取到了页面”。只有服务明确给出的 100–599 整数状态码才成为结果的状态（Firecrawl 的 `metadata.statusCode`、Tinyfish 与 Exa REST 逐 URL 错误里的状态码）：服务说目标回了 404，结果就是 404 加空正文，与 DSH“非 2xx 是结果不是错误”一致；不从文字标签推断状态码。最终 URL 取服务报告的（Firecrawl、Tinyfish），不可用时用请求的 URL。AnySearch 既不报告目标状态也不报告最终 URL，结果总是请求的 URL 与 200。
 - **其余逐 URL 失败**按类别给出错误码，见[错误与上游说明](#错误与上游说明)。
-- **上限**：响应至多 5 MB，整体截止 120 s（含凭据、握手与读正文），正文截到 100 000 字符（不切开代理对）并标记 `truncated`；Exa 返回的正文达到请求的字符预算时也视为可能被截断。服务端超时参数的上限都留在 120 s 之内；经原生 `web_fetch` 时 tool-web 缺省 30 s 的工具超时通常先到，经 `web_fetch_enhanced`（130 s）时本插件的截止时间先到。
+- **上限**：响应至多 5 MB，整体截止 120 s（含凭据、握手与读正文），正文截到 100 000 字符（不切开代理对）并标记 `truncated`；Exa 返回的正文达到请求的字符预算时也视为可能被截断；AnySearch 会在 50 000 字符处截断 HTML 与纯文本而不标记，所以它的正文达到 50 000 字符时同样标记 `truncated`。服务端超时参数的上限都留在 120 s 之内；经原生 `web_fetch` 时 tool-web 缺省 30 s 的工具超时通常先到，经 `web_fetch_enhanced`（130 s）时本插件的截止时间先到。
 
 ### fetch local：白名单与提示
 
@@ -672,25 +676,29 @@ adapter、model 与 native 的错误以已有的 `WEB_*` 码和本插件的简�
 | 本会话已关闭该能力 | `WEB_PROVIDER_UNAVAILABLE` |
 | 所选连接已停用或删除；行设置无效；会话模型推导不了 | `WEB_PROVIDER_CONFIGURED_UNAVAILABLE` |
 | 缺少 API key；adapter / model 的 API key 未通过可见 ASCII 校验；model 的账号令牌缺失或畸形（native 的凭据处理沿用 DSH，错误按下文 native 规则重述） | `WEB_PROVIDER_CREDENTIAL_MISSING`（只含凭据名称或提示重新登录） |
-| 服务 HTTP 非 2xx：401/403 按访问方式提示（keyless 建议加个人密钥、账号提示重新登录、API key 提示检查密钥），402、429 与其他状态各有提示 | `WEB_PROVIDER_ERROR` |
+| 服务 HTTP 非 2xx：401/403 按访问方式提示（keyless 建议加个人密钥、账号提示重新登录、API key 提示检查密钥），402、429 与其他状态各有提示；服务模块可以按自己的错误回复另行分类（AnySearch 抓取的 400 / 422，见下表） | `WEB_PROVIDER_ERROR` |
 | 本插件的截止时间到期（search 90 s、fetch 120 s）、响应超过字节上限、读取中断、网络失败或被拒的重定向、非 JSON、回复形状不对 | `WEB_PROVIDER_ERROR`（固定措辞） |
-| search 回复里的 API 错误信封（非 null 的 `error` 或 `success: false`） | `WEB_PROVIDER_ERROR` |
+| search 回复里的 API 错误信封（非 null 的 `error` 或 `success: false`；AnySearch 为 `code` 不等于 0） | `WEB_PROVIDER_ERROR` |
 | 托管 MCP 工具报错 / JSON-RPC 错误 | `WEB_PROVIDER_ERROR` |
 | 选择无法读取、选择存储不可用 | `WEB_PROVIDER_ERROR`（可重试） |
 | 取消 | `WEB_ABORTED` |
 | 其他意外异常，包括凭据服务与账号服务在解析凭据时抛出的任何异常（即使是带 `WEB_*` 码的 `WebError`） | `WEB_PROVIDER_ERROR`（固定措辞）；调用确实已取消时为 `WEB_ABORTED` |
 
-fetch 远程服务在 2xx 回复里报告的逐 URL 失败：
+fetch 远程服务报告的逐 URL 失败（2xx 回复里的，以及 AnySearch 在 HTTP 400 / 422 回复里按 `error_code` 给出的）：
 
 | 类别 | 来自 | 码 |
 | --- | --- | --- |
-| 超时 | Exa `CRAWL_TIMEOUT` / `CRAWL_LIVECRAWL_TIMEOUT`；Tinyfish `timeout` | `WEB_FETCH_TIMEOUT` |
-| 过大 | Tinyfish `content_too_large` | `WEB_FETCH_TOO_LARGE` |
-| URL 无效 | Tinyfish `invalid_url` / `invalid_redirect_url` | `WEB_INVALID_URL` |
+| 超时 | Exa `CRAWL_TIMEOUT` / `CRAWL_LIVECRAWL_TIMEOUT`；Tinyfish `timeout`；AnySearch `extract_timeout` | `WEB_FETCH_TIMEOUT` |
+| 过大 | Tinyfish `content_too_large`；AnySearch `extract_content_too_large` | `WEB_FETCH_TOO_LARGE` |
+| URL 无效 | Tinyfish `invalid_url` / `invalid_redirect_url`；AnySearch `invalid_extract_url` | `WEB_INVALID_URL` |
+| 目标被服务拒绝 | AnySearch `extract_target_blocked` | `WEB_BLOCKED_URL` |
+| 内容类型不支持 | AnySearch `extract_unsupported_content` | `WEB_UNSUPPORTED_CONTENT_TYPE` |
 | 无内容 | 无结果或正文为空；Exa 匿名的 “No content found…” | `WEB_PROVIDER_ERROR` |
 | 匿名限流 | Exa 托管 MCP 的限流标记 | `WEB_PROVIDER_ERROR`，建议稍后重试或加个人密钥 |
-| 失败 | Firecrawl `success: false`、Tavily `failed_results` 及其余错误标签 | `WEB_PROVIDER_ERROR` |
+| 失败 | Firecrawl `success: false`、Tavily `failed_results` 及其余错误标签；AnySearch 其余 `code` 不等于 0 的回复，以及没有已知 `error_code` 的 HTTP 422 | `WEB_PROVIDER_ERROR` |
 | 形状不对 | 不符合服务文档的回复 | `WEB_PROVIDER_ERROR` |
+
+AnySearch 的 `error_code` 只有 `invalid_extract_url` 有文档，其余几项取自 AnySearch 官方 DSH 插件的源码；`extract_canceled` 归为“失败”，因为只有本次调用的 signal 真的取消才报 `WEB_ABORTED`。没有已知 `error_code` 的 HTTP 400，以及 401、403、429 等其余状态（即使带着 `error_code`），都用通用的 HTTP 状态措辞与通用说明。HTTP 402 在 search 与 fetch 都只给通用的 402 措辞，回复内容整段忽略：匿名调用方超额时，402 回复里带着服务自动生成的账号与 key。
 
 fetch `local`：DSH 官方传输抛出的 `WebError` 原样交给模型（它们本就是 DSH 给模型的消息）；本插件自行生成的错误统一带 `dsh-web-fetch-enhanced: ` 前缀，包括白名单拒绝、DNS 校验与解析失败、取消、兜底失败及规则校验。白名单之外的目标报 `WEB_BLOCKED_URL`（请运维检查白名单）；DNS 失败报 `WEB_PROVIDER_ERROR`。
 
@@ -702,19 +710,19 @@ native：按 DSH 的错误码给本插件的短消息，未知码一律 `WEB_PRO
 
 | 入口 | 说明取自 |
 | --- | --- |
-| HTTP 非 2xx（adapter 与 model） | 错误体前 16 384 字节：JSON 依次取第一个非空字符串的 `error`、`error.message`、`message`、`detail`，否则用原文 |
-| fetch 的逐 URL 失败 | Exa 的 `tag` 与 `message`、Firecrawl 的 `error`、Tavily `failed_results[0].error`、Tinyfish 的 `message` / `code` / `error`、Exa 限流结果的工具文本 |
-| search 的 API 错误信封 | `error`、`error.message`、`message` |
+| HTTP 非 2xx（adapter 与 model） | 错误体前 16 384 字节：JSON 依次取第一个非空字符串的 `error`、`error.message`、`message`、`detail`，否则用原文。adapter 的服务模块可以另选说明或不附说明：AnySearch 抓取分出类别的 400 / 422 取 `message`，AnySearch 的 402 不附 |
+| fetch 的逐 URL 失败 | Exa 的 `tag` 与 `message`、Firecrawl 的 `error`、Tavily `failed_results[0].error`、Tinyfish 的 `message` / `code` / `error`、AnySearch 的 `message`、Exa 限流结果的工具文本 |
+| search 的 API 错误信封 | `error`、`error.message`、`message`（AnySearch 为 `message`） |
 | MCP 工具报错 / JSON-RPC 错误 | 工具的文本块 / `error.message` |
 | native | DSH 消息的第一段（第一个空行之前，即上游的报告）；之后 DSH 为它自己内置行写的设置指引不带 |
 
-不附带说明的情形：缺 key 或 key 畸形、取消、本插件的截止时间与字节上限、网络失败、回复形状不对、意外异常。说明至多 2000 字符（超出以 “…” 结尾，不切开代理对）。说明与抓到的正文一样是数据，本插件不按其中的端点或指示做任何事。
+不附带说明的情形：缺 key 或 key 畸形、取消、本插件的截止时间与字节上限、网络失败、回复形状不对、意外异常，以及 AnySearch 的 HTTP 402。说明至多 2000 字符（超出以 “…” 结尾，不切开代理对）。说明与抓到的正文一样是数据，本插件不按其中的端点或指示做任何事。
 
 ### 凭据隐去
 
 本插件让本次请求交给上游的 API key 或账号令牌不进入给模型的内容（core `redaction.ts`）；检测的边界见[已知限制](#已知限制)：
 
-- **错误文字**（HTTP 错误体、MCP 错误、native 的 DSH 原文）检出凭据——完整或任意 8 字符片段，含一层 JSON 转义后的形式——即整段不附带，换成 “<label>'s response was withheld because it contained this request's credential.”（native 为 “DeepSeek's response …”）。错误体在 16 KiB 处截断时，先去掉末尾的凭据前缀残片。
+- **错误文字**（HTTP 错误体、MCP 错误、native 的 DSH 原文）检出凭据——完整或任意 8 字符片段，含一层 JSON 转义后的形式——即整段不附带，换成 “<label>'s response was withheld because it contained this request's credential.”（native 为 “DeepSeek's response …”）。判定针对整段错误体：服务模块从错误体里另选的说明（如 AnySearch 的 `message`），只要错误体的任何地方含本次凭据就同样扣下。错误体在 16 KiB 处截断时，先去掉末尾的凭据前缀残片。服务模块用来分类的错误体 JSON 先把凭据替换为 `[redacted]`；凭据恰好含 `error_code` 的片段时分类落回通用一类（AnySearch 的 400 为通用 HTTP 400 措辞，422 为 “could not read the page”），说明照样扣下。
 - **成功体**（含其中的逐 URL 失败说明与 search 信封、model 回答、抓到的页面、MCP 结果、native 结果）里的凭据替换为 `[redacted]`，其余原样。adapter 在服务解析后再次处理结果，覆盖从 JSON 键名还原出的文本（如 OpenAlex 倒排摘要）。
 - **Host 日志**：后端调用的诊断只以 debug 级的去敏副本记录，见 [Host 日志](#host-日志)。
 - **凭据解析失败**：adapter 与 model 后端向 DSH Credentials 或账号服务取凭据时，依赖抛出的任何异常都不可信——它可能在还没有可识别的凭据时就带着密钥原文，即使它是 `WebError`、带着像样的 `WEB_*` 码。这类异常一律按“其他意外异常”给出固定措辞，Host 日志只记固定诊断；只有调用确实已取消时报 `WEB_ABORTED`。
@@ -731,13 +739,12 @@ Host 日志分两层，按是否可能经手本次请求的凭据区分：
 
 菜单、`/setup-*` 的选择框与设置页经 `searchConnections` / `fetchConnections` 读写选择（带参数的 Host 命令不经它们，错误是命令输出里的固定英文，见 [/setup-search 与 /setup-fetch](#setup-search-与-setup-fetch)）：行设置无效报 `<ns>/invalid-settings`，选择已在别处改变报 `<ns>/conflict`，连接缺失或停用报 `<ns>/unavailable`，请求不合契约报 `gateway/bad-request`；会话不存在等 DSH 解析会话时的错误原样交出（如 `session/not-found`）；其余异常一律 `gateway/internal` 加固定消息，原始异常以 warn 级只进 Host 日志。
 
-## 从 profile 0.1.1 升级
+## 从 profile 0.1.2 升级
 
-从已发布的 profile 0.1.1（search 0.2.1、fetch 0.2.1、ui 0.1.1）升级时，设置文法与版本、会话选择、模型记忆与对话 provider 列表的存储都不变，已有文档与记录照常读取，没有 Breaking 变化。行为上的变化：
+从已发布的 profile 0.1.2（search 0.2.2、fetch 0.2.2、ui 0.1.2）升级时，设置文法与版本、会话选择、模型记忆与对话 provider 列表的存储都不变，已有文档与记录照常读取，没有 Breaking 变化。行为上的变化：
 
-- [子 Agent 的会话](#子-agent-的会话)可以在菜单里改选择，无论它是否在运行；这类会话里的选择不写模型记忆。
-- [`/setup-search` 与 `/setup-fetch`](#setup-search-与-setup-fetch) 改为 Host 命令：Web 里不带参数仍弹原来的选择框，斜杠菜单里这一行改为英文说明，也可以带参数直接执行；dsh-TUI 里可用，并有参数补全。Web 的子 Agent 会话视图里没有这两个命令，输入框菜单照常。
-- search 的 `no-model` 状态改为“还不知道本会话下一次请求用哪个模型”。
+- search 与 fetch 各多一个内置连接 `builtin:anysearch`（见 [search 的七个远程服务](#search-的七个远程服务)与 [fetch 的五个远程服务](#fetch-的五个远程服务)）：只用个人 API key `ANYSEARCH_API_KEY`，和其他远程服务一样[缺省停用](#远程服务缺省停用)，不在设置页打开就没有任何变化。不要与 AnySearch 官方的 `@anysearch/anysearch-dsh` 一起装（见[已知限制](#已知限制)）。
+- 现有服务给模型的文字与错误码不变。
 
 ## 从 0.1.x 升级
 
@@ -766,7 +773,7 @@ Host 日志分两层，按是否可能经手本次请求的凭据区分：
 每条先写限制：用户能观察到的现象、影响范围与可行的变通；再写原因：上游行为、设计取舍或技术约束。上游的版本未另写时即本项目的 DSH 基线 `0.2.1-rc.2`。
 
 - **`web` 行可被更晚的层覆盖**
-  - 限制：其他 bundle 或用户层改写 `web` 行会压过 profile 的选择（只写一个字段时另一个也丢失），本插件随之收不到流量。路由提示与升级预检会说明；本插件不做运行时自我修复。
+  - 限制：其他 bundle 或用户层改写 `web` 行会压过 profile 的选择（只写一个字段时另一个也丢失），本插件随之收不到流量。例如 AnySearch 官方的 `@anysearch/anysearch-dsh` 的 profile 层把两个字段都写成 `anysearch`，不要与本组合包一起装。路由提示与升级预检会说明；本插件不做运行时自我修复。
   - 原因：DSH 的层叠语义：更晚的层覆盖更早的层，patch 整体替换目标行的 `config`、不做深合并（见[架构 · 组合](architecture.md#组合profile-patch)）。本仓库只有 profile 的 patch 写 `web` 行；更晚的层改写它也是退出本组合包的正常途径，所以不自我修复。
 - **升级预检看不到停用的 `web-search-deepseek` 行上的覆盖**
   - 限制：预检无法提示把该行上的 `baseURL`、`model` 等覆盖迁到 `builtin:deepseek-messages` 的参数；要保留它们，按[从 0.1.x 升级](#从-01x-升级)的人工清单在升级前记下、升级后在设置页重新录入。
@@ -796,10 +803,10 @@ Host 日志分两层，按是否可能经手本次请求的凭据区分：
   - 限制：`web_search_20260318` 缺省经代码执行调用搜索，不支持程序化工具调用的模型会被拒（HTTP 400）；把 `allowedCallers` 设为 `direct`，或选较旧的工具版本。跟随 DeepSeek 路由时缺省是 `web_search_20250305`，不受影响。
   - 原因：缺省跟随厂商当前的 API 标准（见[三种协议的缺省](#三种协议的缺省)），Messages 的缺省工具因此是 `web_search_20260318`；它缺省经代码执行调用，是上游 Anthropic Messages API 对这一工具版本的规定。
 - **匿名路由有缺口**
-  - 限制：部分服务没有匿名路由，或匿名时少几项参数与实时性（见[search 目录](#search-目录9-项)、[fetch 目录](#fetch-目录6-项)与[实时性](#实时性)）；需要时改用个人密钥。
-  - 原因：上游服务的匿名接口本身如此（例如 Semantic Scholar 与 Tinyfish 抓取只有 API key 路由，Tinyfish 没有有据可查的匿名抓取路由；Exa 的实时性只在 API key 路由上生效）；目录只写核实过的访问方式与参数。
+  - 限制：部分服务没有匿名路由，或匿名时少几项参数与实时性（见[search 目录](#search-目录10-项)、[fetch 目录](#fetch-目录7-项)与[实时性](#实时性)）；需要时改用个人密钥。
+  - 原因：上游服务的匿名接口本身如此（例如 Semantic Scholar 与 Tinyfish 抓取只有 API key 路由，Tinyfish 没有有据可查的匿名抓取路由；Exa 的实时性只在 API key 路由上生效）；目录只写核实过的访问方式与参数。AnySearch 有匿名档，但免费账号注册即可用，本插件只提供个人 key（见[候选](plan.md#候选与待定)）。
 - **远程服务的行为由服务决定**
-  - 限制：有些情形没有真实样本，例如 Firecrawl 可能对目标 404 / 503 统一返回 HTTP 500，这时报 provider 错误而不是 404 结果；服务改了字段或错误形状时报“形状不对”，不猜测。
+  - 限制：有些情形没有真实样本，例如 Firecrawl 可能对目标 404 / 503 统一返回 HTTP 500，这时报 provider 错误而不是 404 结果；AnySearch 抓取的错误码大多没有文档（见[错误码](#错误码)），它也不报告目标状态，目标回了 404 看不出来；服务改了字段或错误形状时报“形状不对”，不猜测。
   - 原因：请求形状与结果映射依据服务的公开文档；只有服务明确给出的状态码才成为结果的状态，不从文字标签推断（见[远程抓取的结果映射与上限](#远程抓取的结果映射与上限)）。
 - **native 随 DSH 变化**
   - 限制：native 连接的行为与上限跟着 DSH 的原生 provider 走，包括“不限 API 响应字节”的上限策略；给模型的上游说明只取 DSH 消息的第一段，依赖 DSH 的消息布局。

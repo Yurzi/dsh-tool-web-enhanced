@@ -18,6 +18,28 @@ export interface Upstream {
   readonly onDiagnostic?: OnDiagnostic | undefined
 }
 
+declare const screened: unique symbol
+type Screened = string & { readonly [screened]: true }
+
+/** Upstream text cleared for model-facing errors; only transport builds it. */
+export type UpstreamText = { readonly kind: 'text'; readonly text: Screened }
+export type UpstreamDetail = UpstreamText | { readonly kind: 'withheld' } | undefined
+
+/** A non-2xx answer: its first 16 KiB, screened against this request's credential. */
+export interface FailureResponse {
+  readonly status: number
+  /** The bounded body parsed as JSON with credential-bearing string values redacted; undefined when empty, cut off or not JSON. For classification only. */
+  readonly json: unknown
+  /** The first non-empty error, error.message, message, detail, else the raw text. */
+  readonly explanation: UpstreamDetail
+  /** A selected explanation; withheld whenever the body carries this request's credential. */
+  explain(value: unknown): UpstreamDetail
+}
+
+export type HttpExchange =
+  | { readonly kind: 'ok'; readonly payload: unknown }
+  | { readonly kind: 'failure'; readonly response: FailureResponse }
+
 export interface TransportMessages {
   readonly timedOut: string
   readonly unreachable: (label: string) => string
@@ -52,9 +74,11 @@ export function createTransport(errors: CapabilityErrors, { timeoutMs, maxRespon
     }
   }
 
-  async function send(request: HttpRequest, signal: AbortSignal, upstream: Upstream): Promise<Response> {
+  async function exchangeResponse(request: HttpRequest, signal: AbortSignal, upstream: Upstream, matcher: SecretMatcher): Promise<
+    | { readonly kind: 'ok'; readonly response: Response }
+    | { readonly kind: 'failure'; readonly response: FailureResponse }
+  > {
     throwIfAborted(signal)
-    const matcher = upstream.matcher === undefined ? secretMatcher([]) : upstream.matcher
     let response: Response
     try {
       response = await fetch(request.url, {
@@ -69,14 +93,22 @@ export function createTransport(errors: CapabilityErrors, { timeoutMs, maxRespon
       throwIfAborted(signal)
       throw capabilityError('WEB_PROVIDER_ERROR', messages.unreachable(upstream.label))
     }
-    if (!response.ok) {
-      const failure = statusError(response.status, upstream)
-      const body = await readFailureText(response, signal, upstream, matcher)
-      const detail = failureExplanation(body.text, matcher, body.truncated)
-      if (detail === undefined) throw failure
-      throw new WebError(failure.message + upstreamSuffix(upstream.label, detail), failure.code)
-    }
-    return response
+    if (response.ok) return { kind: 'ok', response }
+    const body = await readFailureText(response, signal, upstream, matcher)
+    return { kind: 'failure', response: failureResponse(response.status, body.text, matcher, body.truncated) }
+  }
+
+  async function send(request: HttpRequest, signal: AbortSignal, upstream: Upstream): Promise<Response> {
+    const matcher = upstream.matcher === undefined ? secretMatcher([]) : upstream.matcher
+    const exchange = await exchangeResponse(request, signal, upstream, matcher)
+    if (exchange.kind === 'failure') throw statusFailure(exchange.response.status, upstream, exchange.response.explanation)
+    return exchange.response
+  }
+
+  function statusFailure(status: number, upstream: Upstream, detail: UpstreamDetail): WebError {
+    const failure = statusError(status, upstream)
+    if (detail === undefined) return failure
+    return new WebError(failure.message + upstreamSuffix(upstream.label, detail), failure.code)
   }
 
   function statusError(status: number, { label, access }: Upstream): WebError {
@@ -192,10 +224,18 @@ export function createTransport(errors: CapabilityErrors, { timeoutMs, maxRespon
     return payload
   }
 
-  async function requestJson(request: HttpRequest, signal: AbortSignal, upstream: Upstream): Promise<unknown> {
+  async function exchangeJson(request: HttpRequest, signal: AbortSignal, upstream: Upstream): Promise<HttpExchange> {
     const matcher = upstream.matcher === undefined ? secretMatcher([]) : upstream.matcher
-    const payload = await readJson(await send(request, signal, { ...upstream, matcher }), signal, upstream.onDiagnostic, matcher)
-    return redactJson(payload, matcher)
+    const exchange = await exchangeResponse(request, signal, upstream, matcher)
+    if (exchange.kind === 'failure') return exchange
+    const payload = await readJson(exchange.response, signal, upstream.onDiagnostic, matcher)
+    return { kind: 'ok', payload: redactJson(payload, matcher) }
+  }
+
+  async function requestJson(request: HttpRequest, signal: AbortSignal, upstream: Upstream): Promise<unknown> {
+    const exchange = await exchangeJson(request, signal, upstream)
+    if (exchange.kind === 'failure') throw statusFailure(exchange.response.status, upstream, exchange.response.explanation)
+    return exchange.payload
   }
 
   function invalidResponse(detail: string): WebError {
@@ -205,7 +245,7 @@ export function createTransport(errors: CapabilityErrors, { timeoutMs, maxRespon
   const tooLarge = (): WebError => capabilityError('WEB_PROVIDER_ERROR', messages.tooLarge)
   const brokenResponse = (): WebError => capabilityError('WEB_PROVIDER_ERROR', messages.brokenResponse)
 
-  return { withDeadline, send, discard, readText, readJson, requestJson, invalidResponse }
+  return { withDeadline, send, discard, readText, readJson, requestJson, exchangeJson, statusFailure, invalidResponse }
 }
 
 /** Normalize untrusted service text before including it in a model-facing failure. */
@@ -218,19 +258,29 @@ export function upstreamText(value: string): string | undefined {
   return text.slice(0, boundary) + '…'
 }
 
-export type UpstreamDetail = { readonly kind: 'text'; readonly text: string } | { readonly kind: 'withheld' } | undefined
+function screenedText(value: string): UpstreamText | undefined {
+  return value.trim() === '' ? undefined : { kind: 'text', text: value as Screened }
+}
+
+/** Text from a successful body, already redacted by transport: uncut, never withheld. */
+export function bodyDetail(value: unknown): UpstreamDetail {
+  return typeof value === 'string' ? screenedText(value) : undefined
+}
 
 /** Sensitive raw explanations are withheld, not precisely edited. */
 export function upstreamDetail(value: string, matcher: SecretMatcher, truncated = false): UpstreamDetail {
   if (containsSecret(value, matcher)) return { kind: 'withheld' }
-  const text = upstreamText(truncated ? stripPrefix(value, matcher) : value)
-  return text === undefined ? undefined : { kind: 'text', text }
+  return screenedText(truncated ? stripPrefix(value, matcher) : value)
 }
 
 export function upstreamSuffix(label: string, detail: UpstreamDetail): string {
   if (detail === undefined) return ''
-  if (detail.kind === 'withheld') return '\n\n' + label + "'s response was withheld because it contained this request's credential."
-  return '\n\n' + label + ' responded (untrusted): ' + detail.text
+  // Redaction can rewrite discriminant values, but never property names; withheld has no text property.
+  if ('text' in detail) {
+    const text = upstreamText(detail.text)
+    return text === undefined ? '' : '\n\n' + label + ' responded (untrusted): ' + text
+  }
+  return '\n\n' + label + "'s response was withheld because it contained this request's credential."
 }
 
 function stripPrefix(text: string, matcher: SecretMatcher): string {
@@ -240,9 +290,31 @@ function stripPrefix(text: string, matcher: SecretMatcher): string {
   return text
 }
 
-function failureExplanation(body: string, matcher: SecretMatcher, truncated: boolean): UpstreamDetail {
+function failureResponse(status: number, body: string, matcher: SecretMatcher, truncated: boolean): FailureResponse {
   // Detect before removing a tail so an intact eight-character match cannot be destroyed.
-  if (containsSecret(body, matcher)) return { kind: 'withheld' }
+  const sensitive = containsSecret(body, matcher)
+  const json = truncated ? undefined : redactJson(failureJson(body), matcher)
+  return {
+    status, json,
+    explanation: failureExplanation(body, matcher, truncated, sensitive),
+    explain(value) {
+      if (sensitive) return { kind: 'withheld' }
+      return typeof value === 'string' ? upstreamDetail(value, matcher) : undefined
+    },
+  }
+}
+
+function failureJson(body: string): unknown {
+  try {
+    return JSON.parse(body) as unknown
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) throw error
+    return undefined
+  }
+}
+
+function failureExplanation(body: string, matcher: SecretMatcher, truncated: boolean, sensitive: boolean): UpstreamDetail {
+  if (sensitive) return { kind: 'withheld' }
   const text = truncated ? stripPrefix(body, matcher) : body
   let payload: unknown
   try {

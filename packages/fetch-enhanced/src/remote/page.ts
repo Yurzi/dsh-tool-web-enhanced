@@ -1,13 +1,12 @@
 import { WebError, type WebFetchRequest, type WebFetchResult } from '@deepseek-ai/dsh-web'
-import { MAX_BODY_CHARS, upstreamText, type Page, type PageFailure } from 'dsh-tool-web-enhanced-core/host'
+import { MAX_BODY_CHARS, upstreamSuffix, type Page, type PageFailure, type UpstreamDetail } from 'dsh-tool-web-enhanced-core/host'
 import { fetchError } from './errors.ts'
 
 /** The capability-owned error followed by the service's bounded explanation, if present. */
-export function pageFailure(label: string, failure: PageFailure, detail: string | undefined): WebError {
+export function pageFailure(label: string, failure: PageFailure, detail: UpstreamDetail): WebError {
   const error = pageError(label, failure)
-  const explanation = detail === undefined ? undefined : upstreamText(detail)
-  if (explanation === undefined) return error
-  return new WebError(error.message + '\n\n' + label + ' responded (untrusted): ' + explanation, error.code)
+  if (detail === undefined) return error
+  return new WebError(error.message + upstreamSuffix(label, detail), error.code)
 }
 
 function pageError(label: string, failure: PageFailure): WebError {
@@ -16,6 +15,8 @@ function pageError(label: string, failure: PageFailure): WebError {
     case 'timeout': return fetchError('WEB_FETCH_TIMEOUT', label + ' timed out reading the page; retry later or choose another fetch connection')
     case 'too-large': return fetchError('WEB_FETCH_TOO_LARGE', 'the page is too large for ' + label + '; fetch a more specific URL')
     case 'invalid-url': return fetchError('WEB_INVALID_URL', label + ' refused the URL as invalid or not allowed; check the URL')
+    case 'blocked': return fetchError('WEB_BLOCKED_URL', label + ' refused to read the URL because the service blocks this target; try another URL or fetch connection')
+    case 'unsupported': return fetchError('WEB_UNSUPPORTED_CONTENT_TYPE', label + ' cannot read this content type (for example PDF or other binary files); try another fetch connection')
     case 'empty': return fetchError('WEB_PROVIDER_ERROR', label + ' found no readable content at the URL; try another URL or fetch connection')
     case 'rate-limited': return fetchError('WEB_PROVIDER_ERROR', label + ' is rate limiting anonymous requests; retry later or ask the user to add a personal API key in fetch connection settings')
     case 'failed': return fetchError('WEB_PROVIDER_ERROR', label + ' could not read the page; retry later or choose another fetch connection')

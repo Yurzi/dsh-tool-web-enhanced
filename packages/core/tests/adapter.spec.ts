@@ -3,8 +3,8 @@ import { once } from 'node:events'
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { WebError } from '@deepseek-ai/dsh-web'
 import {
-  adapterTarget, apiKeyHeader, bearer, capabilityErrors, createMcpClient, createTransport, getJson, isRecord, mapWire, postJson, runAdapter,
-  type AdapterIO, type AdapterTarget, type AdapterWire, type KeylessBound, type McpRoute,
+  adapterTarget, apiKeyHeader, bearer, capabilityErrors, createMcpClient, createTransport, getJson, isRecord, mapWire, postJson, runAdapter, bodyDetail, statusVerdict,
+  type AdapterIO, type AdapterTarget, type AdapterWire, type KeylessBound, type McpRoute, type FailureResponse, type FailureVerdict, type UpstreamDetail,
 } from '../src/host/index.ts'
 
 afterEach(() => { vi.useRealTimers() })
@@ -314,6 +314,125 @@ describe('adapter through a real remote API', () => {
     await expect(pending).rejects.toMatchObject({ message: 'Adapter credential resolution failed' })
     await expect(pending).rejects.not.toHaveProperty('cause')
     await expect(pending).rejects.not.toHaveProperty('stack', expect.stringContaining('private credential'))
+  })
+})
+
+describe('REST failure classification', () => {
+  it.each(['failure', 'withheld', 'unsupported'])('preserves trusted failure-verdict labels when the key matches %s', async key => {
+    const server = await localServer((_req, res) => {
+      res.writeHead(422)
+      res.end(JSON.stringify({ message: 'safe', other: key }))
+    })
+    type Failure = { readonly kind: 'failure'; readonly failure: 'unsupported'; readonly detail: UpstreamDetail }
+    let outcome: Failure | undefined
+    const wire: AdapterWire<Input, Failure> = {
+      request: (input, endpoint, auth) => WIRE.request(input, endpoint, auth),
+      parse() { throw new Error('success parser must not run') },
+      parseFailure(response) {
+        outcome = { kind: 'failure', failure: 'unsupported', detail: response.explain('safe') }
+        return { kind: 'outcome', outcome }
+      },
+    }
+    try {
+      const result = await runAdapter(fixture(async () => key), wire, personal(server.url), INPUT, undefined)
+      expect(result).toBe(outcome)
+      expect(result).toStrictEqual({ kind: 'failure', failure: 'unsupported', detail: { kind: 'withheld' } })
+    } finally { await server.close() }
+  })
+
+  it.each(['api-key', 'keyless'] as const)('returns a failure outcome built from screened JSON on the %s route', async access => {
+    const key = 'fixture-private-key'
+    const server = await localServer((_req, res) => { res.writeHead(400); res.end(JSON.stringify({ category: key })) })
+    let credentialReads = 0
+    const io = fixture(async () => { credentialReads++; return key })
+    let outcome: Output | undefined
+    const received: { response: FailureResponse; input: Input }[] = []
+    const wire: AdapterWire<Input, Output> = {
+      ...WIRE,
+      parseFailure(response, input) {
+        received.push({ response, input })
+        if (!isRecord(response.json) || typeof response.json.category !== 'string') throw new Error('expected screened category')
+        outcome = { value: response.json.category, input: input.value }
+        return { kind: 'outcome', outcome }
+      },
+    }
+    try {
+      const target: AdapterTarget = access === 'api-key' ? personal(server.url) : { access, label: 'Fixture', endpoint: server.url }
+      const result = await runAdapter(io, wire, target, INPUT, undefined)
+      expect(result).toBe(outcome)
+      expect(result).toEqual({ value: access === 'api-key' ? '[redacted]' : key, input: INPUT.value })
+      expect(received).toHaveLength(1)
+      expect(received[0]!.input).toBe(INPUT)
+      expect(received[0]!.response).toMatchObject({ status: 400, json: { category: access === 'api-key' ? '[redacted]' : key } })
+      expect(credentialReads).toBe(access === 'api-key' ? 1 : 0)
+    } finally { await server.close() }
+  })
+
+  it.each(['api-key', 'keyless'] as const)('uses exactly the generic message when the %s hook omits detail', async access => {
+    const server = await localServer((_req, res) => { res.writeHead(400); res.end('must not be shown') })
+    const wire: AdapterWire<Input, Output> = { ...WIRE, parseFailure: () => ({ kind: 'status', detail: undefined }) }
+    try {
+      const target: AdapterTarget = access === 'api-key' ? personal(server.url) : { access, label: 'Fixture', endpoint: server.url }
+      await expect(runAdapter(fixture(async () => 'fixture-key'), wire, target, INPUT, undefined)).rejects.toMatchObject({
+        code: 'WEB_PROVIDER_ERROR', message: 'fixture: Fixture failed (HTTP 400); retry later or choose another connection',
+      })
+    } finally { await server.close() }
+  })
+
+  it('withholds a service-selected explanation when another error field echoes the key', async () => {
+    const key = 'fixture-private-key'
+    const server = await localServer((_req, res) => { res.writeHead(400); res.end(JSON.stringify({ message: 'safe', other: key })) })
+    let detail: UpstreamDetail
+    const wire: AdapterWire<Input, Output> = {
+      ...WIRE,
+      parseFailure(response) {
+        detail = response.explain(isRecord(response.json) ? response.json.message : undefined)
+        return { kind: 'status', detail }
+      },
+    }
+    try {
+      await expect(runAdapter(fixture(async () => key), wire, personal(server.url), INPUT, undefined)).rejects.toMatchObject({
+        code: 'WEB_PROVIDER_ERROR',
+        message: "fixture: Fixture failed (HTTP 400); retry later or choose another connection\n\nFixture's response was withheld because it contained this request's credential.",
+      })
+      expect(detail).toEqual({ kind: 'withheld' })
+    } finally { await server.close() }
+  })
+})
+
+describe('failure verdict mapping', () => {
+  const response: FailureResponse = {
+    status: 400, json: { message: 'safe' }, explanation: bodyDetail('safe'), explain: bodyDetail,
+  }
+
+  it('defaults to status wording with the generic explanation', () => {
+    expect(statusVerdict(response)).toEqual({ kind: 'status', detail: response.explanation })
+  })
+
+  it('maps outcome verdicts exactly once with the original response and input', () => {
+    const outcome: Output = { value: 'classified', input: INPUT.value }
+    const parseFailure = vi.fn((_response: FailureResponse, _input: Input): FailureVerdict<Output> => ({ kind: 'outcome', outcome }))
+    const map = vi.fn((result: Output) => result.value)
+    const mapped = mapWire({ ...WIRE, parseFailure }, map)
+    if (mapped.parseFailure === undefined) throw new Error('expected failure hook')
+    expect(mapped.parseFailure(response, INPUT)).toEqual({ kind: 'outcome', outcome: 'classified' })
+    expect(parseFailure).toHaveBeenCalledExactlyOnceWith(response, INPUT)
+    expect(map).toHaveBeenCalledExactlyOnceWith(outcome)
+  })
+
+  it('preserves status verdict identity without mapping', () => {
+    const verdict: FailureVerdict<Output> = { kind: 'status', detail: response.explanation }
+    const map = vi.fn((result: Output) => result.value)
+    const mapped = mapWire({ ...WIRE, parseFailure: () => verdict }, map)
+    if (mapped.parseFailure === undefined) throw new Error('expected failure hook')
+    expect(mapped.parseFailure(response, INPUT)).toBe(verdict)
+    expect(map).not.toHaveBeenCalled()
+  })
+
+  it('does not add an absent failure hook', () => {
+    const mapped = mapWire(WIRE, result => result.value)
+    expect('parseFailure' in mapped).toBe(false)
+    expect('parseFailure' in WIRE).toBe(false)
   })
 })
 

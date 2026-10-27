@@ -8,6 +8,7 @@
       builtin:firecrawl: { disabled: false }
       builtin:tavily: { disabled: false }
       builtin:tinyfish: { disabled: false }
+      builtin:anysearch: { disabled: false }
       builtin:deepseek-fetch-api: { disabled: false }
       builtin:local:
         options:

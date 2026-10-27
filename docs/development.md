@@ -50,7 +50,7 @@ export PNPM_HOME=$PWD/.pnpm-home \
 | 设置文档（字段、连接形状、预算、版本、标签单行化） | 文法：core `shared/settings.ts`；插件派生：`<pkg>/src/settings/resolve.ts`、`types.ts`、`retired.ts`；Host 行：core `host/settings-row.ts`；浏览器：core `client/settings/document.ts`、`sparse.ts` | core `settings-grammar`、`settings-migration`、`settings-labels`、`client-document`、`client-sparse`、`client-migration`；插件 `settings`、`client-settings` |
 | 目录（连接项、参数规则、默认值、`optIn`、`use`） | `<pkg>/src/catalog.ts`；文案在 `<pkg>/src/client/locales.ts`；`optIn` 的解析在 core `shared/settings.ts`，开关的分层稀疏写入在 core `client/settings/`，菜单底部提示的事实在 core `client/remote-services.ts` | 插件 `catalog`、`settings`、`client-settings*`；core `settings-grammar`、`settings-optin`、`client-optin`、`client-sparse` |
 | 某个远程服务的请求与解析 | core `host/providers/<服务>.ts`；绑定在 search `src/search/adapters/index.ts`、fetch `src/remote/adapters/index.ts` | search `adapters`、`mcp`、`adapter-result`；fetch `adapter-<键>`、`remote-page`；core `providers-search`、`providers-fetch`。一个模块同时有两侧 wire 时两侧都要绿 |
-| adapter 骨架、MCP 客户端、有界传输、去敏 | core `host/adapter.ts`、`mcp.ts`、`transport.ts`、`redaction.ts`、`providers/search.ts`、`providers/fetch.ts`；各能力的上限与传输文案在 search `src/search/http.ts`、fetch `src/remote/http.ts` | core `adapter`、`mcp`、`transport`、`redaction`；search `transport`、`adapters`、`mcp`；fetch `remote-execute`、`composition` |
+| adapter 骨架、MCP 客户端、有界传输、去敏 | core `host/adapter.ts`、`mcp.ts`、`transport.ts`、`redaction.ts`、`providers/search.ts`、`providers/fetch.ts`；各能力的上限与传输文案在 search `src/search/http.ts`、fetch `src/remote/http.ts` | core `adapter`、`mcp`、`transport`、`redaction`、`upstream-detail-types`；search `transport`、`adapters`、`mcp`、`adapter-result`；fetch `remote-execute`、`remote-page`、`composition` |
 | native 后端 | `<pkg>/src/backends/*`；core `host/native.ts`（`restateNative`、`nativeBackend`）、`host/credentials.ts`（`nativeAuth`） | 两侧与 core 的 `native` |
 | 凭据解析的异常边界 | adapter：core `host/adapter.ts`（`runAdapter` 读凭据处）；native：core `host/credentials.ts`（`nativeAuth`）；model：search `src/model/execute.ts`（API key 与账号令牌）。依赖抛出的异常一律换成固定文本，只按真实的取消信号报 `WEB_ABORTED` | core `adapter`；search `model-execute`、`enhanced-credentials`；fetch `remote-execute`、`enhanced-credentials` |
 | search 的 model 后端 | search `src/model/*`；协议表 `MODEL_PROTOCOLS` 在 `src/catalog.ts`；会话模型的读取在 core `host/model.ts` | `model-protocols`、`model-route`、`model-execute`、`client-settings-model`，加 `host`、`agent`、`settings` |
@@ -81,12 +81,28 @@ export PNPM_HOME=$PWD/.pnpm-home \
 服务的协议（请求、信封、字段与语义）只写在 core `host/providers/<服务>.ts`，每个能力一个命名导出的 `AdapterWire`（`<服务>Search`、`<服务>Fetch`）。另一侧已有该服务时在同一模块里加导出；两个 wire 各自是独立的对象字面量，不合成服务对象、不在模块顶层执行工厂——否则只用一侧的插件会把另一侧的解析打进产物。
 
 1. **目录**：在插件 `src/catalog.ts` 加一条 Descriptor（`label`、`kind: 'adapter'`、`remote`、`optIn: true`（远程服务缺省停用）、`endpoint`、`homepage`、`access`、`options`，需要时加 `use`（见[在列出工具里出现](#在列出工具里出现)）；search 另有 `freshness`），位置即显示顺序；把键加进 `ADAPTER_KEYS`。keyless 不接受的参数写 `keyless: false`，只接受部分枚举值写 `keyless: [...]`；只写核实过的访问方式。fetch 的服务端超时类参数上限留在 `TIMEOUT_MS` 之内。
-2. **wire**：在 core 模块导出 `request` / `parse`（目录标为 keyless 时声明为 `KeylessWire<…>` 并提供 `keyless: 'rest'` 或一个 `McpRoute`），在 `host/index.ts` 加命名导出。请求用 `postJson` / `getJson` 与 `bearer` / `apiKeyHeader`，URL 原样发送。`parse` 不抛、不写措辞：
-   - search 返回未规范化的 `SearchRow`（`providers/search.ts` 的 `envelope` / `rowsAt` / `mapRows`），畸形响应返回 `invalid` 与一个 `SearchInvalidReason`，新形状在这个闭合集合里加一项；
-   - fetch 返回 `PageOutcome`：服务报告目标状态与最终 URL 时用 `reportedTarget`，对单个 URL 的失败给出目标 HTTP 状态时用 `statusPage`，服务的失败文字放进失败分支的 `detail`，形状不符一律 `invalid`；不从文字标签猜状态码。解析要有界：先限长，再逐行推进，不对整段正文跑多行正则。
+2. **wire**：在 core 模块导出 `request` / `parse`，需要时加 `parseFailure`（目录标为 keyless 时声明为 `KeylessWire<…>` 并提供 `keyless: 'rest'` 或一个 `McpRoute`），在 `host/index.ts` 加命名导出。请求用 `postJson` / `getJson` 与 `bearer` / `apiKeyHeader`，URL 原样发送。`parse` 不抛、不写措辞：
+   - search 返回未规范化的 `SearchRow`（`providers/search.ts` 的 `envelope` / `rowsAt` / `mapRows`），畸形响应返回 `invalid` 与一个 `SearchInvalidReason`，新形状在这个闭合集合里加一项；API 错误的说明经 `bodyDetail` 放进 `api` 分支的 `detail`；
+   - fetch 返回 `PageOutcome`：服务报告目标状态与最终 URL 时用 `reportedTarget`，对单个 URL 的失败给出目标 HTTP 状态时用 `statusPage`，服务的失败文字经 `bodyDetail` 放进失败分支的 `detail`，形状不符一律 `invalid`；新的失败类别在 `PageFailure` 里加一项，并在 `src/remote/page.ts` 的 `pageError` 写措辞；不从文字标签猜状态码。解析要有界：先限长，再逐行推进，不对整段正文跑多行正则。
+
+   `parseFailure(response, input)` 解析非 2xx 回复（只在 REST 路由上调用；没写时等于 `statusVerdict`，即通用措辞加通用说明），返回 `FailureVerdict`：`{ kind: 'status', detail }`（该状态的通用措辞，`detail` 为 `undefined` 即不附说明）或 `{ kind: 'outcome', outcome }`（与 2xx 的 outcome 同样映射与措辞）。编写规则：
+   - **什么时候写**：服务的错误回复里有会改变 Agent 下一步的分类（URL 无效、内容类型不支持、目标被拒），或者有不应给模型看的内容（如 AnySearch 402 回复里生成的账号与 key）。
+   - **怎么分类**：只看 `status` 和 `json`。说明只能经 `response.explain(…)` 或 `response.explanation` 得到，或者干脆不附（`undefined`）；不要把 `json` 里的字符串放进 outcome 的其他字段。`json` 只去敏字符串值、不去敏属性名，两段各自不足 8 字符的片段拼起来也可能还原出凭据，所以也不要把 `json` 的属性名或字符串片段拼进 outcome。
+   - **401、403、429 交给通用措辞**：通用措辞会按访问方式分别提示加 key、检查 key 或稍后重试。
+   - **函数必须覆盖所有情形**：认不出的情形返回 `statusVerdict(response)`。
+   - **禁止的做法**：不产生 `WEB_ABORTED`（只有本次调用的 signal 真的取消了才是），不重试，不读响应头。
+   - **以后的扩展**：要按响应头分类时，在 `FailureResponse` 上加具名的只读字段（比如 `retryAfter`），不暴露 `Response` 对象。MCP 路由或 model 协议要做失败分类时，复用 `FailureResponse` 和 `FailureVerdict`。
+
+   说明的类型 `UpstreamDetail` 带品牌，只能由 core 的 `bodyDetail`、`upstreamDetail` 与 `FailureResponse` 产生；不要用类型断言造它。`bodyDetail` 只用于 2xx 正文（已去敏，不扣下），不能拿它包装 `FailureResponse.json` 里的字符串来绕开 `explain`。
 3. **绑定**：search 在 `src/search/adapters/index.ts` 的 `ADAPTER_WIRES` 登记 `<键>: mapWire(<服务>Search, searchSources)`，新 reason 的文案写进 `src/search/adapter-result.ts` 的 `INVALID_DETAIL`；fetch 在 `src/remote/adapters/index.ts` 直接登记 `<键>: <服务>Fetch`。两处都用 `satisfies` 按目录事实检查，目录标为 keyless 而缺 keyless 路由即编译失败。
 4. **文案**：`client/settings/model.ts` 的 `OPTION_COPY`（fetch 另有 `SERVICE_NOTES`：只写核实过的缓存与保留说明）与 `locales.ts` 的对应键；“查询 / URL 会发送给 <服务>”由 core 按 `remote: true` 自动显示。
-5. **测试**：search 在 `adapters.spec.ts`（MCP 路由在 `mcp.spec.ts`）经 `ADAPTER_WIRES` 同时覆盖 wire 与 `searchSources`，新服务的畸形响应在 `adapter-result.spec.ts` 的表里加一行；fetch 在 `adapter-<键>.spec.ts` 直接导入 core 的 `<服务>Fetch`。都用本地 HTTP 服务充当远程 API，覆盖请求形状、响应映射、keyless 不发送密钥、错误改写（服务给了说明时断言“短消息 + `<label> responded (untrusted): …`”，没有说明时断言消息逐字不变）。传输边界（重定向拒绝、字节上限、截止时间、取消、凭据缺失与非法）只在 core 与执行层各测一次，不在 adapter 测试里复制。
+5. **测试**：search 在 `adapters.spec.ts`（MCP 路由在 `mcp.spec.ts`）经 `ADAPTER_WIRES` 同时覆盖 wire 与 `searchSources`，新服务的畸形响应在 `adapter-result.spec.ts` 的表里加一行；fetch 在 `adapter-<键>.spec.ts` 直接导入 core 的 `<服务>Fetch`。都用本地 HTTP 服务充当远程 API，覆盖请求形状、响应映射、keyless 不发送密钥、错误改写（服务给了说明时断言“短消息 + `<label> responded (untrusted): …`”，没有说明时断言消息逐字不变）。写了 `parseFailure` 时，同样用本地 HTTP 服务加真实的 transport 与 `runAdapter`（fetch 经 `createRemoteBackend`，自定义连接的运维标签不同于服务名）覆盖：
+   - `parseFailure` 的表格：每个分出的类别及其错误码与措辞；认不出的状态与码回到通用措辞；401、403、429（带着服务的错误码时也是）走通用措辞；不附说明的情形断言消息恰好是通用短消息；
+   - 错误体回显本次凭据时说明被扣下（不论服务选的是哪个字段）；
+   - 凭据恰好命中可信标签（如 key 含 `failure`、`unsupported` 或 `withheld`）时，分类不被改写，或按规则落回通用一类，且不进诊断；
+   - core 的 `providers-search.spec.ts` / `providers-fetch.spec.ts` 另对 wire 直接测 `parseFailure` 的表格。
+
+   传输边界（重定向拒绝、字节上限、截止时间、取消、凭据缺失与非法）只在 core 与执行层各测一次，不在 adapter 测试里复制。
 
 ### native 后端
 
@@ -119,7 +135,7 @@ export PNPM_HOME=$PWD/.pnpm-home \
 
 ### 新的鉴权方式
 
-上游说明与诊断的去敏只认得交给它的凭据（core `host/redaction.ts`）。加新的请求头或令牌种类时，把这次请求实际发送的凭据放进 `Upstream.matcher`（`secretMatcher([凭据])`；adapter 在 `runAdapter`，model 后端在 `src/model/execute.ts`）；`native` 经调用级的 `nativeAuth(ctx, ref, secrets)` 记录交给 DSH 的凭据。漏交的凭据不会被去除。adapter 的服务解析结果也在 `runAdapter` 返回前去敏，不能只处理原始 JSON 的字符串值：OpenAlex 等协议会把属性名还原成正文。回归测试应经真实执行层覆盖这种形状。后端不自己拼上游文字，附带说明由 core 统一生成。
+上游说明与诊断的去敏只认得交给它的凭据（core `host/redaction.ts`）。加新的请求头或令牌种类时，把这次请求实际发送的凭据放进 `Upstream.matcher`（`secretMatcher([凭据])`；adapter 在 `runAdapter`，model 后端在 `src/model/execute.ts`）；`native` 经调用级的 `nativeAuth(ctx, ref, secrets)` 记录交给 DSH 的凭据。漏交的凭据不会被去除。adapter 的 2xx 解析结果也在 `runAdapter` 返回前整体去敏，不能只处理原始 JSON 的字符串值：OpenAlex 等协议会把属性名还原成正文；非 2xx 交给 `parseFailure` 的 `json` 在传输里先去敏，说明按整段原始回复筛查，outcome 不再二次处理。回归测试应经真实执行层覆盖这种形状。后端不自己拼上游文字，附带说明由 core 的 `upstreamSuffix` 统一生成。
 
 新的日志按两层写（规则见[功能设计 · Host 日志](design.md#host-日志)）：可能经手本次请求凭据的后端把失败交给执行层的 `onDiagnostic`，只以 debug 级记 `redactDiagnostic` 的去敏副本；控制面（Remote、Host 命令、行设置、存储、可见性与捕获，从不经手请求凭据）用 `ctx.logger.warn('… %s', error)` 连同原始错误记录，调用方只得到固定措辞。
 
@@ -188,7 +204,8 @@ export PNPM_HOME=$PWD/.pnpm-home \
 - Host 命令：Host 一侧直接 `ctx.commands.execute(agent, '/setup-search …', …)`，与 Remote `get` 对照（`setup-commands.e2e.ts`）。Web 里带参数执行前先跑一轮回环对话：还没有对话的新会话里，DSH 的空会话首页盖住命令卡。斜杠菜单行按 Host 命令名定位（它没有本地化标题），选择框的选项照常用 `en` 字典的值。要看浏览器与 Host 之间的往来时，给 `openApp` 的第四个参数传观察者，在导航前挂上请求与 WebSocket 帧的监听。
 - dsh-TUI：在没有 TTY 的环境里，`harness/terminal.ts` 经 Python 标准库 `pty`（`terminal-pty.py`）启动正式的 `dsh-tui` 入口（`bin/dsh-tui.js`），按输出事件等待文字，不用 sleep；结束时把纯文本与 ANSI 原文存进 `.e2e/artifacts` 与评审目录。dsh-TUI 0.16.1 把 Host 命令的输出压成一行、至多 200 个字符的通知，所以 TUI 屏幕上只断言可见的摘要与路由片段（以及一句话的写入结果），完整文案由真实 `CommandRuntime` 逐字断言（core `host-command*` 与 e2e `setup-commands`）。TUI 用自己的 profile `dsh-tui`，链为 dsh-base → dsh-tui → 本 bundle（`createBaseProfile` 后改 `dsh.profile.bundles`，dsh-tui 以符号链接指向仓库安装的 devDependency，不另装一份）；把 `dsh` 的 PATH 指向隔离的 DSH 安装，启动器据此委托 `dsh --profile dsh-tui`；HOME 与 DSH_HOME 已由隔离环境指进 `.e2e/run`，`~/.dsh` 与 `~/.dsh-tui` 都不碰；启动器检查 npm 更新的请求也指向回环。**不要把 TUI bundle 叠进 Web profile 再启动 TUI**：DSH 的 typert 等行在 TUI 的根能力守卫下激活失败（`dsh-tui: root.effect is unavailable from a plugin activation`）。只做服务级组合检查（真实 `tuiCommandTrees` 里的补全树）时，才在 Web profile 里叠入 TUI bundle 并只经 `bootHost` 启动，停用与 Web 重复的 TUI 服务行和 TUI 前端行（`tui-web-composition.yml`、`disable-tui-frontend.yml`）。
 - 驱动真实 Agent 调用工具时用 `startAgentModelApi`：回环的 Messages SSE 第一步发出给定的工具调用，之后给出回答；只看请求的规格用 `startTextModelApi`。评审用的截图经 `harness/review.ts` 另存到 `.e2e/review/<日期-主题>/`，不被全局准备清空。要拍运行中的工具行时把 Work details 切到 Compact（DSH 缺省的 Detailed 平铺运行中的工具、没有分组标题），用传输闸门（deferred promise）停在运行中；要拍首次启用提示时 `openApp` 的第三个参数传 `'keep'`（不自动关掉它）。
-- 截图在断言之前保存。产物都在 `.e2e/artifacts`：`web.log`、`<name>.png`、`<spec>-failure.json` / `.png` / `.aria.txt`、`fetch-remote-wire-*.json`、`search-model-wire-*.json`、`search-model-host.log`、`m6-setup-ui-wire-*.txt`、`m6-tui-*.txt` / `.ansi.txt`、`m6-tui-service-evidence.json` 等。
+- 跨 reload 收集 HTTP 响应时，只收 reload 提交（main frame 的 `framenavigated`）之后发出的请求：旧文档的请求可能恰在文档拆除时收到响应头，之后它的 body 永不 settle 或报 navigated away，`Promise.all` 就会挂到用例超时（`enhanced-write-race.e2e.ts`）。WebSocket 帧从建连起照常收集。
+- 截图在断言之前保存。产物都在 `.e2e/artifacts`：`web.log`、`<name>.png`、`<spec>-failure.json` / `.png` / `.aria.txt`、`fetch-remote-wire-*.json`、`search-model-wire-*.json`、`search-model-host.log`、`m6-setup-ui-wire-*.txt`、`m6-tui-*.txt` / `.ansi.txt`、`m6-tui-service-evidence.json`、`m7-anysearch-wire.json` / `m7-anysearch-model-wire.json` 等。
 
 ### 常见失败与排查
 
@@ -197,6 +214,7 @@ export PNPM_HOME=$PWD/.pnpm-home \
 | Chromium 启动失败，提示 SingletonSocket / socket 路径过长 | Linux 的 Unix socket 路径上限 108 字节，仓库路径较长时 `.e2e/run` 下的任何目录都放不下 | `openApp` 给 Chromium 一个 `/tmp/dsh-e2e-*` 短临时目录作 `TMPDIR`，浏览器关闭时删除；仍报错时检查是否有别的代码改了 Chromium 的 `TMPDIR` |
 | 进程内 Host 加载了工作区的插件而不是 profile 里装的 | pnpm 的 vitest shim 把工作区放进 `NODE_PATH`，Node 的全局查找路径让它优先 | 全局准备删除 `NODE_PATH`、worker 带 `--no-global-search-paths`；自己起子进程也加上，不要绕开 harness 直接调 vitest 二进制 |
 | GUI 规格偶发找不到元素、工作区选择器被打断、会话草稿串了，或目录选择框的 Edit path 超时 | 共用 home 的规格会恢复彼此的草稿与布局；同一 home 多次重启 GUI 留下状态 | 改用 `isolatedContext` 的独立 home；不要在共享 harness 里再加 locator handler（Playwright 在 handler 内不运行其他 handler，会与欢迎对话框冲突） |
+| `errors` 里出现 “Sidebar Session opening failed: Error: Session reference "…" is released” | DSH 右侧栏在上一个会话还没打开完就切走时，把自己释放引用的取消当作错误打印（ui-sidebar-right 的 `session-view.ts`），页面本身没有出错 | `openApp` 已不把这一条计入 `errors`；其他打开失败的原因不同，照常收集。规格不要为此加等待或另行过滤 |
 | `DSH_E2E_INSTALL=… holds no @deepseek-ai/dsh` 或 “has DSH x; the e2e suite targets y” | 指定的安装不存在或版本不符 | 指向正确版本，或取消该变量 |
 | `dsh web printed no launch URL in 90 s` | GUI 没起来 | 看 `.e2e/artifacts/web.log` |
 | 无外网时 pnpm 命令挂起不返回 | 本机 pnpm 与根 `packageManager` 的版本不同时，pnpm 会去下载指定版本；`pnpm install` 还要访问 registry | 设 `npm_config_manage_package_manager_versions=false`，安装用 `pnpm install --offline`（依赖已在 store 里时） |

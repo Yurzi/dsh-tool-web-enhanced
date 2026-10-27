@@ -21,7 +21,7 @@ const tinyfishKey = credentials.credentialRef('TINYFISH_API_KEY')
 const customKey = credentials.credentialRef(remoteFetchFixture.credentialRef)
 const loopbackOverlay = join(import.meta.dirname, 'fixtures/fetch-remote-loopback.yml')
 const notice = 'authorized web_fetch to reach non-public addresses within [127.0.0.1/32]'
-const services = ['Exa', 'Firecrawl', 'Tavily', 'Tinyfish'] as const
+const services = ['Exa', 'Firecrawl', 'Tavily', 'Tinyfish', 'AnySearch'] as const
 
 describe.skipIf(chromiumPath === undefined && !browserRequired)('Remote fetch connections in the real GUI', () => {
   let server: WebServer | undefined
@@ -90,6 +90,9 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Remote fetch co
     const tinyfish = fetch.getByRole('menuitemradio', { name: /^Tinyfish(?: |$)/ })
     expect(await tinyfish.getAttribute('aria-checked')).toBe('false')
     await tinyfish.getByText(fetchText['status.needsCredential'].replace('{name}', 'Tinyfish'), { exact: true }).waitFor()
+    const anysearch = fetch.getByRole('menuitemradio', { name: /^AnySearch(?: |$)/ })
+    expect(await anysearch.getAttribute('aria-checked')).toBe('false')
+    await anysearch.getByText(fetchText['status.needsCredential'].replace('{name}', 'AnySearch'), { exact: true }).waitFor()
     await app.screenshot('fetch-remote-menu-readiness')
     await fetch.getByRole('menuitemradio', { name: /^Firecrawl(?: |$)/ }).click()
     await menu.waitFor({ state: 'hidden' })
@@ -116,7 +119,9 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Remote fetch co
       const { ctx } = host
       const selected = await ctx.fetchConnections.get({ sessionId })
       expect(selected).toMatchObject({ selection: { connectionId: 'builtin:firecrawl', revision: 1 }, source: 'session' })
-      expect(selected.connections.find(connection => connection.id === 'builtin:tinyfish')).toMatchObject({ status: 'needs-credential', access: 'api-key' })
+      for (const id of ['tinyfish', 'anysearch']) {
+        expect(selected.connections.find(connection => connection.id === 'builtin:' + id)).toMatchObject({ status: 'needs-credential', access: 'api-key' })
+      }
       for (const id of ['exa', 'firecrawl', 'tavily']) {
         expect(selected.connections.find(connection => connection.id === 'builtin:' + id)).toMatchObject({ status: 'ready', access: 'keyless' })
       }

@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "增强网页获取",
-    "description": "用你选择的网页获取连接提供 web_fetch：本机获取（可选内网放行规则）、DeepSeek Fetch API，或远程读取服务（Exa、Firecrawl、Tavily、Tinyfish）。"
+    "description": "用你选择的网页获取连接提供 web_fetch：本机获取（可选内网放行规则）、DeepSeek Fetch API，或远程读取服务（Exa、Firecrawl、Tavily、Tinyfish、AnySearch）。"
   }
 }

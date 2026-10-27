@@ -39,12 +39,24 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Cross-section s
     const frames: string[] = []
     const responses: { url: string; status: number; body: string }[] = []
     const bodies: Promise<void>[] = []
+    // A response from the old document can arrive during reload without its body
+    // ever settling. Collect only requests issued after the new document commits.
+    const page = app.page
+    let reloading = false
+    let reloaded = false
+    const current = new WeakSet<object>()
+    page.on('framenavigated', frame => {
+      if (reloading && frame === page.mainFrame()) reloaded = true
+    })
+    page.on('request', request => { if (reloaded) current.add(request) })
     app.page.on('response', response => {
+      if (!current.has(response.request())) return
       if (response.request().resourceType() !== 'fetch' || !response.headers()['content-type']?.includes('application/json')) return
       bodies.push(response.text().then(body => { responses.push({ url: response.url(), status: response.status(), body }) }))
     })
     app.page.on('websocket', socket => socket.on('framereceived', frame => { frames.push(String(frame.payload)) }))
     // Capture the public transport from connection establishment, not a private client service.
+    reloading = true
     await app.page.reload()
     const settings = await openFetchSettings(app.page, false)
     const switches = settings.getByRole('switch', { name: first, exact: true })

@@ -25,6 +25,7 @@ it('names who receives the URL, by hostname for an operator endpoint', () => {
     'builtin:firecrawl': { use: undefined, recipient: { kind: 'service', service: 'Firecrawl', host: undefined } },
     'builtin:tavily': { use: undefined, recipient: { kind: 'service', service: 'Tavily', host: undefined } },
     'builtin:tinyfish': { use: undefined, recipient: { kind: 'service', service: 'Tinyfish', host: undefined } },
+    'builtin:anysearch': { use: undefined, recipient: { kind: 'service', service: 'AnySearch', host: undefined } },
     'custom:docs': { use: undefined, recipient: { kind: 'service', service: 'Tinyfish', host: 'fetch.docs.example' } },
     'custom:mirror': { use: undefined, recipient: { kind: 'service', service: 'Exa', host: undefined } },
   })

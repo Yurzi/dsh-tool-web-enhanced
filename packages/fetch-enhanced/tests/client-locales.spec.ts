@@ -32,6 +32,11 @@ const copy = {
   'allowlist.description': ['列表为空时，直连只能访问公网地址。设置了代理时，域名由代理解析，公网限制和这里的规则都管不到它们。', 'With an empty list, direct connections reach public addresses only. With a proxy, hostnames are resolved by the proxy, and neither that limit nor these rules apply to them.'],
   'option.local.userAgentHint': ['留空会发送空的 User-Agent；点“恢复默认 User-Agent”改回默认值。', 'Leaving it empty sends an empty User-Agent. Use "Restore User-Agent" to go back to the default.'],
   'settings.unsupported': ['无法读取这些设置，可能来自 0.1.x 或更新的版本。请在下方恢复默认设置，或升级插件。', "These settings can't be read. They may be from 0.1.x or a newer version. Restore the defaults below, or upgrade the plugin."],
+  // docs/orchestration-prompt.md, "浏览器文案": verbatim, from the AnySearch privacy policy and terms as read on 2026-10-26.
+  'services.note.anysearch': [
+    'AnySearch 会收到 URL 和读到的页面内容。它的隐私政策称回复后不保存请求与结果，但服务条款写的是终止服务后仍保留 30 天；API 调用日志保留 12 个月。它读取 HTML、纯文本、JSON 与 Markdown，不读 PDF 等二进制文件，较长的页面可能在 50 000 字符处截断。',
+    'AnySearch sees the URL and the page it reads. Its privacy policy says it does not store requests or results once it has responded, but its terms of service say they are kept for 30 days after the service ends; API call logs are kept for 12 months. It reads HTML, plain text, JSON and Markdown, not PDF or other binary files, and may cut long pages at 50,000 characters.',
+  ],
 } satisfies Partial<Record<LocaleKey, readonly [string, string]>>
 
 describe('fetch browser copy', () => {
@@ -52,18 +57,19 @@ describe('fetch browser copy', () => {
     for (const dictionary of [zh, en]) expect(text(dictionary)).not.toMatch(/web_search|web_fetch|profile|配置包|抓取/)
   })
   it.each([
-    ['zh', '增强网页获取', '用你选择的网页获取连接提供 web_fetch：本机获取（可选内网放行规则）、DeepSeek Fetch API，或远程读取服务（Exa、Firecrawl、Tavily、Tinyfish）。'],
-    ['en', 'Web Fetch Enhanced', 'Serves web_fetch from the fetch connection you choose: local fetching (with optional private-network rules), the DeepSeek Fetch API, or remote reading services (Exa, Firecrawl, Tavily, Tinyfish).'],
+    ['zh', '增强网页获取', '用你选择的网页获取连接提供 web_fetch：本机获取（可选内网放行规则）、DeepSeek Fetch API，或远程读取服务（Exa、Firecrawl、Tavily、Tinyfish、AnySearch）。'],
+    ['en', 'Web Fetch Enhanced', 'Serves web_fetch from the fetch connection you choose: local fetching (with optional private-network rules), the DeepSeek Fetch API, or remote reading services (Exa, Firecrawl, Tavily, Tinyfish, AnySearch).'],
   ])('names every kind of connection in the %s Plugins-page metadata', (language, title, description) => {
     const metadata: unknown = JSON.parse(readFileSync(new URL('../locale/' + language + '.json', import.meta.url), 'utf8'))
     expect(metadata).toEqual({ meta: { title, description } })
   })
   it('describes the package with every kind of connection', () => {
     const manifest: unknown = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
-    expect(manifest).toHaveProperty('description', 'web_fetch provider for DeepSeek Harness with switchable fetch connections: local fetching with optional private-network access, the DeepSeek Fetch API, or remote reading services (Exa, Firecrawl, Tavily, Tinyfish); installed through dsh-tool-web-enhanced-profile')
+    expect(manifest).toHaveProperty('description', 'web_fetch provider for DeepSeek Harness with switchable fetch connections: local fetching with optional private-network access, the DeepSeek Fetch API, or remote reading services (Exa, Firecrawl, Tavily, Tinyfish, AnySearch); installed through dsh-tool-web-enhanced-profile')
   })
   it('has a plain note for every remote adapter service', () => {
     for (const key of ADAPTER_KEYS) expect(SERVICE_NOTES).toHaveProperty(key)
+    expect(SERVICE_NOTES).toHaveProperty('anysearch', 'services.note.anysearch')
   })
 })
 

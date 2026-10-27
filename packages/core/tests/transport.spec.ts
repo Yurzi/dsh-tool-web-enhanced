@@ -3,7 +3,7 @@ import { once } from 'node:events'
 import { gzipSync } from 'node:zlib'
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import * as redaction from '../src/host/redaction.ts'
-import { capabilityErrors, createTransport, secretMatcher, upstreamText } from '../src/host/index.ts'
+import { capabilityErrors, createTransport, secretMatcher, upstreamText, upstreamSuffix, bodyDetail, type FailureResponse } from '../src/host/index.ts'
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
@@ -37,6 +37,96 @@ const sendFailure = async (body: string, secret?: string) => {
   const io = transport()
   return io.withDeadline(undefined, signal => io.send({ url: endpoint, method: 'GET', headers: {} }, signal, { label: 'Fixture', access: 'api-key', matcher: secretMatcher(secret === undefined ? [] : [secret]) }))
 }
+
+async function exchangeFailure(body: string, secret?: string): Promise<FailureResponse> {
+  const endpoint = await serve((_req, res) => { res.writeHead(404); res.end(body) })
+  const io = transport()
+  const exchange = await io.withDeadline(undefined, signal => io.exchangeJson({ url: endpoint, method: 'GET', headers: {} }, signal, {
+    label: 'Fixture', access: 'api-key', matcher: secretMatcher(secret === undefined ? [] : [secret]),
+  }))
+  if (exchange.kind !== 'failure') throw new Error('expected failure exchange')
+  return exchange.response
+}
+
+describe('HTTP failure exchanges', () => {
+  it.each([
+    [{ error: ' first ', message: 'ignored' }, ' first '],
+    [{ error: { message: ' nested ' }, message: 'ignored' }, ' nested '],
+    [{ error: ' ', message: ' message ', detail: 'ignored' }, ' message '],
+    [{ error: { message: '' }, message: ' ', detail: ' detail ' }, ' detail '],
+    ['  plain service text  ', '  plain service text  '],
+    [{ other: 'value' }, '{"other":"value"}'],
+  ])('exposes status, JSON and the same explanation as send for %j', async (body, detail) => {
+    const raw = typeof body === 'string' ? body : JSON.stringify(body)
+    const response = await exchangeFailure(raw)
+    expect(response.status).toBe(404)
+    expect(response.json).toEqual(typeof body === 'string' ? undefined : body)
+    expect(response.explanation).toEqual({ kind: 'text', text: detail })
+    await expect(sendFailure(raw)).rejects.toMatchObject({ message: BASE + upstreamSuffix('Fixture', response.explanation) })
+  })
+
+  it.each(['', ' ', '{invalid'])('leaves empty or malformed JSON unclassified: %j', async body => {
+    expect((await exchangeFailure(body)).json).toBeUndefined()
+  })
+
+  it('screens selected strings independently, and omits nonstrings and whitespace', async () => {
+    const response = await exchangeFailure('{"message":"safe"}', 'request-private-key')
+    expect(response.explain(' selected ')).toEqual({ kind: 'text', text: ' selected ' })
+    expect(response.explain('request-private-key')).toEqual({ kind: 'withheld' })
+    for (const value of [null, undefined, 42, {}, [], '', ' \n ']) expect(response.explain(value)).toBeUndefined()
+    expect(response.explain('x'.repeat(2001))).toEqual({ kind: 'text', text: 'x'.repeat(2001) })
+  })
+
+  it.each(['request-private-key', unicode('request-private-key'), 'private-'])('withholds every selected value when the raw body contains the credential: %s', async echoed => {
+    const body = '{"message":"safe","other":"' + echoed + '"}'
+    const response = await exchangeFailure(body, 'request-private-key')
+    expect(response.json).toEqual({ message: 'safe', other: '[redacted]' })
+    expect(response.explanation).toEqual({ kind: 'withheld' })
+    for (const value of ['safe', '', undefined, 1, {}]) expect(response.explain(value)).toEqual({ kind: 'withheld' })
+  })
+
+  it('redacts credential fragments inside nested classification JSON but screens explanations against the raw body', async () => {
+    const response = await exchangeFailure(JSON.stringify({
+      error_code: 'extract_unsupported_content', data: { echoed: ['unsupported', 'as_sk_unsupported_abcdef'], count: 3 }, message: 'Unsupported content type.',
+    }), 'as_sk_unsupported_abcdef')
+    expect(response.json).toEqual({
+      error_code: 'extract[redacted]content', data: { echoed: ['[redacted]', '[redacted]'], count: 3 }, message: 'U[redacted] content type.',
+    })
+    expect(response.explanation).toEqual({ kind: 'withheld' })
+    expect(response.explain('Unsupported content type.')).toEqual({ kind: 'withheld' })
+  })
+
+  it('does not classify truncated JSON and strips an unmatched trailing credential prefix', async () => {
+    const body = ' '.repeat(16_384 - 5) + 'sk-prUNREAD_SUFFIX'
+    const response = await exchangeFailure(body, 'sk-private-key')
+    expect(response.json).toBeUndefined()
+    expect(response.explanation).toBeUndefined()
+  })
+
+  it('does not classify a complete JSON prefix when additional bytes were cut off', async () => {
+    const body = '{"message":"safe"}'
+    const response = await exchangeFailure(body + ' '.repeat(16_384 - body.length) + 'UNREAD_SUFFIX')
+    expect(response.json).toBeUndefined()
+    expect(response.explanation).toEqual({ kind: 'text', text: 'safe' })
+  })
+
+  it('returns the same redacted successful payload as requestJson', async () => {
+    const endpoint = await serve((_req, res) => { res.end(JSON.stringify({ value: 'request-private-key', count: 1 })) })
+    const io = transport()
+    const request = { url: endpoint, method: 'GET', headers: {} } as const
+    const upstream = { label: 'Fixture', access: 'api-key', matcher: secretMatcher(['request-private-key']) } as const
+    const exchange = await io.withDeadline(undefined, signal => io.exchangeJson(request, signal, upstream))
+    const payload = await io.withDeadline(undefined, signal => io.requestJson(request, signal, upstream))
+    expect(exchange).toEqual({ kind: 'ok', payload })
+    expect(payload).toEqual({ value: '[redacted]', count: 1 })
+  })
+
+  it('preserves complete already-redacted body details without withholding them', () => {
+    for (const value of [undefined, null, 42, {}, '', ' \n ']) expect(bodyDetail(value)).toBeUndefined()
+    expect(bodyDetail(' [redacted] ')).toEqual({ kind: 'text', text: ' [redacted] ' })
+    expect(bodyDetail('x'.repeat(1998) + '😀tail')).toEqual({ kind: 'text', text: 'x'.repeat(1998) + '😀tail' })
+  })
+})
 
 describe('bounded upstream display', () => {
   it.each(['', ' \n\t '])('omits blank explanations %j', value => { expect(upstreamText(value)).toBeUndefined() })

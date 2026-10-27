@@ -6,7 +6,7 @@
 import type { Freshness } from '../../shared/search.ts'
 import { sourceUrl } from '../../shared/url.ts'
 import { isRecord, type AdapterWire } from '../adapter.ts'
-import { upstreamText } from '../transport.ts'
+import { bodyDetail, type UpstreamDetail } from '../transport.ts'
 
 /** The per-source text budget requested from services that return page text; search caps snippets at the same length. */
 export const MAX_SNIPPET_LENGTH = 4000
@@ -30,6 +30,8 @@ export interface SearchRow {
 /** Every malformed-response shape a search wire recognizes, as a closed set without upstream text. */
 export type SearchInvalidReason =
   | 'not-object'
+  | 'code-number'
+  | 'data-results-array'
   | 'results-array'
   | 'data-array'
   | 'data-web-array'
@@ -39,7 +41,7 @@ export type SearchInvalidReason =
   | 'tinyfish-tool'
 
 export type SearchFailure =
-  | { readonly kind: 'failure'; readonly failure: 'api'; readonly detail: string | undefined }
+  | { readonly kind: 'failure'; readonly failure: 'api'; readonly detail: UpstreamDetail }
   | { readonly kind: 'failure'; readonly failure: 'invalid'; readonly reason: SearchInvalidReason }
 
 export type SearchOutcome =
@@ -66,10 +68,10 @@ export function envelope(payload: unknown): EnvelopeOutcome {
   if (!isRecord(payload)) return { kind: 'failure', failure: 'invalid', reason: 'not-object' }
   if ((payload.error !== undefined && payload.error !== null) || payload.success === false) {
     const nested = isRecord(payload.error) ? payload.error.message : undefined
-    let detail: string | undefined
+    let detail: UpstreamDetail
     for (const candidate of [payload.error, nested, payload.message]) {
       if (typeof candidate !== 'string') continue
-      detail = upstreamText(candidate)
+      detail = bodyDetail(candidate)
       if (detail !== undefined) break
     }
     return { kind: 'failure', failure: 'api', detail }

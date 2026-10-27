@@ -13,6 +13,38 @@ function expectReset(config: unknown, field: string): void {
   expect(() => resolveSettings(config)).toThrow(SETTINGS_RESET_HINT)
 }
 
+describe('AnySearch search settings', () => {
+  it('defaults to an opt-in personal key and rejects anonymous or account access', () => {
+    expect(resolveSettings().connections.get('builtin:anysearch')).toMatchObject({
+      kind: 'adapter', adapter: 'anysearch', label: 'AnySearch', disabled: true,
+      access: 'api-key', credentialRef: 'ANYSEARCH_API_KEY', options: {},
+    })
+    for (const access of ['keyless', 'deepseek-account']) {
+      expect(() => resolveSettings({ connections: { 'builtin:anysearch': { access } } })).toThrow('access')
+    }
+  })
+
+  it.each(['cn', 'intl'])('accepts zone %s for builtin and custom key connections', zone => {
+    const customAnySearch = { kind: 'adapter', adapter: 'anysearch', label: 'Private AnySearch', credentialRef: 'PRIVATE_KEY', options: { zone, language: 'zh-CN' } }
+    const settings = resolveSettings({ connections: { 'builtin:anysearch': { options: { zone } }, 'custom:any': customAnySearch } })
+    expect(settings.connections.get('builtin:anysearch')).toMatchObject({ options: { zone } })
+    expect(settings.connections.get('custom:any')).toMatchObject({ adapter: 'anysearch', access: 'api-key', endpoint: CATALOG.anysearch.endpoint, options: { zone, language: 'zh-CN' } })
+    expect(() => resolveSettings({ connections: { 'custom:any': { ...customAnySearch, access: 'keyless' } } })).toThrow('access')
+  })
+
+  it.each(['CN', 'international', '', 42])('rejects invalid zone %j', zone => {
+    expect(() => resolveSettings({ connections: { 'builtin:anysearch': { options: { zone } } } })).toThrow('zone')
+  })
+
+  it.each(['en', 'zh-CN', 'eng', 'zh-Hant-TW', 'es-419'])('accepts language %s under the catalog pattern', language => {
+    expect(resolveSettings({ connections: { 'builtin:anysearch': { options: { language } } } }).connections.get('builtin:anysearch')).toMatchObject({ options: { language } })
+  })
+
+  it.each(['e', 'english', 'zh_CN', 'en-x', 'zh-Hant-TW-extra', 'en-US!', 42])('rejects invalid language %j', language => {
+    expect(() => resolveSettings({ connections: { 'builtin:anysearch': { options: { language } } } })).toThrow('language')
+  })
+})
+
 describe('search unified settings resolution', () => {
   it('resolves the native default without materializing sparse configuration', () => {
     const config = Object.freeze({})

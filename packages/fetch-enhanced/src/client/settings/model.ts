@@ -53,6 +53,7 @@ const OPTION_COPY: Readonly<Record<CatalogKey, Readonly<Record<string, OptionCop
     ttl: { label: 'option.tinyfish.ttl', placeholder: 'option.tinyfish.ttl.placeholder', hint: 'option.tinyfish.ttl.hint' },
     per_url_timeout_ms: { label: 'option.tinyfish.per_url_timeout_ms' },
   },
+  anysearch: {},
 }
 
 /** Copy for the options of one catalog entry; an option without copy yet falls back to a generic label. */
@@ -64,6 +65,7 @@ export const SERVICE_NOTES = {
   firecrawl: 'services.note.firecrawl',
   tavily: 'services.note.tavily',
   tinyfish: 'services.note.tinyfish',
+  anysearch: 'services.note.anysearch',
 } as const satisfies Partial<Record<CatalogKey, LocaleKey>>
 
 const VALUE_LABELS: Readonly<Record<string, LocaleKey>> = {

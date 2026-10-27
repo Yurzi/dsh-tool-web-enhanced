@@ -18,15 +18,22 @@ Choose local or remote fetching per conversation from the composer menu or
 `/setup-fetch`; Off hides `web_fetch` from that conversation's Agent from the
 next model request step. The connections are `builtin:local` (the default:
 DSH's own HTTP(S) fetcher plus an operator allowlist for non-public
-addresses), DSH's DeepSeek Fetch API, Exa, Firecrawl, Tavily and Tinyfish,
+addresses), DSH's DeepSeek Fetch API, Exa, Firecrawl, Tavily, Tinyfish and AnySearch,
 plus custom adapter connections such as a self-hosted endpoint.
 
-- **Remote services start off.** DeepSeek Fetch API, Exa, Firecrawl, Tavily
-  and Tinyfish must be turned on in the row settings before a conversation can
+- **Remote services start off.** DeepSeek Fetch API, Exa, Firecrawl, Tavily,
+  Tinyfish and AnySearch must be turned on in the row settings before a conversation can
   choose them; turning one on agrees that URLs go to it. Local HTTP (the
   default) stays on; custom connections are on when created. When every remote
   service is off, the composer menu says more services can be turned on in
   settings.
+- **AnySearch takes a personal API key only** (`ANYSEARCH_API_KEY`, the same
+  credential name as AnySearch's own plugin): the service has an anonymous
+  tier, but this plugin does not use it. It has no options; it reads HTML,
+  plain text, JSON and Markdown (not PDF or other binary files) and may cut
+  long pages at 50,000 characters. Do not install it together with
+  `@anysearch/anysearch-dsh`: that bundle's profile layer writes both fields
+  of the `web` row as `anysearch`, so routing leaves this plugin.
 - **`/setup-fetch`.** A Host command, so it works in the Web GUI and in
   dsh-TUI. `off` or a connection id changes the choice from the next model
   request; dsh-TUI completes these arguments. Without arguments the Web GUI

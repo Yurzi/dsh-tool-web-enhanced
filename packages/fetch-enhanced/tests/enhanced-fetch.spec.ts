@@ -87,6 +87,29 @@ it('hints remote failures but not local allowlist or URL refusals, keeping redac
   expect(invalid?.message).not.toContain('list_web_fetch_providers')
 })
 
+it.each([
+  [422, 'extract_unsupported_content', 'Unsupported content type.', 'WEB_UNSUPPORTED_CONTENT_TYPE', 'Team reader cannot read this content type (for example PDF or other binary files); try another fetch connection'],
+  [400, 'invalid_extract_url', 'URL is invalid.', 'WEB_INVALID_URL', 'Team reader refused the URL as invalid or not allowed; check the URL'],
+] as const)('puts the switch-provider hint before the AnySearch HTTP %i explanation, including URL refusals', async (status, error_code, message, code, short) => {
+  const endpoint = await serve((_request, response) => {
+    response.statusCode = status
+    json(response, { code: -1, error_code, message })
+  })
+  const h = await composeFetch({
+    enhancedTools: true,
+    connections: { 'custom:anysearch': { kind: 'adapter', adapter: 'anysearch', label: 'Team reader', credentialRef: 'TEST_KEY', endpoint, trustedEndpoint: true } },
+  })
+  await h.request()
+  const result = await h.ctx.tools.execute({
+    callId: ToolCallId('anysearch-hint-' + status), name: 'web_fetch_enhanced',
+    arguments: { url: 'https://example.com/page', provider: 'custom:anysearch' }, agent: h.agent, signal: new AbortController().signal,
+  })
+  expect(failure(result)).toMatchObject({
+    info: { code },
+    message: 'dsh-web-fetch-enhanced: ' + short + '. Provider "custom:anysearch" failed; list_web_fetch_providers shows the others.\n\nTeam reader responded (untrusted): ' + message,
+  })
+})
+
 it('runs local and a remote service in parallel within one step', async () => {
   const both = Promise.withResolvers<void>()
   const arrived: Array<() => void> = []

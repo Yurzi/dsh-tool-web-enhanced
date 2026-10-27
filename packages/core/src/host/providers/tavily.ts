@@ -1,6 +1,7 @@
 /** Tavily search and extraction protocols with anonymous access-mode headers. */
 import { bearer, isRecord, postJson, type Auth, type KeylessWire } from '../adapter.ts'
 import type { FetchWire } from './fetch.ts'
+import { bodyDetail } from '../transport.ts'
 import { count, mapRows, rowsAt, type SearchWire } from './search.ts'
 
 function tavilyHeaders(auth: Auth): Record<string, string> {
@@ -41,7 +42,7 @@ export const tavilyFetch: KeylessWire<FetchWire> = {
       if (!Array.isArray(failures)) return { kind: 'failure', failure: 'invalid', detail: undefined }
       if (failures.length !== 0) {
         const first: unknown = failures[0]
-        const detail = isRecord(first) && typeof first.error === 'string' ? first.error : undefined
+        const detail = bodyDetail(isRecord(first) ? first.error : undefined)
         return { kind: 'failure', failure: 'failed', detail }
       }
     }

@@ -116,9 +116,11 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Screenshot matr
             await row.waitFor()
             expect(await row.isEnabled()).toBe(true)
           }
-          const tinyfish = fetch.getByRole('menuitemradio', { name: /^Tinyfish(?: |$)/ })
-          expect(await tinyfish.getAttribute('aria-checked')).toBe('false')
-          await tinyfish.getByText(fetchText['status.needsCredential'].replace('{name}', 'Tinyfish'), { exact: true }).waitFor()
+          for (const name of ['Tinyfish', 'AnySearch']) {
+            const row = fetch.getByRole('menuitemradio', { name: new RegExp('^' + name + '(?: |$)') })
+            expect(await row.getAttribute('aria-checked')).toBe('false')
+            await row.getByText(fetchText['status.needsCredential'].replace('{name}', name), { exact: true }).waitFor()
+          }
           await fetch.getByRole('menuitemradio', { name: /^Firecrawl(?: |$)/ }).scrollIntoViewIfNeeded()
           await page.getByRole('alert').filter({ hasText: 'Unable to create default workspace.' }).waitFor({ state: 'hidden' })
           break

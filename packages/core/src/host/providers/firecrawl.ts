@@ -1,6 +1,7 @@
 /** Firecrawl search and scrape protocols, including their distinct success envelopes. */
 import { bearer, isRecord, postJson, type KeylessWire } from '../adapter.ts'
 import { reportedTarget, statusPage, type FetchWire } from './fetch.ts'
+import { bodyDetail } from '../transport.ts'
 import { count, envelope, mapRows, type SearchWire } from './search.ts'
 
 const DAY_MS = 86_400_000
@@ -41,7 +42,7 @@ export const firecrawlFetch: KeylessWire<FetchWire> = {
   },
   parse(payload, input) {
     if (!isRecord(payload) || typeof payload.success !== 'boolean') return { kind: 'failure', failure: 'invalid', detail: undefined }
-    if (!payload.success) return { kind: 'failure', failure: 'failed', detail: typeof payload.error === 'string' ? payload.error : undefined }
+    if (!payload.success) return { kind: 'failure', failure: 'failed', detail: bodyDetail(payload.error) }
     if (!isRecord(payload.data)) return { kind: 'failure', failure: 'invalid', detail: undefined }
     const data = payload.data
     const metadata = isRecord(data.metadata) ? data.metadata : {}

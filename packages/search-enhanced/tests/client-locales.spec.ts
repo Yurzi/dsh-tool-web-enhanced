@@ -76,6 +76,10 @@ const copy = {
   'options.invalidItem': ['第 {line} 行（“{item}”）不是域名或域名加路径', 'Line {line} (“{item}”) is not a domain with an optional path'],
   'model.format': ['模型搜索 · {protocol}', 'Model search · {protocol}'],
   'options.invalidLine': ['第 {line} 行格式无效', 'Line {line} is not valid'],
+  // docs/orchestration-prompt.md, "浏览器文案": verbatim; the zone values cn / intl stay codes.
+  'option.anysearch.zone': ['地区', 'Region'],
+  'option.anysearch.language': ['偏好语言', 'Preferred language'],
+  'option.anysearch.language.placeholder': ['如 zh-CN 或 en', 'e.g. zh-CN or en'],
 } as const
 
 const retired = [

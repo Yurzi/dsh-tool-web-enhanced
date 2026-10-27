@@ -14,6 +14,7 @@
 | **M5 增强工具与远程服务缺省停用** | 已完成 | 两个插件各注册本侧的[增强工具](design.md#增强工具)：带必填 `provider` 参数的 `web_search_enhanced` / `web_fetch_enhanced`，与列出本对话 provider 的 `list_web_search_providers` / `list_web_fetch_providers`；行设置的“增强工具”开关（带同意说明）与确认的 `web` 路由决定是否注册，可见性控制器按 Agent 遮罩，成对注册可回滚；每个新建的顶层对话快照一份 provider 列表（子对话继承，开关关闭时写空记录、不补建）；显式入口走同一执行层、不写会话状态，拒绝与后端失败有固定措辞与换 provider 提示；[远程服务缺省停用](design.md#远程服务缺省停用)（服务列表说明、菜单只列启用的连接并在底部提示、首次启用提示）；设置页写入串行；凭据解析的依赖异常一律固定化；单元与组合测试和 e2e 覆盖真实 preset、base profile、回环模型驱动的调用与截图 |
 | **M5.5 子 Agent 会话可改选择** | 已完成 | [子 Agent 的会话](design.md#子-agent-的会话)（spawn 与 subagent_fork）无论 Agent 是否在运行都可在菜单里读写选择，不写模型记忆，用户 fork 不变；core 的会话来源 `sessionOrigin` 与以会话为目标（`SessionTarget`）的读写；Remote 的 `get` / `set` 共用一种取法，不在运行的子会话直接读写记录、不恢复 Agent；单元、嵌套 fiber 的组合测试与 e2e 覆盖 |
 | **M6 dsh-tui** | 已完成 | [`/setup-search`、`/setup-fetch`](design.md#setup-search-与-setup-fetch) 改为两个插件各自注册的 Host 命令，Web GUI 与 dsh-TUI 都能用：不带参数显示当前选择与来源、路由状态与启用的连接，`off`、连接 id 与 search 的实时性按 Remote `set` 的同一套写入（core `writeSelection`）；浏览器以 `commandUi.decorate` 保留原来的选择框，带参数的一行交给 Host 命令，执行后重读该会话；dsh-TUI 里命令参数有补全（core `terminal.ts`，本地结构类型、独立的注入作用域）；ui 包不参与 TUI，profile 补丁不变；真实 `CommandRuntime` 上的 Host 组合测试、真实 `CommandUiRuntime` 上的浏览器测试，e2e 覆盖真实 Host、Web GUI 与经真实 PTY 驱动的 dsh-TUI |
+| **M7 adapter 失败分类与 AnySearch** | 已完成 | adapter wire 加可选的非 2xx 失败分类 `parseFailure`：传输不认识任何服务，只读非 2xx 的前 16 KiB、按本次凭据筛查后交出 `FailureResponse`，并给出通用状态措辞；上游说明的类型 `UpstreamDetail` 带品牌、只能由 core 构造，2000 字符的截断推迟到成文时；现有服务给模型的文字不变（见[架构 · core 的 provider wires 与 runAdapter](architecture.md#core-的-provider-wires-与-runadapter)）。search 与 fetch 各加内置连接 `builtin:anysearch`：REST，只用个人 API key，缺省停用；search 有 `zone` / `language` 连接参数，fetch 按 `error_code` 分出 URL 无效、目标被拒、内容类型不支持等类别，402 一律不附说明；单元测试经本地 HTTP 覆盖，e2e 经回环服务驱动真实 Agent 并截取两侧设置页 |
 
 ## 接下来
 
@@ -37,6 +38,11 @@
 | TUI 底栏显示当前连接 | `tuiStatus.setField` 是全局字段；要知道 TUI 正在显示哪个会话需订阅 `tui/session-switched`，这要求 `dsh-plugin.json` 声明 DecisionEvents 契约 | 有需要时 |
 | TUI“网页搜索”分区改写 `web` 行 | 该分区在 `web-deepseek-api` 行运行时出现，切换即把路由移出本插件；在 profile 里停用该行能让分区消失，但两种界面都会失去这一原生 provider 行（现在保留它作手工逃生口）。现在只在 `/setup-*` 的无参数输出里显示路由状态 | 决定是否在 profile 里停用 `web-deepseek-api` 时 |
 | 拆出独立的 tui 包 | TUI 特有的只有命令补全的转接，代码量小，放在 core `./host` 的一个模块里。拆包可以让插件不带 TUI 的接口与类型、让运维单独停用这一行、把 dsh-tui 的 devDependency 与 `dsh-plugin.json` 声明限在一个包里，代价是多一个发布包、profile 行与一层中立的补全注册服务（照 ui 的做法：插件经可选注入登记，tui 包转接到 `tuiCommandTrees`，不依赖任何插件行） | 出现第二个 TUI 特有的功能（底栏、行设置区块，或任何需要 `dsh-plugin.json` 的功能）时 |
+| AnySearch 垂直搜索 | AnySearch 连接只做普通网页搜索：服务的 `tag` / `params` 垂直搜索、批量搜索与子领域目录没有接入 | 有用户需要时，作为连接参数或单独的目录项设计 |
+| MCP 路由与 model 协议的失败分类 | `parseFailure` 只在 adapter 的 REST 路由上调用；托管 MCP 与 model 后端的 HTTP 非 2xx 仍是通用措辞加通用说明 | 有服务需要时，复用 `FailureResponse` 与 `FailureVerdict`（[开发流程 · 远程服务](development.md#远程服务adapter)） |
+| AnySearch 匿名访问 | 服务有不带 key 的匿名档，本插件只用个人 API key（免费账号注册即可用）；匿名调用方超额时，402 回复里带着服务生成的账号与 key（本插件对 402 一律不附说明） | 用户要求时；先定生成凭据的处理 |
+| 占位符 key 的识别 | 凭据里存的是占位符（示例值、未填写的模板）时照常发出请求，由服务以 401 / 403 拒绝，错误按“检查密钥”措辞 | 有用户反馈时 |
+| 2xx 路径上 outcome 的整体去敏可能改写可信标签（凭据恰好含标签片段时） | `runAdapter` 在 `parse` 之后对 2xx 的 outcome 整体 `redactJson`（OpenAlex 属性名与 Exa 拼接依赖它）；凭据恰好含 wire 判别标签的片段（如 `failure`、`invalid`）时标签会被改写，结果可能是笼统的 provider 错误而不是原分类。非 2xx 的 outcome 已不再二次去敏 | 需要时改为保护 wire 自己的标签，或让 2xx 也在交给 wire 之前处理完 |
 | 各服务条款与隐私政策的直链 | 用户已决定这不是本插件的责任：设置页只说明请求发往哪个服务，不链接条款 | 若以后要做：目录加条款与隐私链接，显示在远程服务的开关旁 |
 
 ## 扩展原则

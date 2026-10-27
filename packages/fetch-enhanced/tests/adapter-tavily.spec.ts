@@ -43,7 +43,7 @@ describe('Tavily fetch request and page mapping', () => {
 
   it.each([403, 404])('does not infer target %i from failed_results text or undocumented status fields', status => {
     const payload = { results: [], failed_results: [{ url: INPUT.url, status, error: 'Target returned HTTP ' + status + ' private upstream ' + KEY }] }
-    expect(parseOutcome(payload)).toStrictEqual({ kind: 'failure', failure: 'failed', detail: 'Target returned HTTP ' + status + ' private upstream ' + KEY })
+    expect(parseOutcome(payload)).toStrictEqual({ kind: 'failure', failure: 'failed', detail: { kind: 'text', text: 'Target returned HTTP ' + status + ' private upstream ' + KEY } })
   })
 
   it.each([
@@ -60,7 +60,7 @@ describe('Tavily fetch request and page mapping', () => {
     { results: [], failed_results: [] },
     { results: [{ raw_content: 'body' }], failed_results: [{ error: 'private upstream ' + KEY }] },
   ])('reports unsuccessful extraction as a failure: %#', payload => {
-    expect(parseOutcome(payload)).toStrictEqual({ kind: 'failure', failure: 'failed', detail: payload.failed_results[0]?.error })
+    expect(parseOutcome(payload)).toStrictEqual({ kind: 'failure', failure: 'failed', detail: payload.failed_results[0] === undefined ? undefined : { kind: 'text', text: payload.failed_results[0].error } })
   })
 
   it.each([undefined, ''])('reports missing readable raw content as empty: %j', raw_content => {

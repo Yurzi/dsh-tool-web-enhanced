@@ -137,6 +137,16 @@ export const CATALOG = {
       domain_type: { kind: 'enum', values: ['web', 'news', 'research_paper'], keyless: ['web', 'news'] },
     },
   },
+  anysearch: {
+    label: 'AnySearch', endpoint: 'https://api.anysearch.com/v1/search',
+    // The service has an anonymous tier; this plugin offers personal keys only (free accounts exist).
+    access: { keyless: false, apiKey: { credentialRef: 'ANYSEARCH_API_KEY' }, account: false },
+    kind: 'adapter', remote: true, optIn: true, freshness: [], homepage: 'https://www.anysearch.com',
+    options: {
+      zone: { kind: 'enum', values: ['cn', 'intl'] },
+      language: { kind: 'text', pattern: /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8}){0,2}$/u },
+    },
+  },
   openalex: {
     label: 'OpenAlex', endpoint: 'https://api.openalex.org/works', access: { keyless: true, apiKey: { credentialRef: 'OPENALEX_API_KEY' }, account: false },
     kind: 'adapter', remote: true, optIn: true, freshness: [], homepage: 'https://openalex.org',
@@ -163,7 +173,7 @@ export const CATALOG = {
 
 export type CatalogKey = keyof typeof CATALOG
 export const NATIVE_KEYS = ['deepseek-messages', 'deepseek-search-api'] as const satisfies readonly CatalogKey[]
-export const ADAPTER_KEYS = ['exa', 'firecrawl', 'tavily', 'tinyfish', 'openalex', 'semanticscholar'] as const satisfies readonly CatalogKey[]
+export const ADAPTER_KEYS = ['exa', 'firecrawl', 'tavily', 'tinyfish', 'anysearch', 'openalex', 'semanticscholar'] as const satisfies readonly CatalogKey[]
 export const MODEL_KEYS = ['session-model'] as const satisfies readonly CatalogKey[]
 export type AdapterKey = typeof ADAPTER_KEYS[number]
 export const isCatalogKey = (value: unknown): value is CatalogKey => typeof value === 'string' && Object.hasOwn(CATALOG, value)

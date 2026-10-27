@@ -4,9 +4,9 @@ import { ADAPTER_KEYS, CATALOG, DEFAULT_CONNECTION, FRESHNESS, NATIVE_KEYS, hono
 
 describe('search catalog', () => {
   it('places native backends first and retains the adapter display order', () => {
-    expect(Object.keys(CATALOG)).toEqual(['deepseek-messages', 'deepseek-search-api', 'session-model', 'exa', 'firecrawl', 'tavily', 'tinyfish', 'openalex', 'semanticscholar'])
+    expect(Object.keys(CATALOG)).toEqual(['deepseek-messages', 'deepseek-search-api', 'session-model', 'exa', 'firecrawl', 'tavily', 'tinyfish', 'anysearch', 'openalex', 'semanticscholar'])
     expect(NATIVE_KEYS).toEqual(['deepseek-messages', 'deepseek-search-api'])
-    expect(ADAPTER_KEYS).toEqual(['exa', 'firecrawl', 'tavily', 'tinyfish', 'openalex', 'semanticscholar'])
+    expect(ADAPTER_KEYS).toEqual(['exa', 'firecrawl', 'tavily', 'tinyfish', 'anysearch', 'openalex', 'semanticscholar'])
     expect(DEFAULT_CONNECTION).toBe('builtin:deepseek-messages')
     expect(FRESHNESS).toEqual(['auto', 'fresh', 'realtime'])
   })
@@ -37,7 +37,7 @@ describe('search catalog', () => {
     expect(honorsFreshness('exa', 'keyless')).toBe(false)
     expect(honorsFreshness('firecrawl', 'api-key')).toBe(true)
     expect(honorsFreshness('firecrawl', 'keyless')).toBe(true)
-    for (const key of ['deepseek-messages', 'deepseek-search-api', 'session-model', 'tavily', 'tinyfish', 'openalex', 'semanticscholar'] as const) {
+    for (const key of ['deepseek-messages', 'deepseek-search-api', 'session-model', 'tavily', 'tinyfish', 'anysearch', 'openalex', 'semanticscholar'] as const) {
       expect(honorsFreshness(key, 'api-key')).toBe(false)
       expect(honorsFreshness(key, 'keyless')).toBe(false)
     }

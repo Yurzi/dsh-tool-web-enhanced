@@ -19,17 +19,24 @@ Choose a search connection per conversation from the composer menu or
 the next model request step. Operators decide which connections exist: DSH's
 own DeepSeek search (the default) and DeepSeek Search API, the conversation's
 own model (`builtin:session-model`), Exa, Firecrawl, Tavily, Tinyfish,
-OpenAlex and Semantic Scholar, plus custom adapter connections and fixed-model
+AnySearch, OpenAlex and Semantic Scholar, plus custom adapter connections and fixed-model
 connections over Anthropic Messages, OpenAI Responses or OpenAI Chat
 Completions. Native connections keep the behaviour of DSH's own providers;
 only their error messages are restated.
 
 - **Remote services start off.** DeepSeek Search API, Exa, Firecrawl, Tavily,
-  Tinyfish, OpenAlex and Semantic Scholar must be turned on in the row
+  Tinyfish, AnySearch, OpenAlex and Semantic Scholar must be turned on in the row
   settings before a conversation can choose them; turning one on agrees that
   queries go to it. DeepSeek Messages (the default) and the conversation model
   stay on; custom connections are on when created. When every remote service
   is off, the composer menu says more services can be turned on in settings.
+- **AnySearch takes a personal API key only** (`ANYSEARCH_API_KEY`, the same
+  credential name as AnySearch's own plugin): the service has an anonymous
+  tier, but this plugin does not use it. Its connection options are a region
+  (`zone`: `cn` or `intl`) and a preferred language (`language`, such as
+  `zh-CN` or `en`). Do not install it together with `@anysearch/anysearch-dsh`:
+  that bundle's profile layer writes both fields of the `web` row as
+  `anysearch`, so routing leaves this plugin.
 - **`/setup-search`.** A Host command, so it works in the Web GUI and in
   dsh-TUI. `off`, a connection id or `freshness auto|fresh|realtime` change
   the choice from the next model request; dsh-TUI completes these arguments.

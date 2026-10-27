@@ -1,15 +1,17 @@
 import { DEFAULT_USER_AGENT } from '@deepseek-ai/dsh-web-fetch-http'
 import { describe, expect, it } from 'vitest'
 import { validateOptions } from 'dsh-tool-web-enhanced-core/shared'
-import { CATALOG, DEFAULT_CONNECTION, DEFAULT_LOCAL_SETTINGS, isCatalogKey } from '../src/catalog.ts'
+import { ADAPTER_KEYS, CATALOG, DEFAULT_CONNECTION, DEFAULT_LOCAL_SETTINGS, isCatalogKey } from '../src/catalog.ts'
 import { contract } from '../src/contract.ts'
 
 describe('fetch catalog and contract', () => {
-  it('lists local, native and four adapters in display order with explicit access facts', () => {
-    expect(Object.keys(CATALOG)).toEqual(['local', 'deepseek-fetch-api', 'exa', 'firecrawl', 'tavily', 'tinyfish'])
-    for (const [key, keyless, credentialRef] of [['exa', true, 'EXA_API_KEY'], ['firecrawl', true, 'FIRECRAWL_API_KEY'], ['tavily', true, 'TAVILY_API_KEY'], ['tinyfish', false, 'TINYFISH_API_KEY']] as const) {
+  it('lists local, native and five adapters in display order with explicit access facts', () => {
+    expect(Object.keys(CATALOG)).toEqual(['local', 'deepseek-fetch-api', 'exa', 'firecrawl', 'tavily', 'tinyfish', 'anysearch'])
+    for (const [key, keyless, credentialRef] of [['exa', true, 'EXA_API_KEY'], ['firecrawl', true, 'FIRECRAWL_API_KEY'], ['tavily', true, 'TAVILY_API_KEY'], ['tinyfish', false, 'TINYFISH_API_KEY'], ['anysearch', false, 'ANYSEARCH_API_KEY']] as const) {
       expect(CATALOG[key]).toMatchObject({ kind: 'adapter', remote: true, access: { keyless, apiKey: { credentialRef }, account: false } })
     }
+    expect(ADAPTER_KEYS).toEqual(['exa', 'firecrawl', 'tavily', 'tinyfish', 'anysearch'])
+    expect(CATALOG.anysearch.options).toEqual({})
     expect(DEFAULT_CONNECTION).toBe('builtin:local')
     expect(CATALOG.local).toMatchObject({ kind: 'local', remote: false, access: { keyless: true, apiKey: false, account: false } })
     expect(CATALOG['deepseek-fetch-api']).toMatchObject({ kind: 'native', remote: true, access: { keyless: false, apiKey: { credentialRef: 'DEEPSEEK_API_KEY' }, account: true } })

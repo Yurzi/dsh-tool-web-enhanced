@@ -88,11 +88,19 @@ export const CATALOG = {
       per_url_timeout_ms: { kind: 'integer', min: 1, max: 110_000 },
     },
   },
+  anysearch: {
+    label: 'AnySearch', kind: 'adapter', remote: true, optIn: true,
+    endpoint: 'https://api.anysearch.com/v1/extract', homepage: 'https://www.anysearch.com',
+    // The service has an anonymous tier; this plugin offers personal keys only (free accounts exist).
+    access: { keyless: false, apiKey: { credentialRef: 'ANYSEARCH_API_KEY' }, account: false },
+    // The extract body takes exactly one url: no operator options.
+    options: {},
+  },
 } as const satisfies Record<string, FetchDescriptor>
 
 export type CatalogKey = keyof typeof CATALOG
 export const NATIVE_KEYS = ['deepseek-fetch-api'] as const satisfies readonly CatalogKey[]
-export const ADAPTER_KEYS = ['exa', 'firecrawl', 'tavily', 'tinyfish'] as const satisfies readonly CatalogKey[]
+export const ADAPTER_KEYS = ['exa', 'firecrawl', 'tavily', 'tinyfish', 'anysearch'] as const satisfies readonly CatalogKey[]
 export type NativeKey = typeof NATIVE_KEYS[number]
 export type AdapterKey = typeof ADAPTER_KEYS[number]
 export const isCatalogKey = (value: unknown): value is CatalogKey => typeof value === 'string' && Object.hasOwn(CATALOG, value)

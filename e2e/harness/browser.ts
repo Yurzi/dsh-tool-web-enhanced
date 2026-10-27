@@ -16,6 +16,16 @@ export const chromiumPath = [process.env.DSH_E2E_CHROMIUM, '/usr/bin/chromium', 
 
 export const browserRequired = process.env.CI !== undefined
 
+/**
+ * DSH's right Sidebar logs its own cancellation as an error: selecting another
+ * conversation before the previous one has finished opening releases that
+ * Session reference, and the rejected readiness is reported as
+ * `Sidebar Session opening failed: Error: Session reference "…" is released`
+ * (ui-sidebar-right session-view.ts). It is not a failure of the page; other
+ * opening failures carry a different reason and are still collected.
+ */
+const SIDEBAR_RELEASE = /^Sidebar Session opening failed: Error: Session reference "[^"]+" is released(?:\n|$)/u
+
 /** Retain accessible DOM and console evidence when a browser assertion fails. */
 export async function recordBrowserFailure(app: App, name: string): Promise<void> {
   const accessibility = await app.page.locator('body').ariaSnapshot()
@@ -30,7 +40,7 @@ export async function recordBrowserFailure(app: App, name: string): Promise<void
 export interface App {
   readonly browser: Browser
   readonly page: Page
-  /** Console errors and uncaught page errors, in order. */
+  /** Console errors (except DSH's Sidebar release notice) and uncaught page errors, in order. */
   readonly errors: string[]
   screenshot(name: string): Promise<void>
   close(): Promise<void>
@@ -61,7 +71,7 @@ export async function openApp(url: string, contextOptions: BrowserContextOptions
     const copy = contextOptions.locale === 'zh-CN' ? uiZh : uiText
     page.setDefaultTimeout(30_000)
     const errors: string[] = []
-    page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()) })
+    page.on('console', (message) => { if (message.type() === 'error' && !SIDEBAR_RELEASE.test(message.text())) errors.push(message.text()) })
     page.on('pageerror', (error) => { errors.push(error.message) })
     const onboarding = contextOptions.locale === 'zh-CN'
       ? { preview: '预览版说明', continue: '继续', later: '稍后配置' }

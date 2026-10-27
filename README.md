@@ -22,7 +22,7 @@ DSH 的 `web` 行为 `web_search` 与 `web_fetch` 各指定一个 provider，整
 
 - **每个会话分别选择**：在输入框的连接菜单或 `/setup-search`、`/setup-fetch` 里，为当前会话选一个搜索连接、一个抓取连接，或把其中一项关闭。关闭后，从下一个模型请求步起该会话的 Agent 看不到对应的工具（只在 `web` 行确认把该能力路由到本插件时隐藏）。
 - **运维决定能选什么**：哪些连接启用、默认连接、密钥的凭据名称、自定义连接与自建端点，都在插件页的行设置里配置；会话只能在已启用的连接之间选择。
-- **远程服务由运维打开**：查询或 URL 会发给第三方的远程服务缺省停用，在设置页打开后会话才能选它。Exa、Firecrawl、Tavily、Tinyfish、OpenAlex 的搜索，以及 Exa、Firecrawl、Tavily 的抓取，打开后缺省用服务的匿名路由，不需要密钥；需要时可改用个人密钥。
+- **远程服务由运维打开**：查询或 URL 会发给第三方的远程服务缺省停用，在设置页打开后会话才能选它。Exa、Firecrawl、Tavily、Tinyfish、OpenAlex 的搜索，以及 Exa、Firecrawl、Tavily 的抓取，打开后缺省用服务的匿名路由，不需要密钥；需要时可改用个人密钥。AnySearch（搜索与抓取）只支持个人密钥。
 - **可选的增强工具**：运维在行设置里打开“增强工具”后，Agent 还能用 `web_search_enhanced` / `web_fetch_enhanced` 为单次调用指定连接，并用 `list_web_search_providers` / `list_web_fetch_providers` 查看可选项，不改会话的选择（见[增强工具](#增强工具)）。
 - **内网抓取需要显式放行**：本机抓取默认与 DSH 原生一样只访问公网地址；运维可以按网段和主机名放行指定的非公网地址。
 
@@ -46,7 +46,7 @@ dsh plugin --profile <profile> add dsh-tool-web-enhanced-profile
 - 停用原生的 `web-search-deepseek` 行（它的 DeepSeek 搜索成为本项目的 `DeepSeek Messages` 连接）；
 - 插入三行：`web-search-enhanced`、`web-fetch-enhanced`、`tool-web-enhanced-ui`。
 
-更晚的层（你自己的设置或其他 bundle）如果改写了 `web` 行，会压过 profile 的选择；插件页上本组合包的概览会显示每个能力实际由谁提供。
+更晚的层（你自己的设置或其他 bundle）如果改写了 `web` 行，会压过 profile 的选择；插件页上本组合包的概览会显示每个能力实际由谁提供。**不要和 AnySearch 官方的 `@anysearch/anysearch-dsh` 一起装**：它的 profile 层会把 `web` 行的两个字段都写成 `anysearch`，路由就离开了本插件。
 
 如果装过 dsh-web-search-enhanced 或 dsh-web-fetch-enhanced 0.1.x，请先看[从 0.1.x 升级](#从-01x-升级)。
 
@@ -88,7 +88,7 @@ dsh plugin --profile <profile> add dsh-tool-web-enhanced-profile
 - **增强工具**：一个开关，打开即同意 Agent 在已启用的服务里自行选用、把查询或 URL 发给所选的服务；只影响之后新建的会话（见[增强工具](#增强工具)）。
 - **连接**：每个内置连接一行，可启用或停用；远程服务缺省停用（行上标“未启用”），打开即同意把查询或 URL 发给它；同时支持免密钥与个人密钥的服务可以切换访问方式；展开后写明查询或 URL 会发送给谁，抓取的远程服务另有缓存与数据保留说明；其余参数修改后自动保存。
 - **密钥放进 DSH Credentials**：设置里只保存凭据名称（`credentialRef`，如 `EXA_API_KEY`），密钥本身存在 DSH Credentials 里（可以用页面上的只写输入框保存），每次调用时读取，不缓存。原生 DeepSeek 连接沿用 DSH 自己的凭据规则：本次请求走 DeepSeek 账号路由时用账号，否则用 `DEEPSEEK_API_KEY`。
-- **自定义连接**：选一个内置 adapter（搜索 6 个、抓取 4 个），配自己的名称、凭据名称、可选的自建端点与参数，总是使用个人密钥。搜索另可新建固定模型的模型搜索连接（Anthropic Messages、OpenAI Responses 或 OpenAI Chat Completions），填写模型 id、端点与凭据名称。
+- **自定义连接**：选一个内置 adapter（搜索 7 个、抓取 5 个），配自己的名称、凭据名称、可选的自建端点与参数，总是使用个人密钥。搜索另可新建固定模型的模型搜索连接（Anthropic Messages、OpenAI Responses 或 OpenAI Chat Completions），填写模型 id、端点与凭据名称。
 - **端点信任**：自建端点、固定模型连接，以及与官方地址不同的原生 `baseURL`，都要打开“信任此地址”才会保存（写入 `trustedEndpoint: true`）。信任绑定到确认时的地址，地址改了要重新确认；关闭信任即回到官方端点。
 - **本机抓取的白名单**：`本机 HTTP` 有专门的编辑器，填写允许的网段（`allowCidrs`）和可选的主机名（`allowHostnames`），逐行检查语法并提示过宽、回环、云元数据等范围，按“保存访问规则”才写入。User-Agent 与各项上限也在这里改。
 - **恢复默认设置**：确认后清除本行的全部设置与自定义连接；DSH Credentials 里的密钥和会话的选择不受影响。
@@ -97,9 +97,9 @@ dsh plugin --profile <profile> add dsh-tool-web-enhanced-profile
 
 ## 内置连接
 
-“缺省访问方式”是没改过设置时的方式。远程服务缺省停用：搜索的 DeepSeek Search API、Exa、Firecrawl、Tavily、Tinyfish、OpenAlex、Semantic Scholar，抓取的 DeepSeek Fetch API、Exa、Firecrawl、Tavily、Tinyfish，都要先在设置页打开；保持启用的只有两个缺省连接（DeepSeek Messages、本机 HTTP）与会话模型（查询发往会话本来就在用的模型服务商）。打开之后，也只有会话选了它（或打开增强工具后 Agent 指定了它），查询或 URL 才会发出去。自定义连接新建即启用。
+“缺省访问方式”是没改过设置时的方式。远程服务缺省停用：搜索的 DeepSeek Search API、Exa、Firecrawl、Tavily、Tinyfish、AnySearch、OpenAlex、Semantic Scholar，抓取的 DeepSeek Fetch API、Exa、Firecrawl、Tavily、Tinyfish、AnySearch，都要先在设置页打开；保持启用的只有两个缺省连接（DeepSeek Messages、本机 HTTP）与会话模型（查询发往会话本来就在用的模型服务商）。打开之后，也只有会话选了它（或打开增强工具后 Agent 指定了它），查询或 URL 才会发出去。自定义连接新建即启用。
 
-### 搜索（9 个）
+### 搜索（10 个）
 
 | 连接 | 访问方式 | 查询发给谁 | 说明 |
 | --- | --- | --- | --- |
@@ -110,12 +110,13 @@ dsh plugin --profile <profile> add dsh-tool-web-enhanced-profile
 | Firecrawl | 免密钥（缺省）/ `FIRECRAWL_API_KEY` | Firecrawl | 网页搜索，可附带抓取的正文 |
 | Tavily | 免密钥（缺省）/ `TAVILY_API_KEY` | Tavily | 网页搜索 |
 | Tinyfish | 免密钥（缺省）/ `TINYFISH_API_KEY` | Tinyfish（免密钥时经 Tinyfish 托管的 MCP） | 网页、新闻搜索；论文搜索需个人密钥 |
+| AnySearch | 仅 API key `ANYSEARCH_API_KEY` | AnySearch | 网页搜索；可设地区（`zone`：`cn` / `intl`）与偏好语言（`language`，如 `zh-CN`、`en`） |
 | OpenAlex | 免密钥（缺省）/ `OPENALEX_API_KEY` | OpenAlex | 学术文献 |
 | Semantic Scholar | 仅 API key `SEMANTIC_SCHOLAR_API_KEY` | Semantic Scholar | 学术文献 |
 
 内容实时性（自动 / 24 小时内 / 实时）只对 Exa（个人密钥）与 Firecrawl 生效，其他连接按“自动”发送。模型搜索（会话模型与固定模型连接）由模型服务商按次计费服务端搜索，另消耗 token。会话模型能跟随哪些路由、推导不了时的原因见[功能设计 · model 后端](docs/design.md#model-后端)。
 
-### 抓取（6 个）
+### 抓取（7 个）
 
 | 连接 | 访问方式 | URL 发给谁 | 说明 |
 | --- | --- | --- | --- |
@@ -125,8 +126,11 @@ dsh plugin --profile <profile> add dsh-tool-web-enhanced-profile
 | Firecrawl | 免密钥（缺省）/ `FIRECRAWL_API_KEY` | Firecrawl | Firecrawl scrape |
 | Tavily | 免密钥（缺省）/ `TAVILY_API_KEY` | Tavily | Tavily extract |
 | Tinyfish | 仅 API key `TINYFISH_API_KEY` | Tinyfish | Tinyfish fetch |
+| AnySearch | 仅 API key `ANYSEARCH_API_KEY` | AnySearch | AnySearch extract；读取 HTML、纯文本、JSON 与 Markdown，不读 PDF 等二进制文件，较长的页面可能在 50 000 字符处截断 |
 
-远程抓取服务的结果是文本；服务没有报告目标状态时结果记为请求 URL 的 HTTP 200。各服务的路由、参数与结果映射见[功能设计 · 各后端的行为](docs/design.md#各后端的行为)。
+远程抓取服务的结果是文本；服务没有报告目标状态时结果记为请求 URL 的 HTTP 200。
+
+AnySearch 两侧都只支持个人 API key：服务本身有匿名档，但本插件不提供匿名访问（免费账号注册即可用），自定义的 AnySearch 连接同样只用密钥。凭据名 `ANYSEARCH_API_KEY` 与 AnySearch 官方插件相同，DSH Credentials 里已有的这一项可以直接用。不要和 `@anysearch/anysearch-dsh` 一起装，见[安装](#安装)。各服务的路由、参数与结果映射见[功能设计 · 各后端的行为](docs/design.md#各后端的行为)。
 
 ## 增强工具
 
@@ -142,7 +146,7 @@ dsh plugin --profile <profile> add dsh-tool-web-enhanced-profile
 
 ## 隐私与安全须知
 
-- **远程服务会收到查询或 URL**：远程服务缺省停用；打开后，会话选了它（或增强工具打开时 Agent 指定了它），搜索查询或要抓取的 URL 就会发给该服务（模型搜索发给模型服务商）；菜单、设置页与列出工具都写明接收方。设置页对四个抓取服务说明了缓存与数据保留，例如 Firecrawl 缺省可能返回缓存并把结果存入其缓存与索引（可关闭 `storeInCache`），Tinyfish 的服务条款允许用这些数据训练模型。免密钥的 Exa 抓取经其托管 MCP 发送，并带本插件的名称与版本。
+- **远程服务会收到查询或 URL**：远程服务缺省停用；打开后，会话选了它（或增强工具打开时 Agent 指定了它），搜索查询或要抓取的 URL 就会发给该服务（模型搜索发给模型服务商）；菜单、设置页与列出工具都写明接收方。设置页对五个抓取服务说明了缓存与数据保留，例如 Firecrawl 缺省可能返回缓存并把结果存入其缓存与索引（可关闭 `storeInCache`），Tinyfish 的服务条款允许用这些数据训练模型，AnySearch 的隐私政策称回复后不保存请求与结果、服务条款却写终止服务后仍保留 30 天。免密钥的 Exa 抓取经其托管 MCP 发送，并带本插件的名称与版本。
 - **远程抓取不做地址检查**：URL 原样交给服务，目标能否访问由服务决定。
 - **本机抓取默认只访问公网**：`本机 HTTP` 的白名单为空时，与 DSH 原生 public-only 抓取完全一致。内网地址需要在 `allowCidrs` 里显式放行；设了 `allowHostnames` 时，还要 URL 的主机名匹配其中一条。直连时校验 DNS 返回的全部地址，任一不合规即拒绝。
   - **Fake-IP**：如果代理工具让系统 DNS 返回 Fake-IP 地址（常见于 `198.18.0.0/15`，以你的代理配置为准），这些地址不是公网地址，本机抓取会拒绝；需要时把该网段加入 `allowCidrs`，并可用 `allowHostnames` 收窄。
@@ -184,10 +188,10 @@ dsh-web-search-enhanced 与 dsh-web-fetch-enhanced 的 0.1.x 版本原本各自�
 
 | 包 | 版本 | 作用 |
 | --- | --- | --- |
-| [dsh-tool-web-enhanced-profile](packages/profile/README.md) | 0.1.2 | 要安装的 bundle，不含代码：挂载下面三个包，并在 `web` 行选中两个插件的 provider |
-| [dsh-web-search-enhanced](packages/search-enhanced/README.md) | 0.2.2 | 行 `web-search-enhanced`，`web_search` 的 provider `search-enhanced`，内部切换搜索后端 |
-| [dsh-web-fetch-enhanced](packages/fetch-enhanced/README.md) | 0.2.2 | 行 `web-fetch-enhanced`，`web_fetch` 的 provider `fetch-enhanced`，内部切换抓取后端 |
-| [dsh-tool-web-enhanced-ui](packages/ui/README.md) | 0.1.2 | 行 `tool-web-enhanced-ui`：输入框的连接菜单、首次启用提示与插件页上的组合包概览；不依赖两个插件行 |
+| [dsh-tool-web-enhanced-profile](packages/profile/README.md) | 0.1.3 | 要安装的 bundle，不含代码：挂载下面三个包，并在 `web` 行选中两个插件的 provider |
+| [dsh-web-search-enhanced](packages/search-enhanced/README.md) | 0.2.3 | 行 `web-search-enhanced`，`web_search` 的 provider `search-enhanced`，内部切换搜索后端 |
+| [dsh-web-fetch-enhanced](packages/fetch-enhanced/README.md) | 0.2.3 | 行 `web-fetch-enhanced`，`web_fetch` 的 provider `fetch-enhanced`，内部切换抓取后端 |
+| [dsh-tool-web-enhanced-ui](packages/ui/README.md) | 0.1.3 | 行 `tool-web-enhanced-ui`：输入框的连接菜单、首次启用提示与插件页上的组合包概览；不依赖两个插件行 |
 
 `dsh-tool-web-enhanced-core` 是私有的共享源码，构建时内联进各插件，不发布。
 

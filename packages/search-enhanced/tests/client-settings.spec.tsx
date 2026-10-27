@@ -693,3 +693,95 @@ describe('remote services off by default and the Enhanced tools switch', () => {
     expect(mutate).toHaveBeenCalledWith([{ op: 'set', path: ['connections', 'builtin:exa', 'disabled'], value: false }], 8)
   })
 })
+
+describe('AnySearch on the settings page', () => {
+  const menuItems = () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+
+  it('lists AnySearch after Tinyfish, off by default, reached with a personal key only', () => {
+    const h = mountPage({ credentialsMap: { ANYSEARCH_API_KEY: 'missing' } })
+    const services = [...h.container.querySelectorAll('h4')].find(heading => heading.textContent === tZh('services.title'))!.closest('section')!
+    const names = [...services.querySelectorAll('li')].map(item => item.textContent)
+    const position = (name: string) => names.findIndex(text => text.includes(name))
+    expect(position('AnySearch')).toBe(position('Tinyfish') + 1)
+    expect(position('OpenAlex')).toBe(position('AnySearch') + 1)
+    const row = h.row('AnySearch')
+    expect(row.querySelector('[role="switch"]')!.getAttribute('aria-checked')).toBe('false')
+    expect(row.textContent).toContain(tZh('services.off'))
+    expect(row.textContent).toContain(tZh('services.personalKey', { ref: 'ANYSEARCH_API_KEY' }) + ' · ' + tZh('credential.unset'))
+    expect(row.textContent).not.toContain(tZh('services.keyless'))
+    h.configure('AnySearch')
+    expect(row.textContent).toContain(tZh('services.remoteNotice', { name: 'AnySearch' }))
+    expect(row.querySelector('[role="tab"]')).toBeNull()
+    expect(row.textContent).not.toContain(tZh('services.access'))
+    expect(row.textContent).not.toContain(tZh('options.keylessMore'))
+    expect(labelled(row, 'credential.reference').value).toBe('ANYSEARCH_API_KEY')
+    expect(row.querySelector('input[type="password"]')).not.toBeNull()
+  })
+
+  it('turns AnySearch on with disabled: false', async () => {
+    const h = mountPage()
+    click(h.row('AnySearch').querySelector('[role="switch"]'))
+    await flush()
+    expect(h.mutate).toHaveBeenCalledExactlyOnceWith([{ op: 'set', path: ['connections', 'builtin:anysearch', 'disabled'], value: false }], 8)
+  })
+
+  it('offers the catalog regions verbatim, besides the service default, and saves the one chosen', async () => {
+    const h = mountPage()
+    h.configure('AnySearch')
+    const zone = h.row('AnySearch').querySelector<HTMLElement>('button[aria-label="' + tZh('option.anysearch.zone') + '"]')!
+    expect(zone.textContent).toContain(tZh('options.default'))
+    click(zone)
+    expect(menuItems().map(item => item.textContent)).toEqual([tZh('options.default'), 'cn', 'intl'])
+    click(menuItems().find(item => item.textContent === 'intl'))
+    await flush()
+    expect(h.mutate).toHaveBeenCalledExactlyOnceWith([{ op: 'set', path: ['connections', 'builtin:anysearch', 'options', 'zone'], value: 'intl' }], 8)
+  })
+
+  it('keeps a preferred language outside the catalog pattern unsaved with its error, and saves a valid tag', async () => {
+    const h = mountPage({ user: { version: 2, connections: { 'builtin:anysearch': { options: { zone: 'cn' } } } } })
+    h.configure('AnySearch')
+    const row = h.row('AnySearch')
+    expect(row.querySelector<HTMLElement>('button[aria-label="' + tZh('option.anysearch.zone') + '"]')!.textContent).toContain('cn')
+    const language = labelled(row, 'option.anysearch.language')
+    expect(language.placeholder).toBe('如 zh-CN 或 en')
+    for (const invalid of ['zh_CN', 'chinese', 'zh-']) {
+      type(language, invalid)
+      blur(language)
+      await flush()
+      expect(language.getAttribute('aria-invalid'), invalid).toBe('true')
+      expect(row.textContent).toContain(tZh('options.invalid'))
+    }
+    expect(h.mutate).not.toHaveBeenCalled()
+    type(language, 'zh-CN')
+    blur(language)
+    await flush()
+    expect(h.mutate).toHaveBeenCalledExactlyOnceWith([{ op: 'set', path: ['connections', 'builtin:anysearch', 'options', 'language'], value: 'zh-CN' }], 8)
+  })
+
+  it('names both options in English', () => {
+    const h = mountPage({ translate: tEn })
+    h.configure('AnySearch')
+    const row = h.row('AnySearch')
+    expect(row.querySelector('button[aria-label="Region"]')).not.toBeNull()
+    const language = row.querySelector<HTMLInputElement>('input[title="language"]')!
+    expect(row.querySelector('label[for="' + language.id + '"]')?.textContent).toBe('Preferred language')
+    expect(language.placeholder).toBe('e.g. zh-CN or en')
+  })
+
+  it('adds a custom AnySearch connection with a key and its options', async () => {
+    const h = mountPage()
+    click(byText(h.container, 'button', tZh('custom.addStructured')))
+    const form = h.container.querySelector('form')!
+    click(form.querySelector('button[aria-label="' + tZh('editor.adapter') + '"]'))
+    click(menuItems().find(item => item.textContent === 'AnySearch'))
+    expect(labelled(form, 'editor.endpoint').placeholder).toBe(CATALOG.anysearch.endpoint)
+    type(labelled(form, 'editor.label'), 'Team AnySearch')
+    type(labelled(form, 'editor.id'), 'team-anysearch')
+    type(labelled(form, 'option.anysearch.language'), 'en')
+    click(byText(form, 'button', tZh('editor.save')))
+    await flush()
+    expect(h.mutate).toHaveBeenCalledExactlyOnceWith([{ op: 'set', path: ['connections', 'custom:team-anysearch'], value: {
+      kind: 'adapter', adapter: 'anysearch', label: 'Team AnySearch', credentialRef: 'CUSTOM_TEAM_ANYSEARCH_API_KEY', options: { language: 'en' },
+    } }], 8)
+  })
+})

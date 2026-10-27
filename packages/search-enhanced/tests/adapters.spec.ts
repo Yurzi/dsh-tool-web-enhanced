@@ -1,7 +1,7 @@
 /** Wire contracts per adapter (synthetic, official-doc-shaped fixtures) and the dispatch through executeSearch. */
 import { createServer } from 'node:http'
 import { once } from 'node:events'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { ADAPTER_KEYS, CATALOG, type AdapterKey } from '../src/catalog.ts'
 import { MAX_SNIPPET_LENGTH, type Auth, type SearchInput } from 'dsh-tool-web-enhanced-core/host'
 import { ADAPTER_WIRES } from '../src/search/adapters/index.ts'
@@ -15,6 +15,7 @@ const KEY: Auth = { kind: 'api-key', key: 'fixture-key' }
 const input = (overrides: Partial<SearchInput> = {}): SearchInput => ({ query: 'q', maxResults: 5, freshness: 'auto', options: {}, ...overrides })
 const request = (adapter: AdapterKey, overrides?: Partial<SearchInput>, auth: Auth = KEY) => ADAPTER_WIRES[adapter].request(input(overrides), CATALOG[adapter].endpoint, auth)
 const params = (url: string) => Object.fromEntries(new URL(url).searchParams)
+const apiFailure = (adapter: AdapterKey, message: string) => adapter === 'anysearch' ? { code: -1, message } : { error: { message } }
 
 describe('adapter requests', () => {
   it.each<[AdapterKey, string, Record<string, string>, Record<string, unknown> | undefined]>([
@@ -184,7 +185,7 @@ describe('adapter responses', () => {
     for (const payload of [null, [], { results: 'none' }]) {
       expect(() => ADAPTER_WIRES[adapter].parse(payload, input())).toThrow(expect.objectContaining({ code: 'WEB_PROVIDER_ERROR' }))
     }
-    expect(() => ADAPTER_WIRES[adapter].parse({ error: 'private upstream detail' }, input())).toThrow('The search service responded (untrusted): private upstream detail')
+    expect(() => ADAPTER_WIRES[adapter].parse(apiFailure(adapter, 'private upstream detail'), input())).toThrow('The search service responded (untrusted): private upstream detail')
   })
 })
 
@@ -273,6 +274,83 @@ describe('executeSearch', () => {
   })
 })
 
+describe('AnySearch through its mapped wire and a local HTTP API', () => {
+  async function api(payload: unknown, status = 200) {
+    const requests: { method: string | undefined; path: string | undefined; headers: Record<string, unknown>; body: unknown }[] = []
+    const server = createServer((req, res) => {
+      let body = ''
+      req.on('data', (chunk: Buffer) => { body += chunk.toString('utf8') })
+      req.on('end', () => {
+        requests.push({ method: req.method, path: req.url, headers: req.headers, body: JSON.parse(body) as unknown })
+        res.writeHead(status, { 'content-type': 'application/json' })
+        res.end(JSON.stringify(payload))
+      })
+    })
+    server.listen(0, '127.0.0.1')
+    await once(server, 'listening')
+    onTestFinished(async () => {
+      server.closeAllConnections()
+      await new Promise<void>((resolve, reject) => server.close(error => { if (error === undefined) resolve(); else reject(error) }))
+    })
+    const address = server.address()
+    if (address === null || typeof address === 'string') throw new Error('expected TCP listener')
+    const settings = resolveSettings({ connections: {
+      'custom:anysearch': { kind: 'adapter', adapter: 'anysearch', label: 'AnySearch', credentialRef: 'ANYSEARCH_API_KEY', endpoint: 'http://127.0.0.1:' + address.port + '/search', trustedEndpoint: true, options: { zone: 'cn', language: 'zh-CN' } },
+    } })
+    const connection = settings.connections.get('custom:anysearch')
+    if (connection === undefined || connection.kind !== 'adapter') throw new Error('expected AnySearch connection')
+    return { requests, connection }
+  }
+
+  it('posts query, bounded count and connection options, prioritizes snippet, drops missing URLs and permits empty titles', async () => {
+    const { connection, requests } = await api({ code: 0, data: { results: [
+      { url: 'https://example.com/a', title: '', snippet: 'Summary', content: 'Summary date: 2026-01-01' },
+      { url: 'https://example.com/b', title: 'Fallback', content: 'Page content' },
+      { title: 'Missing URL', snippet: 'discard' },
+    ] } })
+    const credential = vi.fn(async () => 'fixture-key')
+    const result = await executeSearch({ kind: 'adapter', connection, freshness: 'realtime' }, { query: 'Research query', maxResults: 50 }, { credential })
+    expect(result).toStrictEqual({ sources: [
+      { url: 'https://example.com/a', snippet: 'Summary' },
+      { url: 'https://example.com/b', title: 'Fallback', snippet: 'Page content' },
+    ], truncated: false })
+    expect(credential).toHaveBeenCalledExactlyOnceWith('ANYSEARCH_API_KEY')
+    expect(requests).toHaveLength(1)
+    expect(requests[0]).toMatchObject({ method: 'POST', path: '/search', headers: { authorization: 'Bearer fixture-key', 'content-type': 'application/json' }, body: { query: 'Research query', max_results: 10, zone: 'cn', language: 'zh-CN' } })
+  })
+
+  it.each([false, true])('discards HTTP 402 generated account data, even when it also echoes our key (%s)', async echo => {
+    const secrets = { username: 'generated-user-unique', password: 'generated-password-unique', api_key: 'as_sk_generated_unique' }
+    const { connection, requests } = await api({ code: -1, message: JSON.stringify(secrets) + (echo ? ' fixture-key' : ''), ...secrets }, 402)
+    const onDiagnostic = vi.fn()
+    const pending = executeSearch({ kind: 'adapter', connection, freshness: 'auto' }, { query: 'q' }, { credential: async () => 'fixture-key', onDiagnostic })
+    await expect(pending).rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR', message: 'dsh-web-search-enhanced: AnySearch refused the request (HTTP 402); check account credit and API access' })
+    for (const value of Object.values(secrets)) await expect(pending).rejects.not.toThrow(value)
+    await expect(pending).rejects.not.toHaveProperty('cause')
+    expect(onDiagnostic).not.toHaveBeenCalled()
+    expect(requests).toHaveLength(1)
+  })
+
+  it('preserves generic HTTP 401 wording followed by the untrusted explanation', async () => {
+    const { connection } = await api({ code: -1, message: 'Invalid API key.' }, 401)
+    await expect(executeSearch({ kind: 'adapter', connection, freshness: 'auto' }, { query: 'q' }, { credential: async () => 'fixture-key' })).rejects.toMatchObject({
+      code: 'WEB_PROVIDER_ERROR',
+      message: 'dsh-web-search-enhanced: AnySearch rejected the API key (HTTP 401); ask the user to check the key in connection settings\n\nAnySearch responded (untrusted): Invalid API key.',
+    })
+  })
+
+  it.each([undefined, '', '  '])('never sends a request when the personal API key is missing (%j)', async key => {
+    const { connection, requests } = await api({ code: 0, data: { results: [] } })
+    const credential = vi.fn(async () => key)
+    await expect(executeSearch({ kind: 'adapter', connection, freshness: 'auto' }, { query: 'q' }, { credential })).rejects.toMatchObject({
+      code: 'WEB_PROVIDER_CREDENTIAL_MISSING',
+      message: 'dsh-web-search-enhanced: no API key is stored for ANYSEARCH_API_KEY; ask the user to add it in search connection settings (DSH Credentials) or choose another connection',
+    })
+    expect(credential).toHaveBeenCalledExactlyOnceWith('ANYSEARCH_API_KEY')
+    expect(requests).toEqual([])
+  })
+})
+
 describe('adapters through a real remote API', () => {
   it('redacts OpenAlex credentials reconstructed from inverted-abstract keys after parsing', async () => {
     const secret = 'fixture-openalex-secret'
@@ -316,7 +394,7 @@ describe('adapters through a real remote API', () => {
       req.resume()
       req.on('end', () => {
         res.setHeader('content-type', 'application/json')
-        res.end(JSON.stringify({ error: { message: injection } }))
+        res.end(JSON.stringify(apiFailure(adapter, injection)))
       })
     })
     server.listen(0, '127.0.0.1')
@@ -343,7 +421,7 @@ describe('adapters through a real remote API', () => {
       req.on('end', () => {
         calls++
         res.setHeader('content-type', 'application/json')
-        res.end(JSON.stringify({ error: { message: '  rejected fixture-secret; fixture-secret is not permitted  ' } }))
+        res.end(JSON.stringify(apiFailure(adapter, '  rejected fixture-secret; fixture-secret is not permitted  ')))
       })
     })
     server.listen(0, '127.0.0.1')
@@ -373,7 +451,8 @@ describe('adapters through a real remote API', () => {
     const requests: { method: string | undefined; url: string | undefined; headers: Record<string, unknown>; body: unknown }[] = []
     const row = { url: 'https://example.com/page', title: ' Page ', text: 'evidence', content: 'evidence', description: 'evidence', snippet: 'evidence' }
     const payload = adapter === 'firecrawl' ? { success: true, data: { web: [row] } }
-      : adapter === 'semanticscholar' ? { data: [row] } : { results: [row] }
+      : adapter === 'semanticscholar' ? { data: [row] }
+        : adapter === 'anysearch' ? { code: 0, data: { results: [row] } } : { results: [row] }
     const server = createServer((req, res) => {
       let body = ''
       req.on('data', (chunk: Buffer) => { body += chunk.toString('utf8') })

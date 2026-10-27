@@ -69,11 +69,11 @@ describe('Tinyfish fetch REST request and page mapping', () => {
     ['invalid_redirect_url', 'invalid-url'], ['empty_content', 'empty'], ['bot_blocked', 'failed'],
     ['login_required', 'failed'], ['page_not_found', 'failed'], ['target_unreachable', 'failed'],
   ] as const)('maps per-URL %s and preserves its service message', (error, failure) => {
-    expect(responseOutcome({ results: [], errors: [{ error, message: 'UPSTREAM_SECRET' }] })).toStrictEqual({ kind: 'failure', failure, detail: 'UPSTREAM_SECRET' })
+    expect(responseOutcome({ results: [], errors: [{ error, message: 'UPSTREAM_SECRET' }] })).toStrictEqual({ kind: 'failure', failure, detail: { kind: 'text', text: 'UPSTREAM_SECRET' } })
   })
 
   it.each([null, '404', 0, 600, 403.5])('never guesses a target status from %s', status => {
-    expect(responseOutcome({ results: [], errors: [{ error: 'page_not_found', status }] })).toStrictEqual({ kind: 'failure', failure: 'failed', detail: 'page_not_found' })
+    expect(responseOutcome({ results: [], errors: [{ error: 'page_not_found', status }] })).toStrictEqual({ kind: 'failure', failure: 'failed', detail: { kind: 'text', text: 'page_not_found' } })
   })
 
   it.each([

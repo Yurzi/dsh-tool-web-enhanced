@@ -1,4 +1,4 @@
-import { exaSearch, firecrawlSearch, tavilySearch, tinyfishSearch, openalexSearch, semanticscholarSearch, mapWire } from 'dsh-tool-web-enhanced-core/host'
+import { exaSearch, firecrawlSearch, tavilySearch, tinyfishSearch, anysearchSearch, openalexSearch, semanticscholarSearch, mapWire } from 'dsh-tool-web-enhanced-core/host'
 import type { AdapterKey } from '../../catalog.ts'
 import { searchSources } from '../adapter-result.ts'
 import type { AdapterFor } from './types.ts'
@@ -8,6 +8,7 @@ export const ADAPTER_WIRES = {
   firecrawl: mapWire(firecrawlSearch, searchSources),
   tavily: mapWire(tavilySearch, searchSources),
   tinyfish: mapWire(tinyfishSearch, searchSources),
+  anysearch: mapWire(anysearchSearch, searchSources),
   openalex: mapWire(openalexSearch, searchSources),
   semanticscholar: mapWire(semanticscholarSearch, searchSources),
 } satisfies { readonly [K in AdapterKey]: AdapterFor<K> }

@@ -1,6 +1,7 @@
 /** Tinyfish REST search and fetch protocols, with hosted MCP search for keyless access. */
 import { apiKeyHeader, getJson, isRecord, postJson, type KeylessWire } from '../adapter.ts'
 import type { McpToolResult } from '../mcp.ts'
+import { bodyDetail } from '../transport.ts'
 import { reportedTarget, statusPage, type FetchWire, type PageFailure } from './fetch.ts'
 import { mapRows, rowsAt, type SearchRow, type SearchWire } from './search.ts'
 import { toolRows } from './tool-rows.ts'
@@ -50,7 +51,7 @@ export const tinyfishFetch: FetchWire = {
         const target = reportedTarget(error.status, input.url, input.url)
         if (target !== undefined) return { kind: 'page', page: statusPage(target) }
         const detail = [error.message, error.code, error.error].find((value): value is string => typeof value === 'string' && value.trim() !== '')
-        return { kind: 'failure', failure: fetchFailure(error.error), detail }
+        return { kind: 'failure', failure: fetchFailure(error.error), detail: bodyDetail(detail) }
       }
     }
     if (!Array.isArray(payload.results)) return { kind: 'failure', failure: 'invalid', detail: undefined }

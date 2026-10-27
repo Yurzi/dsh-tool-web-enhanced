@@ -65,7 +65,7 @@ describe('Firecrawl fetch request and page mapping', () => {
     { success: false, error: 'private upstream ' + KEY, code: 'SCRAPE_TIMEOUT', data: { metadata: { statusCode: 404 } } },
     { success: false, code: 'SCRAPE_ALL_ENGINES_FAILED' },
   ])('reports unsuccessful envelopes as a page failure: %#', payload => {
-    expect(parseOutcome(payload)).toStrictEqual({ kind: 'failure', failure: 'failed', detail: 'error' in payload ? payload.error : undefined })
+    expect(parseOutcome(payload)).toStrictEqual({ kind: 'failure', failure: 'failed', detail: 'error' in payload ? { kind: 'text', text: payload.error } : undefined })
   })
 
   it.each([

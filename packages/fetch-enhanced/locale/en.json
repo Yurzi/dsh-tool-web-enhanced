@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Web Fetch Enhanced",
-    "description": "Serves web_fetch from the fetch connection you choose: local fetching (with optional private-network rules), the DeepSeek Fetch API, or remote reading services (Exa, Firecrawl, Tavily, Tinyfish)."
+    "description": "Serves web_fetch from the fetch connection you choose: local fetching (with optional private-network rules), the DeepSeek Fetch API, or remote reading services (Exa, Firecrawl, Tavily, Tinyfish, AnySearch)."
   }
 }

@@ -303,6 +303,7 @@ describe('fetchConnections real Host', () => {
       { id: 'builtin:firecrawl', label: 'Firecrawl', kind: 'adapter', remote: true, access: 'keyless', status: 'ready' },
       { id: 'builtin:tavily', label: 'Tavily', kind: 'adapter', remote: true, access: 'keyless', status: 'ready' },
       { id: 'builtin:tinyfish', label: 'Tinyfish', kind: 'adapter', remote: true, access: 'api-key', status: 'needs-credential' },
+      { id: 'builtin:anysearch', label: 'AnySearch', kind: 'adapter', remote: true, access: 'api-key', status: 'disabled' },
     ])
     const tokenEndpoints: string[] = []
     h.ctx.provide('deepseekAccount', { resolveToken: async (endpoint: string) => { tokenEndpoints.push(endpoint); return 'account-token' } } as never)

@@ -8,7 +8,7 @@ import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { Pairing, Route } from 'dsh-tool-web-enhanced-core/shared'
 import type { FetchSettings } from '../src/settings/types.ts'
 import type { CredentialStatusMap, PairingsState } from '../src/client/injected.ts'
-import { zh } from '../src/client/locales.ts'
+import { en, zh } from '../src/client/locales.ts'
 import { SettingsPage, type SettingsPageProps } from '../src/client/settings/SettingsPage.tsx'
 import { CATALOG } from '../src/catalog.ts'
 
@@ -72,8 +72,8 @@ function blur(element: Element | null | undefined): void {
   act(() => { element.focus(); element.blur() })
 }
 
-const tZh = (key: string, params?: Record<string, unknown>): string => {
-  const template = zh[key as keyof typeof zh] ?? key
+const translator = (dictionary: Readonly<Record<string, string>>) => (key: string, params?: Record<string, unknown>): string => {
+  const template = dictionary[key] ?? key
   return template.replace(/\{(\w+)\}/g, (match, name: string) => {
     const val = params?.[name]
     if (val === undefined) return match
@@ -82,6 +82,8 @@ const tZh = (key: string, params?: Record<string, unknown>): string => {
     return JSON.stringify(val)
   })
 }
+const tZh = translator(zh)
+const tEn = translator(en)
 
 interface MountOptions {
   user?: Record<string, unknown>
@@ -317,7 +319,7 @@ describe('fetch row settings', () => {
 
   it('shows every remote service from the catalog with who receives the URL and its options per route', () => {
     const h = mountPage()
-    for (const name of ['Exa', 'Firecrawl', 'Tavily', 'Tinyfish']) {
+    for (const name of ['Exa', 'Firecrawl', 'Tavily', 'Tinyfish', 'AnySearch']) {
       expect(h.row(name).textContent).not.toContain(tZh('services.remoteNotice', { name }))
       h.configure(name)
       expect(h.row(name).textContent).toContain(tZh('services.remoteNotice', { name }))
@@ -474,5 +476,41 @@ describe('remote services off by default and the Enhanced tools switch', () => {
     click(row('Exa').querySelector('[role="switch"]'))
     await flush()
     expect(mutate).toHaveBeenCalledWith([{ op: 'set', path: ['connections', 'builtin:exa', 'disabled'], value: false }], 8)
+  })
+})
+
+describe('AnySearch on the settings page', () => {
+  it('lists AnySearch last, off by default, reached with a personal key only and without options', () => {
+    const h = mountPage({ credentialsMap: { ANYSEARCH_API_KEY: 'missing' } })
+    const services = [...h.container.querySelectorAll('h4')].find(heading => heading.textContent === tZh('services.title'))!.closest('section')!
+    const names = [...services.querySelectorAll('li')].map(item => item.textContent)
+    expect(names.findIndex(text => text.includes('AnySearch'))).toBe(names.findIndex(text => text.includes('Tinyfish')) + 1)
+    const row = h.row('AnySearch')
+    expect(row.querySelector('[role="switch"]')!.getAttribute('aria-checked')).toBe('false')
+    expect(row.textContent).toContain(tZh('services.off'))
+    expect(row.textContent).toContain(tZh('services.personalKey', { ref: 'ANYSEARCH_API_KEY' }) + ' · ' + tZh('credential.unset'))
+    expect(row.textContent).not.toContain(tZh('services.keyless'))
+    h.configure('AnySearch')
+    expect(row.querySelector('[role="tab"]')).toBeNull()
+    expect(row.textContent).not.toContain(tZh('services.access'))
+    expect(input(h, 'credential.reference').value).toBe('ANYSEARCH_API_KEY')
+    expect(row.querySelector('input[type="password"]')).not.toBeNull()
+    expect(row.textContent).not.toContain(tZh('options.title'))
+    expect(row.querySelectorAll('input:not([type="password"])')).toHaveLength(1)
+  })
+
+  it.each([['zh', tZh, zh], ['en', tEn, en]])('says in %s who receives the URL and what AnySearch keeps and reads', (_language, translate, dictionary) => {
+    const h = mountPage({ translate })
+    h.configure('AnySearch')
+    const notes = [...h.row('AnySearch').querySelectorAll('p')].map(paragraph => paragraph.textContent)
+    expect(notes).toContain(translate('services.remoteNotice', { name: 'AnySearch' }))
+    expect(notes).toContain(dictionary['services.note.anysearch'])
+  })
+
+  it('turns AnySearch on with disabled: false', async () => {
+    const h = mountPage()
+    click(h.row('AnySearch').querySelector('[role="switch"]'))
+    await flush()
+    expect(h.mutate).toHaveBeenCalledExactlyOnceWith([{ op: 'set', path: ['connections', 'builtin:anysearch', 'disabled'], value: false }], 8)
   })
 })

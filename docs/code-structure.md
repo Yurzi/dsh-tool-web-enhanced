@@ -31,11 +31,11 @@ docs/orchestration-prompt.md：维护者维护的多 agent 开发任务说明（
 
 | 包目录 / manifest | npm 名称 | 版本 | exports 与 DSH 元数据 |
 | --- | --- | --- | --- |
-| [profile](<../packages/profile/package.json>) | dsh-tool-web-enhanced-profile | 0.1.2 | 导出 patch、locale、icon、package.json；dsh.bundle.patch 指向 patch。 |
+| [profile](<../packages/profile/package.json>) | dsh-tool-web-enhanced-profile | 0.1.3 | 导出 patch、locale、icon、package.json；dsh.bundle.patch 指向 patch。 |
 | [core](<../packages/core/package.json>) | dsh-tool-web-enhanced-core | 0.0.0 | private；./shared、./host、./client 直接指向源码；无 dsh 字段。 |
-| [search-enhanced](<../packages/search-enhanced/package.json>) | dsh-web-search-enhanced | 0.2.2 | 插件导出；dsh.client.platform = web。 |
-| [fetch-enhanced](<../packages/fetch-enhanced/package.json>) | dsh-web-fetch-enhanced | 0.2.2 | 插件导出；dsh.client.platform = web。 |
-| [ui](<../packages/ui/package.json>) | dsh-tool-web-enhanced-ui | 0.1.2 | 插件导出；dsh.client.platform = web。 |
+| [search-enhanced](<../packages/search-enhanced/package.json>) | dsh-web-search-enhanced | 0.2.3 | 插件导出；dsh.client.platform = web。 |
+| [fetch-enhanced](<../packages/fetch-enhanced/package.json>) | dsh-web-fetch-enhanced | 0.2.3 | 插件导出；dsh.client.platform = web。 |
+| [ui](<../packages/ui/package.json>) | dsh-tool-web-enhanced-ui | 0.1.3 | 插件导出；dsh.client.platform = web。 |
 
 三个插件共用 exports：`. → ./lib/index.js`、`./client → ./lib/client.cjs`，以及 locale JSON、icon SVG 与 package.json；均为 `sideEffects: false`，没有运行时 dependencies。profile 的 dependencies 是三个公开插件；core 只作为开发依赖参与内联。
 
@@ -90,14 +90,15 @@ src/
 | [terminal.ts](<../packages/core/src/host/terminal.ts>) | dsh-TUI 补全：本地结构类型（`TuiCommandTreeProvider`、`CommandCompletionNode`）、`tuiCommandTrees` 的 Context 类型增补与 `registerTerminal`（按当前设置同步列出 `off`、启用的连接、`freshness` 与三档）。 |
 | [credentials.ts](<../packages/core/src/host/credentials.ts>) | API key、路由 key（无 Credentials 服务时回退启动环境）、账号 token 与就绪状态（按下一次请求的模型，未知时只看 API key）。 |
 | [errors.ts](<../packages/core/src/host/errors.ts>) · [native.ts](<../packages/core/src/host/native.ts>) | 能力错误类型、取消与错误工厂；包装 DSH 原生 provider 并重述错误。 |
-| [transport.ts](<../packages/core/src/host/transport.ts>) · [mcp.ts](<../packages/core/src/host/mcp.ts>) | 有界 HTTP 读写、统一期限与上游说明；一次工具调用内的 MCP 握手与 JSON / SSE 解析。 |
-| [adapter.ts](<../packages/core/src/host/adapter.ts>) | AdapterWire、目标、鉴权、mapWire 与 runAdapter。 |
+| [transport.ts](<../packages/core/src/host/transport.ts>) · [mcp.ts](<../packages/core/src/host/mcp.ts>) | 有界 HTTP 读写与统一期限，不认识任何服务：`exchangeJson` 交出去敏的 2xx payload 或非 2xx 的 `FailureResponse`（前 16 KiB、按本次凭据筛查），`statusFailure` 是通用状态措辞；带品牌的上游说明 `UpstreamDetail`（`bodyDetail`、`upstreamDetail`）与唯一的成文处 `upstreamSuffix`；一次工具调用内的 MCP 握手与 JSON / SSE 解析。 |
+| [adapter.ts](<../packages/core/src/host/adapter.ts>) | AdapterWire（含可选的非 2xx 分类 `parseFailure`）、`FailureVerdict` 与缺省的 `statusVerdict`、目标、鉴权、mapWire 与 runAdapter（REST 路由的 2xx 与非 2xx 两条路）。 |
 | [redaction.ts](<../packages/core/src/host/redaction.ts>) | 检测本次请求凭据，生成成功内容与诊断的去敏副本。 |
 | [enhanced-parts.ts](<../packages/core/src/host/enhanced-parts.ts>) | 两侧增强工具共用部件的出口，重导出下面三个模块。 |
 | enhanced-parts/[calls](<../packages/core/src/host/enhanced-parts/calls.ts>) · [wording](<../packages/core/src/host/enhanced-parts/wording.ts>) | 参数错误、未知字段、发起调用的 Agent、`provider` 文法与一次显式执行（`runOnProvider`）；`EnhancedVoice`、就绪子句、拒绝措辞与换 provider 提示的插入。 |
 | enhanced-parts/[listing](<../packages/core/src/host/enhanced-parts/listing.ts>) | 列出工具的规范值 schema、值与文本（单行化、有界），`UNSUPPORTED_REASON_TEXT`（search 执行层共用）；`recipientText`、`oneLine`、`LABEL_MAX` 也供 Host 命令与补全使用。 |
-| [providers/search.ts](<../packages/core/src/host/providers/search.ts>) · [fetch.ts](<../packages/core/src/host/providers/fetch.ts>) | SearchInput / SearchOutcome 与行解析辅助；FetchInput / PageOutcome 与目标状态映射。 |
+| [providers/search.ts](<../packages/core/src/host/providers/search.ts>) · [fetch.ts](<../packages/core/src/host/providers/fetch.ts>) | SearchInput / SearchOutcome（闭合的 `SearchInvalidReason`）与行解析辅助；FetchInput / PageOutcome（闭合的 `PageFailure`）与目标状态映射；失败说明都是 `UpstreamDetail`。 |
 | providers/[exa](<../packages/core/src/host/providers/exa.ts>)、[firecrawl](<../packages/core/src/host/providers/firecrawl.ts>)、[tavily](<../packages/core/src/host/providers/tavily.ts>)、[tinyfish](<../packages/core/src/host/providers/tinyfish.ts>) | 各导出 `<service>Search` 与 `<service>Fetch` wire。 |
+| providers/[anysearch](<../packages/core/src/host/providers/anysearch.ts>) | `anysearchSearch` 与 `anysearchFetch`（REST，只有 API key 路由）；两者的 `parseFailure` 对 402 不附说明，抓取另对 400 / 422 按 `error_code` 分类；50 000 字符的截断标记。 |
 | providers/[openalex](<../packages/core/src/host/providers/openalex.ts>)、[semanticscholar](<../packages/core/src/host/providers/semanticscholar.ts>) | 只有搜索 wire：学术摘要字段与论文来源映射。 |
 | [providers/tool-rows.ts](<../packages/core/src/host/providers/tool-rows.ts>) | MCP 搜索工具共用的结构化与文本行格式解析。 |
 
@@ -193,7 +194,7 @@ src/
 | backends/[native](<../packages/fetch-enhanced/src/backends/native.ts>) · [common](<../packages/fetch-enhanced/src/backends/common.ts>) · [deepseek-fetch-api](<../packages/fetch-enhanced/src/backends/deepseek-fetch-api.ts>) | 创建原生抓取后端；原生鉴权、错误改写与 Host 诊断；实例化 DSH DeepSeek Fetch API provider。 |
 | remote/[adapters/index](<../packages/fetch-enhanced/src/remote/adapters/index.ts>) · [types](<../packages/fetch-enhanced/src/remote/types.ts>) | 把 core 抓取 wire 绑定到目录；按目录约束 keyless 类型。 |
 | remote/[execute](<../packages/fetch-enhanced/src/remote/execute.ts>) · [http](<../packages/fetch-enhanced/src/remote/http.ts>) · [errors](<../packages/fetch-enhanced/src/remote/errors.ts>) | 构建 adapter 后端并执行；HTTP / MCP 传输参数与消息；抓取能力错误工厂。 |
-| [remote/page.ts](<../packages/fetch-enhanced/src/remote/page.ts>) | Page / PageFailure 转 WebFetchResult / WebError。 |
+| [remote/page.ts](<../packages/fetch-enhanced/src/remote/page.ts>) | Page / PageFailure 转 WebFetchResult / WebError（每类失败的措辞，上游说明经 `upstreamSuffix`）。 |
 | client/[index.tsx](<../packages/fetch-enhanced/src/client/index.tsx>) · [section](<../packages/fetch-enhanced/src/client/section.ts>) · [command](<../packages/fetch-enhanced/src/client/command.ts>) | 安装浏览器面、设置注入、`/setup-fetch` 的 decoration 与 Host 命令执行后的重读、可选 UI section；抓取连接菜单 section；/setup-fetch 选择框的选项。 |
 | client/[connections](<../packages/fetch-enhanced/src/client/connections.ts>) · [locales](<../packages/fetch-enhanced/src/client/locales.ts>) | 就绪状态、URL 接收方与选择文案；中英文词典。 |
 | client/[selection](<../packages/fetch-enhanced/src/client/selection.ts>) · [route](<../packages/fetch-enhanced/src/client/route.ts>) · [injected](<../packages/fetch-enhanced/src/client/injected.ts>) | 把 core 的选择 store 与路由状态绑定到抓取 Remote 与字段；设置页注入类型。 |
@@ -247,7 +248,7 @@ src/
 | [environment.ts](<../e2e/harness/environment.ts>) | 隔离环境、`dsh` 调用、`isolatedContext`（在本次运行下另建一套隔离目录，得到独立 home）、`addPlugins`（可选 profile 名）、`createBaseProfile`（经 `dsh-app-boot` 的 `initProfile` 建只有 base 的 profile）、`installUserFixture`（把夹具追加到真实的用户层 patch）、`composedRows`（读 `--dump-config`）。 |
 | [host.ts](<../e2e/harness/host.ts>) | 按 CLI 的步骤在进程内启动 Host（`dsh-app-boot` 的公开导出），叠加 `fixtures/host-plane.yml` 去掉 GUI 行，不绑定端口；可选 `profileName`（Web 或 base）；`prepare` 回调在插件初始化前接入观察者（如日志）。按 `dsh-cmdline` 公开的 `onReady` 契约提供“应用就绪”源：启动完成后通知已登记的监听者，之后登记的立即回调（HMR 的初始重载等它，否则 Settings 写入一直排队）；`dispose` 先 await 公开的 `hmr.runExclusive(async () => {})` 作为屏障，再处置根 fiber。 |
 | [web.ts](<../e2e/harness/web.ts>) | 启动 `dsh web`，监听 127.0.0.1 上 OS 分配的空闲端口（从不用 3080），输出写 `web.log`。 |
-| [browser.ts](<../e2e/harness/browser.ts>) | 无头 Chromium（Playwright），按 context 语言关闭首次启动的对话框（可选保留本组合包的首次启用提示以便截图），导航前可接入页面观察者（如记录请求与 WebSocket 帧），失败时记录可访问性快照与截图。 |
+| [browser.ts](<../e2e/harness/browser.ts>) | 无头 Chromium（Playwright），按 context 语言关闭首次启动的对话框（可选保留本组合包的首次启用提示以便截图），导航前可接入页面观察者（如记录请求与 WebSocket 帧），收集控制台错误与页面异常（不计 DSH 右侧栏切换会话时打印的 “Session reference … is released”），失败时记录可访问性快照与截图。 |
 | [terminal.ts](<../e2e/harness/terminal.ts>) · [terminal-pty.py](<../e2e/harness/terminal-pty.py>) | `startTerminal`：经 Python 标准库 `pty` 在真实伪终端里运行一条命令（如正式的 `dsh-tui` 入口，180×60，`DSH_TUI_LANG=en`），按输出事件等待文字（不计时），结束时把纯文本与 ANSI 原文存为证据。 |
 | [navigation.ts](<../e2e/harness/navigation.ts>)、[theme.ts](<../e2e/harness/theme.ts>)、[model-visuals.ts](<../e2e/harness/model-visuals.ts>) | 经公开界面打开插件页、设置页、新会话、连接菜单及其能力标签与主题设置。 |
 | [remote-fetch-api.ts](<../e2e/harness/remote-fetch-api.ts>)、[model-api.ts](<../e2e/harness/model-api.ts>)、[http.ts](<../e2e/harness/http.ts>) | 回环假远程服务 / 假模型 API（记录方法、路径、请求头与请求体，回复可替换或按请求生成）与本地抓取目标；`startAgentModelApi` 回放确定的 Messages SSE（第一步发出给定的工具调用，之后回答），驱动真实 Agent 循环，`startTextModelApi` 只回文本。 |
@@ -263,6 +264,7 @@ src/
 | [disable-search.yml](<../e2e/fixtures/disable-search.yml>) / [disable-fetch.yml](<../e2e/fixtures/disable-fetch.yml>) / [disable-ui.yml](<../e2e/fixtures/disable-ui.yml>) | 分别停用搜索、抓取与共享 UI 行。 |
 | [fetch-allow-loopback.yml](<../e2e/fixtures/fetch-allow-loopback.yml>) / [fetch-native-route.yml](<../e2e/fixtures/fetch-native-route.yml>) | 显式允许回环的本地连接；把抓取路由切到原生 HTTP。 |
 | [remote-fetch.ts](<../e2e/fixtures/remote-fetch.ts>) / [search-model.ts](<../e2e/fixtures/search-model.ts>) | 自定义抓取连接与 Firecrawl 页响应；固定模型、Session 路由与协议响应。 |
+| [anysearch.ts](<../e2e/fixtures/anysearch.ts>) | 两侧各一个指向回环端点的自定义 AnySearch 连接（可信端点、测试凭据；search 带 `zone` 与 `language`），以及 search、extract 与 400 `invalid_extract_url` 的协议回复。 |
 | [subagent-selection.ts](<../e2e/fixtures/subagent-selection.ts>) | 两侧各两个指向不同回环目的地的连接（固定模型搜索、Firecrawl 抓取）；回环模型：按队列给父 Agent 下发工具调用，可在子 Agent 的请求处暂停。 |
 | [setup-command-connections.yml](<../e2e/fixtures/setup-command-connections.yml>) | 命令与补全用的搜索连接：默认 OpenAlex、API key 访问的 Exa、大写 id 的自定义连接 `custom:MyEngine`。 |
 | [setup-command-invalid-settings.yml](<../e2e/fixtures/setup-command-invalid-settings.yml>) / [setup-command-other-route.yml](<../e2e/fixtures/setup-command-other-route.yml>) | 两行都写不受支持的 `version: 1`（设置无效）；`web` 行把搜索路由给 `deepseek`。 |
@@ -294,23 +296,25 @@ src/
 | [enhanced-hot-switch.e2e.ts](<../e2e/enhanced-hot-switch.e2e.ts>) | 不重启：在 GUI 打开开关后两组工具出现，关掉 search 后下一次请求只少 search 的两个 | 是 | 独立 |
 | [enhanced-readiness.e2e.ts](<../e2e/enhanced-readiness.e2e.ts>) | 同一 GUI Host 保存自定义连接的密钥并刷新浏览器后，菜单与列出工具的就绪状态一致 | 是 | 独立 |
 | [enhanced-review-visuals.e2e.ts](<../e2e/enhanced-review-visuals.e2e.ts>) | 补拍的评审截图：工具行的真实结果、展开的远程服务说明、在 GUI 打开 Exa 前后同一会话的菜单、有无预检问题的首次启用提示（宽度 / 主题 / 语言矩阵） | 是 | 每例独立 |
-| [enhanced-write-race.e2e.ts](<../e2e/enhanced-write-race.e2e.ts>) | 同一轮里跨节的连续写入都保存且没有警告；本页读到 revision 之后的外部修改仍被拒 | 是 | 每例独立 |
+| [enhanced-write-race.e2e.ts](<../e2e/enhanced-write-race.e2e.ts>) | 同一轮里跨节的连续写入都保存且没有警告；本页读到 revision 之后的外部修改仍被拒；证据只收 reload 提交之后发出的请求的响应 | 是 | 每例独立 |
+| [anysearch.e2e.ts](<../e2e/anysearch.e2e.ts>) | 回环 AnySearch 与回环模型：search 的请求（Bearer、查询、数目、地区与语言）与来源映射；extract 只发 `url`、结果为原文；400 `invalid_extract_url` 带运维标签与不可信说明；真实 Agent 经原生 `web_search` / `web_fetch` 拿到成功结果与 URL 无效的措辞 | 否 | 独立 |
+| [anysearch-settings.e2e.ts](<../e2e/anysearch-settings.e2e.ts>) | 两侧设置页的 AnySearch 行（缺省未启用、只有个人密钥）与展开面板（search 的两个参数、fetch 的服务说明），中英文截图 | 是 | 每例独立 |
 | [subagent-selection.e2e.ts](<../e2e/subagent-selection.e2e.ts>) | 回环模型让父 Agent 经 preset 的 `subagent` / `subagent_fork` 建两个子会话；在 Web 打开子会话，不在运行与运行中都经菜单改两侧连接，下一步（或父 Agent 用 `send_message` 再叫起时）请求发往新连接，模型记忆保持为空；Web 的分叉会话照常写两侧的模型记忆 | 是 | 独立 |
 | [setup-commands.e2e.ts](<../e2e/setup-commands.e2e.ts>) | 真实 Host 的 `CommandRuntime`：两个命令的说明与参数提示、不带参数的显示、`off` / 连接 id（含大写的 `custom:MyEngine`）/ 三档实时性的写入与 Remote `get` 一致；用法、不可选与实时性不适用的拒绝不改选择；设置无效的固定措辞；插件行停用时命令消失，ui 行停用时照常 | 否 | 套件 |
 | [setup-commands-ui.e2e.ts](<../e2e/setup-commands-ui.e2e.ts>) | 先跑一轮回环对话再在 Web 打开会话：斜杠菜单行与原来的选择框（截图）；带参数执行后命令卡显示输出、菜单与按钮反映新选择；展开命令卡看到路由警告；ui 行停用时选择框与带参数执行照常；插件行停用时命令与选择框一起消失。记录请求与 WebSocket 帧作证据 | 是 | 独立 |
 | [tui-completion.e2e.ts](<../e2e/tui-completion.e2e.ts>) | 已安装的 dsh-TUI（根 devDependency）与本 bundle：Web profile 叠入 TUI bundle、经 `bootHost` 检查真实 `tuiCommandTrees` 里两棵补全树与 Host 命令输出；独立的 TUI profile（dsh-base → dsh-tui → 本 bundle）里经真实 PTY 启动正式 `dsh-tui` 入口，Tab 补全插入原样的 `custom:MyEngine` 并执行，另一次不带参数执行看到连接列表与路由行 | 否（PTY） | 独立 |
 
-当前 e2e 基线为 27 个文件、175 个测试（最终 `pnpm run test:e2e`）。
+当前 e2e 基线为 29 个文件、183 个测试（最终 `pnpm run test:e2e`）。
 
 ## 测试清单
 
-当前测试基线为 **105 个文件、2236 个测试**（最终 `pnpm run check`，不含 e2e）；逐包数量如下，参数化用例按实际展开计数。每行对应一个测试文件；tests/fixtures/ 下的辅助模块不计入。
+当前测试基线为 **107 个文件、2407 个测试**（最终 `pnpm run check`，不含 e2e）；逐包数量如下，参数化用例按实际展开计数。每行对应一个测试文件；tests/fixtures/ 下的辅助模块不计入。
 
 | 包 | 测试文件 | 通过测试 |
 | --- | ---: | ---: |
-| core | 37 | 637 |
-| search-enhanced | 30 | 816 |
-| fetch-enhanced | 30 | 689 |
+| core | 38 | 719 |
+| search-enhanced | 30 | 862 |
+| fetch-enhanced | 31 | 732 |
 | ui | 7 | 86 |
 | profile | 1 | 8 |
 
@@ -320,7 +324,7 @@ core 的测试夹具：[fixtures/enhanced.ts](<../packages/core/tests/fixtures/e
 
 | 文件 | 覆盖要点 |
 | --- | --- |
-| [adapter.spec.ts](<../packages/core/tests/adapter.spec.ts>) | 真实 HTTP 边界上的鉴权、keyless、期限、取消与 wire 映射；凭据解析器的任何异常在边界上固定化。 |
+| [adapter.spec.ts](<../packages/core/tests/adapter.spec.ts>) | 真实 HTTP 边界上的鉴权、keyless、期限、取消与 wire 映射；凭据解析器的任何异常在边界上固定化；非 2xx 分类：两条 REST 路由都调用 `parseFailure`，`outcome` 裁决原样返回（来自已去敏的 `json`），`status` 裁决不附说明时恰好是通用短消息，另选的说明在回显本次 key 时扣下，凭据命中可信标签时标签不变；`mapWire` 映射 `outcome` 裁决、`status` 裁决不变、没有钩子时不加。 |
 | [client-capability.spec.ts](<../packages/core/tests/client-capability.spec.ts>) | 能力无关 store、命令 decoration（只有 `name`、`available`、`ui`）、路由与凭据状态。 |
 | [client-catalog.spec.ts](<../packages/core/tests/client-catalog.spec.ts>) | 目录派生字段、连接表单、凭据引用与端点信任。 |
 | [client-document.spec.ts](<../packages/core/tests/client-document.spec.ts>) | 原始层合并、候选验证与版本写回。 |
@@ -339,8 +343,8 @@ core 的测试夹具：[fixtures/enhanced.ts](<../packages/core/tests/fixtures/e
 | [native.spec.ts](<../packages/core/tests/native.spec.ts>) | 共享原生鉴权、错误改写与成功内容处理。 |
 | [nested-remote.spec.ts](<../packages/core/tests/nested-remote.spec.ts>) | 运行时服务、插件行与传输各在非根 fiber 下（同 DSH loader）时，两侧 Remote 的 `get` / `set` 照常读写、Host 日志没有未注入服务的访问错误。 |
 | [plans.spec.ts](<../packages/core/tests/plans.spec.ts>) | 请求步冻结与当前连接复查。 |
-| [providers-fetch.spec.ts](<../packages/core/tests/providers-fetch.spec.ts>) | 抓取 outcome、目标状态与服务失败说明。 |
-| [providers-search.spec.ts](<../packages/core/tests/providers-search.spec.ts>) | 搜索 API 错误信封与说明边界。 |
+| [providers-fetch.spec.ts](<../packages/core/tests/providers-fetch.spec.ts>) | 抓取 outcome、目标状态与服务失败说明；AnySearch extract 的请求体只有 `url`、`parse` 表（含 50 000 字符的截断边界）与 `parseFailure` 表（402 不读回复体、各 `error_code`、422 与 400 无码、401 / 403 / 429 走通用措辞）。 |
+| [providers-search.spec.ts](<../packages/core/tests/providers-search.spec.ts>) | 搜索 API 错误信封与说明边界；AnySearch search 的请求形状（先展开参数，再写 `query` 与截到 10 的 `max_results`）、`parse` 表与 402。 |
 | [redaction.spec.ts](<../packages/core/tests/redaction.spec.ts>) | 凭据检测、成功内容替换与安全诊断副本。 |
 | [remote.spec.ts](<../packages/core/tests/remote.spec.ts>) | Remote 契约错误、存储异常与固定内部错误；运行中的 spawn / subagent_fork 子 Agent 可读（含继承）可写、不写模型记忆；真实 JSONL 的冷子会话读写不恢复 Agent、恢复后保持所选，没有记录时取默认或继承、不查模型记忆，并发写入只拒一个过期修订号；普通冷会话（含用户 fork）经真实 controller 恢复并写记忆；会话不存在时保留 controller 的 not-found；没有 `sessionPersistence` 时回到 controller。 |
 | [restriction.spec.ts](<../packages/core/tests/restriction.spec.ts>) | 原生工具遮罩：路由返回、选择变化与卸载；子 Agent 会话写为关闭后立即隐藏；排队中的冷写入提交时目标已恢复，按恢复后的 Agent 同步、旧的捕获不覆盖，不写记忆。 |
@@ -355,7 +359,8 @@ core 的测试夹具：[fixtures/enhanced.ts](<../packages/core/tests/fixtures/e
 | [snapshots.spec.ts](<../packages/core/tests/snapshots.spec.ts>) | 快照并发共享、失败重试与过期捕获。 |
 | [storage.spec.ts](<../packages/core/tests/storage.spec.ts>) | 卸载后排队任务不重开存储；`provider_lists` 加入已有的 version 1 域；对话列表与选择共用每会话队列、只写一次。 |
 | [terminal-contract.spec.ts](<../packages/core/tests/terminal-contract.spec.ts>) | `registerTerminal` 在 dsh-tui 真实的 `TuiCommandTreeRuntime` 上：注入子作用域满足它对插件调用方的要求，条目与描述（多行名称单行化）正确；卸载后注销（真实注册表拒绝重复的根，重新挂载成功即证明）。 |
-| [transport.spec.ts](<../packages/core/tests/transport.spec.ts>) | 有界上游说明、错误体截断、凭据隐去与诊断。 |
+| [transport.spec.ts](<../packages/core/tests/transport.spec.ts>) | 有界上游说明、错误体截断、凭据隐去与诊断；`exchangeJson` 的 `FailureResponse`：`explanation` 与 `send` 附带的说明逐字一致，`json` 去敏（含嵌套值）、空或截断时不分类，`explain` 对字符串、非字符串与空白的结果，回复含本次凭据时一律扣下；`ok` 与 `requestJson` 相同；`bodyDetail` 保留整段文字、不扣下。 |
+| [upstream-detail-types.spec.ts](<../packages/core/tests/upstream-detail-types.spec.ts>) | 类型测试（`@ts-expect-error`）：结构相同的字面量、展开替换 `text`、拼接出的新字符串都不能当作 `UpstreamDetail`。 |
 | [visibility.spec.ts](<../packages/core/tests/visibility.spec.ts>) | 可见性控制器的时序（deferred promise）：同步注册与遮罩、世代与操作版本、遗忘与卸载、服务替换后重新注册、成对注册的回滚与恢复；只有对话列表的重读失败时原生选择照常提交。 |
 
 ### search-enhanced 测试
@@ -363,7 +368,7 @@ core 的测试夹具：[fixtures/enhanced.ts](<../packages/core/tests/fixtures/e
 | 文件 | 覆盖要点 |
 | --- | --- |
 | [adapter-result.spec.ts](<../packages/search-enhanced/tests/adapter-result.spec.ts>) | 服务 outcome 到来源、错误与上游说明。 |
-| [adapters.spec.ts](<../packages/search-enhanced/tests/adapters.spec.ts>) | wire 请求、keyless 路由与各服务响应解析；OpenAlex 属性名还原文本后的凭据去敏。 |
+| [adapters.spec.ts](<../packages/search-enhanced/tests/adapters.spec.ts>) | wire 请求、keyless 路由与各服务响应解析；OpenAlex 属性名还原文本后的凭据去敏；AnySearch 经 `ADAPTER_WIRES` 与本地 HTTP：请求与参数、摘要优先取 `snippet`、丢弃没有 URL 的行、空标题，402 丢弃生成的账号（含回显本次 key 时），401 的通用措辞加说明，缺 key 不发请求。 |
 | [agent.spec.ts](<../packages/search-enhanced/tests/agent.spec.ts>) | 真实 Agent / loop、fork、Off 与 Session 模型切换；standard、minimal 与 PTC preset 上的增强工具表，路由、开关与 Off 变化后的下一次请求，不补建旧对话，子会话继承列表，卸载只撤本侧。 |
 | [catalog.spec.ts](<../packages/search-enhanced/tests/catalog.spec.ts>) | 目录顺序、访问事实、freshness 与参数约束。 |
 | [client-apply.spec.tsx](<../packages/search-enhanced/tests/client-apply.spec.tsx>) | 浏览器注册、可选 UI 注入、设置页与状态生命周期；在真实 `CommandUiRuntime` 上：选择框挂在同名 Host 命令上（菜单行是 Host 命令的，无参数弹框并经 Remote 写入，带参数交给 Host 命令）、本浏览器执行 Host 命令后只重读该会话并让模型记忆失效、卸载后交还 Host 命令。 |
@@ -374,7 +379,7 @@ core 的测试夹具：[fixtures/enhanced.ts](<../packages/core/tests/fixtures/e
 | [client-section.spec.tsx](<../packages/search-enhanced/tests/client-section.spec.tsx>) | 搜索 section、选项组与状态通知。 |
 | [client-selection.spec.ts](<../packages/search-enhanced/tests/client-selection.spec.ts>) | 共享读取、revision 写入、失效与并发竞态。 |
 | [client-settings-model.spec.ts](<../packages/search-enhanced/tests/client-settings-model.spec.ts>) | model 协议分组、参数提示与连接表单事实。 |
-| [client-settings.spec.tsx](<../packages/search-enhanced/tests/client-settings.spec.tsx>) | 设置交互、信任、无效文档与 Reset。 |
+| [client-settings.spec.tsx](<../packages/search-enhanced/tests/client-settings.spec.tsx>) | 设置交互、信任、无效文档与 Reset；AnySearch 行（在 Tinyfish 之后、缺省未启用、只有个人密钥）、地区与偏好语言按目录校验与保存、自定义 AnySearch 连接。 |
 | [client-sparse.spec.ts](<../packages/search-enhanced/tests/client-sparse.spec.ts>) | 搜索设置的稀疏操作。 |
 | [cold-host.spec.ts](<../packages/search-enhanced/tests/cold-host.spec.ts>) | 真实能力生命周期、`WebRuntime`、Remote 与 JSONL：冷的 spawn / subagent_fork 子会话经 Remote 改选择不恢复 Agent、不写记忆；恢复后 `agent/created` 的计划即用新连接，之后每一步按 `agent/request` 重新捕获（同一步内仍冻结）。 |
 | [contract.spec.ts](<../packages/search-enhanced/tests/contract.spec.ts>) | Remote schema、视图与严格输入。 |
@@ -389,7 +394,7 @@ core 的测试夹具：[fixtures/enhanced.ts](<../packages/core/tests/fixtures/e
 | [native.spec.ts](<../packages/search-enhanced/tests/native.spec.ts>) | 原生鉴权、端点与请求级安全边界。 |
 | [plugin.spec.ts](<../packages/search-enhanced/tests/plugin.spec.ts>) | provider 注册、Volatile 设置、公开路由与卸载。 |
 | [selections.spec.ts](<../packages/search-enhanced/tests/selections.spec.ts>) | 连接选择与请求步快照的执行组合。 |
-| [settings.spec.ts](<../packages/search-enhanced/tests/settings.spec.ts>) | 文档、原生参数、adapter 与 model 连接解析。 |
+| [settings.spec.ts](<../packages/search-enhanced/tests/settings.spec.ts>) | 文档、原生参数、adapter 与 model 连接解析；AnySearch 拒绝 keyless 与账号访问，`zone` 与 `language` 的规则（内置与自定义连接）。 |
 | [tools-search.spec.ts](<../packages/search-enhanced/tests/tools-search.spec.ts>) | 定义与 design 原文、超时与并行安全；参数错误（与 tool-web 原消息对照）；多查询并发、先截再合并、首个失败；与真实 tool-web `web_search` 的逐字节对照；列出工具。 |
 | [transport.spec.ts](<../packages/search-enhanced/tests/transport.spec.ts>) | 传输期限、大小、取消与错误处理。 |
 
@@ -401,6 +406,7 @@ core 的测试夹具：[fixtures/enhanced.ts](<../packages/core/tests/fixtures/e
 | [adapter-firecrawl.spec.ts](<../packages/fetch-enhanced/tests/adapter-firecrawl.spec.ts>) | Firecrawl 请求、信封与目标状态。 |
 | [adapter-tavily.spec.ts](<../packages/fetch-enhanced/tests/adapter-tavily.spec.ts>) | Tavily 请求、抽取结果与逐 URL 失败。 |
 | [adapter-tinyfish.spec.ts](<../packages/fetch-enhanced/tests/adapter-tinyfish.spec.ts>) | Tinyfish 请求、页结果、状态与大小边界。 |
+| [adapter-anysearch.spec.ts](<../packages/fetch-enhanced/tests/adapter-anysearch.spec.ts>) | 直接导入 core `anysearchFetch`，经本地 HTTP 与真实 `createRemoteBackend`（运维标签不同于服务名）：请求体只有 `url`；成功结果为请求的 URL、200、文本、不拼标题；定稿的措辞表与错误码；402 的生成凭据不进消息与诊断；任一字段回显本次 key 时说明扣下；凭据命中可信标签时分类保持或按规则落回通用一类；缺 key 不发请求。 |
 | [agent.spec.ts](<../packages/fetch-enhanced/tests/agent.spec.ts>) | 真实 loop 的 Off、fork 与本地提示刷新；与 search 相同的增强工具表与可见性用例。 |
 | [catalog.spec.ts](<../packages/fetch-enhanced/tests/catalog.spec.ts>) | 目录、原生默认值与空选项契约。 |
 | [client-allowlist-lines.spec.ts](<../packages/fetch-enhanced/tests/client-allowlist-lines.spec.ts>) | 物理行诊断、警告、替换与追加。 |
@@ -410,10 +416,10 @@ core 的测试夹具：[fixtures/enhanced.ts](<../packages/core/tests/fixtures/e
 | [client-locales.spec.ts](<../packages/fetch-enhanced/tests/client-locales.spec.ts>) | 中英文键、连接状态与服务说明。 |
 | [client-route.spec.ts](<../packages/fetch-enhanced/tests/client-route.spec.ts>) | 路由观察与环境值。 |
 | [client-selection.spec.ts](<../packages/fetch-enhanced/tests/client-selection.spec.ts>) | 选择缓存、revision 与并发失效。 |
-| [client-settings.spec.tsx](<../packages/fetch-enhanced/tests/client-settings.spec.tsx>) | 本地与远程设置、信任、无效文档与 Reset。 |
+| [client-settings.spec.tsx](<../packages/fetch-enhanced/tests/client-settings.spec.tsx>) | 本地与远程设置、信任、无效文档与 Reset；AnySearch 行（排在最后、缺省未启用、只有个人密钥、没有参数）与中英文服务说明。 |
 | [composition.spec.ts](<../packages/fetch-enhanced/tests/composition.spec.ts>) | 远程 / 本地切换、实时设置与 keyless 目录端点。 |
 | [enhanced-credentials.spec.ts](<../packages/fetch-enhanced/tests/enhanced-credentials.spec.ts>) | 经真实增强工具：adapter 凭据依赖异常不进入结果，真实取消仍为 `WEB_ABORTED`。 |
-| [enhanced-fetch.spec.ts](<../packages/fetch-enhanced/tests/enhanced-fetch.spec.ts>) | 经真实 `WebRuntime` 与能力执行：按 id 调 local、远程 adapter 与 native，不改会话选择；提示不加在 local 的 URL 无效与白名单拒绝上（远程服务的拒绝仍加）；并行；列出的接收方与 `this provider` 白名单说明。 |
+| [enhanced-fetch.spec.ts](<../packages/fetch-enhanced/tests/enhanced-fetch.spec.ts>) | 经真实 `WebRuntime` 与能力执行：按 id 调 local、远程 adapter 与 native，不改会话选择；提示不加在 local 的 URL 无效与白名单拒绝上（远程服务的拒绝仍加，AnySearch 的 URL 无效与内容类型不支持逐字断言提示在上游说明之前）；并行；列出的接收方与 `this provider` 白名单说明。 |
 | [enhanced-listing.spec.ts](<../packages/fetch-enhanced/tests/enhanced-listing.spec.ts>) | `fetchListing`：接收方（运维端点取主机名）与 local 的白名单说明。 |
 | [host.spec.ts](<../packages/fetch-enhanced/tests/host.spec.ts>) | 真实 Host 的选择、记忆、继承、快照与恢复；子 Agent 会话的写入从下一请求步生效、不写记忆，顶层与用户 fork 写记忆；没有下一请求模型时只按 API key 判断就绪。 |
 | [local-provider.spec.ts](<../packages/fetch-enhanced/tests/local-provider.spec.ts>) | 官方 HTTP transport 上的本地授权、取消与限制；自有错误前缀与上游错误原样透传。 |
@@ -422,10 +428,10 @@ core 的测试夹具：[fixtures/enhanced.ts](<../packages/core/tests/fixtures/e
 | [prompt.spec.ts](<../packages/fetch-enhanced/tests/prompt.spec.ts>) | allowlist 提示规范化、去重与有界摘要；主语参数。 |
 | [proxy.spec.ts](<../packages/fetch-enhanced/tests/proxy.spec.ts>) | 代理请求、代理解析与 IP literal 拦截。 |
 | [remote-execute.spec.ts](<../packages/fetch-enhanced/tests/remote-execute.spec.ts>) | 远程传输、MCP、凭据（解析器异常固定化、调用方取消优先）、重定向与 deadline。 |
-| [remote-page.spec.ts](<../packages/fetch-enhanced/tests/remote-page.spec.ts>) | 页状态、文本截断、失败码与上游说明。 |
+| [remote-page.spec.ts](<../packages/fetch-enhanced/tests/remote-page.spec.ts>) | 页状态、文本截断、失败码与上游说明（含 `blocked`、`unsupported`）；经真实 wire 与执行层：Exa 拼接出的凭据先去敏再截断、Firecrawl 占位符再去敏后仍为 2000 字符，凭据恰为 `text` 或 `withheld` 时说明照常或照样扣下。 |
 | [resolver.spec.ts](<../packages/fetch-enhanced/tests/resolver.spec.ts>) | 完整 DNS 答案集、NAT64、取消与自有错误前缀。 |
 | [rules.spec.ts](<../packages/fetch-enhanced/tests/rules.spec.ts>) | CIDR、hostname、公共地址与例外策略；规则校验错误前缀。 |
-| [settings.spec.ts](<../packages/fetch-enhanced/tests/settings.spec.ts>) | 文档（缺省远程停用）、allowlist、原生与自定义连接解析。 |
+| [settings.spec.ts](<../packages/fetch-enhanced/tests/settings.spec.ts>) | 文档（缺省远程停用）、allowlist、原生与自定义连接解析；AnySearch 只用个人密钥、不接受参数。 |
 | [tools-fetch.spec.ts](<../packages/fetch-enhanced/tests/tools-fetch.spec.ts>) | 定义与 design 原文、超时与并行安全；参数错误（与 tool-web 原消息对照）；按调用 Agent 执行一次、提示规则；与真实 tool-web `web_fetch` 的逐字节对照；列出工具。 |
 
 ### ui 与 profile 测试

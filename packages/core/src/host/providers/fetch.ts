@@ -5,6 +5,7 @@
  */
 import { sourceUrl } from '../../shared/url.ts'
 import type { AdapterWire } from '../adapter.ts'
+import type { UpstreamDetail } from '../transport.ts'
 
 /** Body characters returned to tool-web, and the budget requested from services that take one; equals the native `maxBodyChars` default. */
 export const MAX_BODY_CHARS = 100_000
@@ -32,11 +33,11 @@ export interface Page {
 }
 
 /** Why a service could not read a page; the plugin words each one with the connection label. */
-export type PageFailure = 'timeout' | 'too-large' | 'invalid-url' | 'empty' | 'rate-limited' | 'failed' | 'invalid'
+export type PageFailure = 'timeout' | 'too-large' | 'invalid-url' | 'blocked' | 'unsupported' | 'empty' | 'rate-limited' | 'failed' | 'invalid'
 
 export type PageOutcome =
   | { readonly kind: 'page'; readonly page: Page }
-  | { readonly kind: 'failure'; readonly failure: PageFailure; readonly detail: string | undefined }
+  | { readonly kind: 'failure'; readonly failure: PageFailure; readonly detail: UpstreamDetail }
 
 export type FetchWire = AdapterWire<FetchInput, PageOutcome>
 

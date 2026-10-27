@@ -354,25 +354,43 @@ flowchart LR
 
 ~~~ts
 // search：src/search/adapters/index.ts —— 解析结果映射成 DSH 来源
-const ADAPTER_WIRES = { exa: mapWire(exaSearch, searchSources), /* … */ } satisfies { [K in AdapterKey]: AdapterFor<K> }
+const ADAPTER_WIRES = { exa: mapWire(exaSearch, searchSources), /* … */ anysearch: mapWire(anysearchSearch, searchSources), /* … */ } satisfies { [K in AdapterKey]: AdapterFor<K> }
 // fetch：src/remote/adapters/index.ts —— 直接绑定，映射在执行层
-const ADAPTER_WIRES = { exa: exaFetch, firecrawl: firecrawlFetch, tavily: tavilyFetch, tinyfish: tinyfishFetch } satisfies { [K in AdapterKey]: FetchWireFor<K> }
+const ADAPTER_WIRES = { exa: exaFetch, firecrawl: firecrawlFetch, tavily: tavilyFetch, tinyfish: tinyfishFetch, anysearch: anysearchFetch } satisfies { [K in AdapterKey]: FetchWireFor<K> }
 ~~~
+
+一次 adapter 调用经过四层，每层只有自己那份知识：
+
+| 层 | 职责 | 不做什么 |
+| --- | --- | --- |
+| 传输（core `transport.ts`） | 发请求，负责截止时间、字节上限、拒绝重定向；2xx 读完 JSON 并把本次凭据替换为 `[redacted]`；非 2xx 只读前 16 KiB，按本次凭据筛查后交出 `FailureResponse`；提供通用的状态措辞 `statusFailure`（401 / 403 按访问方式、402、429 与其他状态） | 不认识任何服务，不按服务分支 |
+| wire（core `providers/<服务>.ts`） | 服务协议：`request`、解析 2xx 的 `parse`，以及可选的、解析非 2xx 的 `parseFailure` | 都不抛异常，不写给模型的措辞 |
+| 执行（core `runAdapter`） | 取凭据、建 matcher；2xx：`parse` 之后对结果整体 `redactJson`；非 2xx：取 `parseFailure`（缺省 `statusVerdict`）的裁决，`status` 裁决抛 `statusFailure` 的通用错误，`outcome` 裁决直接返回、不再二次去敏 | 不写服务专属的措辞 |
+| 插件绑定（search `searchSources`、fetch `pageFailure`） | 把 outcome 变成来源、结果或措辞；来自 2xx 与来自非 2xx 的 outcome 走同一条路 | 不解析服务协议 |
+
+`parseFailure` 只在 REST 路由上调用（api-key 与 keyless `'rest'`）；托管 MCP 路由与 model 后端经 `send` / `requestJson`，非 2xx 照旧是 `statusFailure` 加通用说明。
 
 | 构件 | 作用 |
 | --- | --- |
-| `AdapterWire<I, O>` | `request(input, endpoint, auth)` 与 `parse(payload, input)`，可选的 keyless 路由：`'rest'`（同一请求、匿名发往目录端点）或一次 MCP `tools/call` |
+| `AdapterWire<I, O>` | `request(input, endpoint, auth)`、`parse(payload, input)`、可选的 `parseFailure(response, input)`，以及可选的 keyless 路由：`'rest'`（同一请求、匿名发往目录端点）或一次 MCP `tools/call` |
+| `FailureResponse` | 非 2xx 回复：`status`；`json` 是前 16 KiB 完整时解析出的 JSON，按本次凭据去敏（只去敏字符串值，不去敏属性名），只供分类，空、截断或不是 JSON 时为 `undefined`；`explanation` 是通用规则选出的说明（`error`、`error.message`、`message`、`detail`，否则原文），`explain(value)` 筛查服务自己选的说明。两者都按原始整段回复判定：回复含本次凭据，就整段扣下 |
+| `FailureVerdict<O>` / `statusVerdict` | `parseFailure` 的裁决：`status`（该状态的通用措辞加给定的说明，`undefined` 即不附）或 `outcome`（服务定义的 outcome，与 2xx 的同样映射与措辞）；缺省的 `statusVerdict` 是通用措辞加通用说明 |
+| `UpstreamDetail` | outcome 里的上游说明：`{ kind: 'text', text }`、`{ kind: 'withheld' }` 或 `undefined`。品牌在 `text` 的字符串值上，只有 `transport.ts` 里一个私有构造点能产生它，`bodyDetail`、`upstreamDetail` 与 `FailureResponse` 都经它构造；对象展开替换 `text` 或拼接新字符串都过不了类型检查。保留筛查后的整段文字 |
+| `bodyDetail` / `upstreamSuffix` | `bodyDetail` 取 2xx 正文里的说明：正文已在传输中去敏，所以不截断、从不扣下。`upstreamSuffix` 是说明成文的唯一位置：trim 与 2000 字符上限在这里做；按结构区分，有 `text` 属性就写 “<label> responded (untrusted): …”，否则写扣下的句子 |
 | `KeylessBound` / `KeylessWire` | 目录标为 keyless 的项缺 keyless 路由即编译失败 |
-| `mapWire` | 把 REST 与 MCP 两条解析结果都经同一个函数映射一次，请求与路由不变 |
+| `mapWire` | 把 REST 与 MCP 两条解析结果、以及 `parseFailure` 的 `outcome` 裁决，经同一个函数映射一次；`status` 裁决原样传出，请求与路由不变；源 wire 没有 `parseFailure` 时映射后的 wire 也没有这个属性 |
 | `adapterTarget` | keyless 目标一律改写为目录端点，不带凭据引用 |
-| `runAdapter` | 在一个截止时间内：keyless 不读凭据，发 REST 或 MCP；api-key 读凭据，经 `storedApiKey` 检查（见[安全架构](#安全架构)的密钥格式），再发往目标端点；最后 `parse` 并对解析结果再次去敏，覆盖键名转成文本的服务格式。非 `WebError` 以去敏副本抛出 |
-| 能力词汇 | `providers/search.ts`：`SearchInput`、`SearchRow`、`SearchOutcome`（行，或 `api` / `invalid` 失败）；`providers/fetch.ts`：`FetchInput`、`Page`、`PageFailure`、`PageOutcome`、`MAX_BODY_CHARS` |
+| `runAdapter` | 在一个截止时间内：keyless 不读凭据，发 REST 或 MCP；api-key 读凭据，经 `storedApiKey` 检查（见[安全架构](#安全架构)的密钥格式），再发往目标端点；之后按上面“执行”一层处理 2xx 与非 2xx。非 `WebError` 以去敏副本抛出 |
+| 能力词汇 | `providers/search.ts`：`SearchInput`、`SearchRow`、`SearchOutcome`（行，或 `api` / `invalid` 失败；`api` 的 `detail` 是 `UpstreamDetail`，`invalid` 带闭合集合 `SearchInvalidReason` 的一项）；`providers/fetch.ts`：`FetchInput`、`Page`、`PageFailure`、`PageOutcome`（失败分支的 `detail` 是 `UpstreamDetail`）、`MAX_BODY_CHARS` |
 
 分界与理由：
 
-- **wire 不写给模型的措辞**：服务模块只放服务知识（请求、信封、字段名与语义），解析返回闭合的 outcome，不构造 `WebError`；上游自己的说明只作为数据（`detail`）带出。措辞、来源规范化、页面映射与截断在插件，同一个服务因此能在两侧以各自的口吻报错。
+- **wire 不写给模型的措辞**：服务模块只放服务知识（请求、信封、错误回复、字段名与语义），解析返回闭合的 outcome 或裁决，不构造 `WebError`；上游自己的说明只作为数据（`detail`）带出。措辞、来源规范化、页面映射与截断在插件，同一个服务因此能在两侧以各自的口吻报错。
+- **传输不认识服务**：怎么理解服务的回复（包括非 2xx）是 wire 的职责，传输只做通用的读取与筛查，没有按服务或按状态码的分支（`statusFailure` 里按状态码的通用措辞除外）；新服务的错误分类只改它自己的模块。
+- **不可信正文在交给 wire 之前处理完**：2xx 的 payload 与非 2xx 的 `json` 都先去敏，说明的扣下按整段原始回复判定。所以非 2xx 的 outcome 不再整体去敏，wire 自己的判别标签不会因凭据恰好含标签片段而被改写；2xx 的 outcome 仍在 `parse` 之后整体去敏，因为解析可能把属性名或几段字符串变成文本（OpenAlex 倒排摘要、Exa 的 `tag` 与 `message`）。
+- **先筛查、成文时才截断**：品牌只证明说明经过筛查，不截断；2xx 的说明在 outcome 去敏之后才在 `upstreamSuffix` 截到 2000 字符，截断不会毁掉还没识别的凭据片段。去敏只改字符串值、不改属性名，所以 `upstreamSuffix` 按有没有 `text` 属性区分，而不是按 `kind` 的值。
 - **REST 端点由插件解析连接后传入 wire**：内置连接与 keyless 使用目录端点，自定义 API-key 连接可使用运维给出、已确认信任（`trustedEndpoint: true`）的端点；MCP URL 定义在服务 wire 中，不另建统一端点表。
-- **独立的命名导出，没有 provider 表**：同一服务的两侧 wire 只共享模块私有常量，各自是独立的对象字面量，模块顶层不执行工厂。只用一侧的插件因此在打包时摇掉另一侧的解析；在出现需要枚举服务的使用者之前不建表。
+- **独立的命名导出，没有 provider 表**：同一服务的两侧 wire 只共享模块私有常量与纯函数，各自是独立的对象字面量，模块顶层不执行工厂。只用一侧的插件因此在打包时摇掉另一侧的解析；在出现需要枚举服务的使用者之前不建表。
 - **fetch 的 adapter 也是请求/解析对**：调研的抓取服务都是一次请求取到页面，让两侧共用 `runAdapter`，“keyless 不读密钥”“keyless 只发目录端点”“密钥只含合法头字符”这几条规则就只有一处实现、一组测试。
 - **刻意不统一**：两侧的输入与解析结果、同一服务两侧的解析语义、传输数值、search 独有的实时性与 model 后端、fetch 独有的 `local`。共享的是机制，不是数值和能力语义。
 
@@ -490,11 +508,11 @@ search、fetch、ui 三个插件共用构建定义；profile 直接发布 patch 
 
 | 位置 | 错误文字 | 成功体 |
 | --- | --- | --- |
-| core 有界传输 | HTTP 非 2xx 的错误体 | JSON 回复的字符串值（adapter 与 model 后端） |
+| core 有界传输 | HTTP 非 2xx 的错误体：通用说明与服务另选的说明都按整段原始回复判定；供服务分类的 `json` 先去敏字符串值 | JSON 回复的字符串值（adapter 与 model 后端） |
 | core MCP 客户端 | `isError` 的工具文本、JSON-RPC 错误 | 成功的 `result` |
-| core `runAdapter` | — | 服务解析后的结果，覆盖从 JSON 键名还原的文本 |
+| core `runAdapter` | 非 2xx 的 outcome 不再处理：其中的说明已经筛查，其余只是 wire 的标签或已去敏的 `json` 值 | 服务解析 2xx 后的结果，覆盖从 JSON 键名还原的文本 |
 | core `nativeBackend` / `restateNative` | DSH 错误的第一段 | DSH provider 的结果 |
 
-增强工具不新增去敏位置：显式调用的上游说明就是执行层已去敏的结果，换 provider 的提示插在原消息第一段末尾，即不可信说明之前，不会被读成上游文字。
+说明在 core `upstreamSuffix` 成文（trim 并截到 2000 字符；没有 `text` 属性的说明一律按扣下成文）。增强工具不新增去敏位置：显式调用的上游说明就是执行层已去敏的结果，换 provider 的提示插在原消息第一段末尾，即不可信说明之前，不会被读成上游文字。
 
 凭据由调用方经 `secretMatcher` 交给这些位置（adapter 与 model 交给传输，`native` 经 `nativeAuth` 记录本次交给 DSH 的值）；后端不自己拼上游文字。这些执行诊断（传输、MCP、`native`、两侧执行层、model 后端）只以 debug 级、`redactDiagnostic` 的去敏副本进 Host 日志，不带原 cause 与 stack；控制面失败不经手请求凭据，以 warn 级带原始错误记录（见上表“Host 日志”）。

@@ -13,6 +13,21 @@ function expectReset(config: unknown, field: string): void {
   expect(() => resolveSettings(config)).toThrow(SETTINGS_RESET_HINT)
 }
 
+describe('AnySearch fetch settings', () => {
+  it('offers an opt-in personal key and no operator options', () => {
+    expect(resolveSettings().connections.get('builtin:anysearch')).toMatchObject({
+      kind: 'adapter', adapter: 'anysearch', disabled: true, access: 'api-key', credentialRef: 'ANYSEARCH_API_KEY', options: {},
+    })
+    expect(() => resolveSettings({ connections: { 'builtin:anysearch': { access: 'keyless' } } })).toThrow('access')
+    expect(() => resolveSettings({ connections: { 'builtin:anysearch': { options: { format: 'markdown' } } } })).toThrow('format')
+    const custom = { kind: 'adapter', adapter: 'anysearch', label: 'Private AnySearch', credentialRef: 'PRIVATE_KEY' }
+    expect(resolveSettings({ connections: { 'custom:any': custom } }).connections.get('custom:any')).toMatchObject({
+      adapter: 'anysearch', access: 'api-key', credentialRef: 'PRIVATE_KEY', endpoint: CATALOG.anysearch.endpoint, options: {},
+    })
+    expect(() => resolveSettings({ connections: { 'custom:any': { ...custom, access: 'keyless' } } })).toThrow('access')
+  })
+})
+
 describe('fetch unified settings resolution', () => {
   it('resolves common defaults with remote services off without mutating input', () => {
     const document = Object.freeze({})

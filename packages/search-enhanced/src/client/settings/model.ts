@@ -96,6 +96,10 @@ const OPTION_COPY: Readonly<Record<CatalogKey, Readonly<Record<string, OptionCop
     purpose: { label: 'option.tinyfish.purpose', placeholder: 'option.tinyfish.purpose.placeholder' },
     domain_type: { label: 'option.tinyfish.domain_type' },
   },
+  anysearch: {
+    zone: { label: 'option.anysearch.zone' },
+    language: { label: 'option.anysearch.language', placeholder: 'option.anysearch.language.placeholder' },
+  },
   openalex: {
     sort: { label: 'option.openalex.sort', placeholder: 'option.openalex.sort.placeholder' },
     filter: { label: 'option.openalex.filter', placeholder: 'option.openalex.filter.placeholder' },

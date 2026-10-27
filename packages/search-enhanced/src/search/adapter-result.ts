@@ -1,5 +1,5 @@
 import type { WebSearchSource } from '@deepseek-ai/dsh-web'
-import { upstreamText, type SearchInvalidReason, type SearchOutcome } from 'dsh-tool-web-enhanced-core/host'
+import { upstreamSuffix, type SearchInvalidReason, type SearchOutcome } from 'dsh-tool-web-enhanced-core/host'
 import { searchError } from './errors.ts'
 import { invalidResponse } from './http.ts'
 import { SourceList } from './sources.ts'
@@ -7,6 +7,8 @@ import { SourceList } from './sources.ts'
 /** What the search service returned, in the model-facing invalid-response message. */
 const INVALID_DETAIL: Readonly<Record<SearchInvalidReason, string>> = {
   'not-object': 'a body that is not a JSON object',
+  'code-number': 'no numeric "code" field',
+  'data-results-array': 'no "data.results" array',
   'results-array': 'no "results" array',
   'data-array': 'no "data" array',
   'data-web-array': 'no "data.web" array',
@@ -24,9 +26,8 @@ export function searchSources(outcome: SearchOutcome): WebSearchSource[] {
     return list.sources
   }
   if (outcome.failure === 'api') {
-    const detail = outcome.detail === undefined ? undefined : upstreamText(outcome.detail)
     const message = 'the search service reported an API error; retry later or choose another search connection'
-    throw searchError('WEB_PROVIDER_ERROR', detail === undefined ? message : message + '\n\nThe search service responded (untrusted): ' + detail)
+    throw searchError('WEB_PROVIDER_ERROR', message + upstreamSuffix('The search service', outcome.detail))
   }
   throw invalidResponse(INVALID_DETAIL[outcome.reason])
 }
