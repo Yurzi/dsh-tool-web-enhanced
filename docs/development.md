@@ -117,11 +117,11 @@ export PNPM_HOME=$PWD/.pnpm-home \
 
 给 search 的 `model` 后端加一种线上协议：
 
-1. `src/catalog.ts` 的 `MODEL_PROTOCOLS` 加一项：键（自定义连接的 `protocol` 值）、`label`、`use`（该协议的固定模型连接在列出工具里的用途）、`options`，厂商规定至多设一个的参数对写进 `exclusive`。参数名跨协议唯一：同名参数必须是同一个规则对象，因为 `session-model` 接受并集 `MODEL_OPTIONS`（它的展开列表要加上新协议）。缺省值写进 `MODEL_DEFAULTS`，只按厂商当前标准写。
+1. `src/catalog.ts` 的 `MODEL_PROTOCOLS` 加一项：键（自定义连接的 `protocol` 值）、`label`、`use`（该协议的固定模型连接在列出工具里的用途）、`options`，厂商规定至多设一个的参数对写进 `exclusive`。参数名跨协议唯一：同名参数必须是同一个规则对象，因为 `session-model` 接受可跟随协议的并集 `MODEL_OPTIONS`（仅固定连接的协议不加入其展开列表；`codex-alpha` 复用 `maxTokens`）。缺省值写进 `MODEL_DEFAULTS`，只按厂商当前标准写。
 2. `src/model/types.ts` 的 `ModelOptions` 加上新参数（`model-protocols.spec.ts` 有它与 `MODEL_OPTIONS` 的类型级相等断言）。
 3. `src/model/protocols.ts` 的 `modelUrl`、`modelRequest`（先写缺省，再按 `optionalFields` 只发设置了的参数）、`parseModelResponse`（回答原样拼接，来源只取协议的结构化字段，形状不对返回 `invalid`）各加一个分支；`switch` 穷尽，漏写即编译失败。
 4. 要让跟随会话模型认它：`src/model/route.ts` 的 `protocolOf` 加上 DSH 路由配置里的 `api` 名；只对 DeepSeek 有意义的值写进 `src/model/deepseek.ts`，不在别处按 provider 分支。
-5. 浏览器：`client/settings/CustomConnections.tsx` 的 `notes`（指向协议说明的 locale 键），`client/settings/model.ts` 的 `MODEL_COPY`、`PROTOCOL_HINTS`（`Record<ModelProtocol, …>`）与 `VALUE_LABELS`，以及 `locales.ts` 的对应键。设置文法、格式列表与按协议分组的参数（`protocolGroups`）由 `MODEL_PROTOCOLS` 驱动。
+5. 浏览器：`client/settings/CustomConnections.tsx` 的 `notes`（指向协议说明的 locale 键），`client/settings/model.ts` 的 `MODEL_COPY`、`PROTOCOL_HINTS`（`Record<ModelProtocol, …>`）与 `VALUE_LABELS`，以及 `locales.ts` 的对应键。设置文法、格式列表与固定模型的参数由 `MODEL_PROTOCOLS` 驱动；会话模型的 `SESSION_MODEL_GROUPS` 只包含可跟随协议，不包含仅固定连接的 `codex-alpha`。
 6. 测试：`model-protocols.spec.ts`（请求形状、缺省、解析与畸形响应）；`model-execute.spec.ts` 用本地 HTTP 服务假扮该 API（鉴权头、缺 key 不发请求、拒绝重定向、取消）；`settings.spec.ts`；跟随时加 `model-route.spec.ts`。夹具照官方文档构造，从不向真实服务发请求。
 
 ### 在列出工具里出现

@@ -28,6 +28,12 @@ DSH 的 `web` 行为 `web_search` 与 `web_fetch` 各指定一个 provider，整
 
 没有自动重试，也没有失败后自动换后端：一次调用失败就以 `WEB_*` 错误码和简短的英文说明返回给模型；打开增强工具时，由 Agent 自己选另一个连接再试。
 
+## Codex Alpha Search
+
+搜索的自定义模型连接支持独立的 `codex-alpha` 协议（不是 OpenAI Responses）。在搜索行设置中新建“模型搜索 · Codex Alpha Search”连接，显式填写搜索模型（例如 `gpt-5.6-luna`）、API 根地址（例如 `https://gateway.example/v1`）与 DSH Credentials 凭据名称，并确认信任该端点。请求地址会追加 `/alpha/search`，不要在根地址里重复填写；`maxTokens` 缺省为 `2048`。
+
+配置后，在连接菜单或 `/setup-search` 中选择它；不会自动映射会话模型、复用 OpenAI Provider 登录态或切换默认连接。返回 Alpha 的答案正文与结构化来源，继续使用增强搜索的传输与凭据保护。抓取路由、连接与本机 CIDR 白名单不变。完整配置见[功能设计](docs/design.md#codex-alpha-固定模型连接)。
+
 ## 安装
 
 要求：DSH `>=0.2.1-rc.2 <0.3.0-0`，Node.js `^22.19.0 || >=24.0.0`。

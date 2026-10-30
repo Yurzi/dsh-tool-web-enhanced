@@ -16,6 +16,30 @@ export function modelDocument(endpoint: string, protocol: ModelProtocol = 'anthr
   } }
 }
 
+export const alphaFixture = {
+  connectionId: 'custom:e2e-codex-alpha', label: 'E2E Codex Alpha', model: 'gpt-5.6-luna',
+  query: 'Codex Alpha 网页来源', content: 'Alpha search preserved the answer and its structured sources. 网页 😀',
+  source: 'https://example.org/alpha-source',
+} as const
+
+export function alphaDocument(endpoint: string) {
+  return { version: 2, defaultConnection: alphaFixture.connectionId, connections: {
+    [alphaFixture.connectionId]: {
+      kind: 'model', protocol: 'codex-alpha', model: alphaFixture.model, label: alphaFixture.label,
+      endpoint, trustedEndpoint: true, credentialRef: modelFixture.credentialRef,
+    },
+  } }
+}
+
+export function alphaAnswer() {
+  return { output: alphaFixture.content, results: [
+    { url: alphaFixture.source, title: 'Alpha source' },
+    { url: alphaFixture.source, title: 'Duplicate' },
+    { url: 'javascript:alert(1)', title: 'Rejected scheme' },
+    { url: 'https://user:secret@example.org/private', title: 'Rejected credentials' },
+  ] }
+}
+
 export const piAiFixture = { provider: 'e2e-search-responses', model: modelFixture.model } as const
 
 export function piAiRows(endpoint: string) {

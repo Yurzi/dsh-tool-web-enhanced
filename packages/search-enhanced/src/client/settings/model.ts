@@ -47,7 +47,8 @@ const PROTOCOL_HINTS = {
   'anthropic-messages': { maxTokens: 'option.model.maxTokens.anthropicHint', domains: 'option.model.domains.exclusiveHint' },
   'openai-responses': { maxTokens: 'option.model.maxTokens.responsesHint', domains: 'option.model.domains.bothHint' },
   'openai-chat-completions': { maxTokens: 'option.model.maxTokens.chatHint', domains: 'option.model.domains.bothHint' },
-} as const satisfies Record<ModelProtocol, { readonly maxTokens: LocaleKey; readonly domains: LocaleKey }>
+  'codex-alpha': { maxTokens: 'option.model.maxTokens.alphaHint' },
+} as const satisfies Record<ModelProtocol, { readonly maxTokens: LocaleKey; readonly domains?: LocaleKey }>
 
 /** Copy for the options of one protocol of a custom model connection. */
 export function protocolCopy(protocol: ModelProtocol): OptionCopyTable<LocaleKey> {
@@ -56,13 +57,19 @@ export function protocolCopy(protocol: ModelProtocol): OptionCopyTable<LocaleKey
     ...MODEL_COPY,
     maxTokens: { ...MODEL_COPY.maxTokens, hint: hints.maxTokens },
     anthropicTool: { ...MODEL_COPY.anthropicTool, hint: 'option.model.anthropicTool.fixedHint' },
-    allowedDomains: { ...MODEL_COPY.allowedDomains, hint: hints.domains },
-    blockedDomains: { ...MODEL_COPY.blockedDomains, hint: hints.domains },
+    ...('domains' in hints ? {
+      allowedDomains: { ...MODEL_COPY.allowedDomains, hint: hints.domains },
+      blockedDomains: { ...MODEL_COPY.blockedDomains, hint: hints.domains },
+    } : {}),
   } }
 }
 
-/** The Session-model connection takes every protocol's options; grouped by the protocols that apply them. */
-export const SESSION_MODEL_GROUPS: readonly OptionGroup[] = protocolGroups(MODEL_PROTOCOLS)
+/** Alpha requires a fixed custom connection and never follows the Session-model route. */
+export const SESSION_MODEL_GROUPS: readonly OptionGroup[] = protocolGroups({
+  'anthropic-messages': MODEL_PROTOCOLS['anthropic-messages'],
+  'openai-responses': MODEL_PROTOCOLS['openai-responses'],
+  'openai-chat-completions': MODEL_PROTOCOLS['openai-chat-completions'],
+})
 
 const OPTION_COPY: Readonly<Record<CatalogKey, Readonly<Record<string, OptionCopy<LocaleKey>>>>> = {
   'deepseek-messages': {

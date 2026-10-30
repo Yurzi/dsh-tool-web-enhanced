@@ -337,7 +337,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | `native` | search / fetch | 实例化 DSH 导出的 `DeepSeekSearchProvider`、`DeepSeekSearchApiProvider`、`DeepSeekFetchApiProvider`，凭据与端点解析照搬对应原生行（core `nativeAuth`、`nativeBackend`） | 与原生一致，只改写错误消息（core `restateNative`） |
 | `adapter` | search / fetch（含 `custom:*` 的 `kind: adapter`） | core 的 provider wire，由 `runAdapter` 执行 | 对齐 DSH 远程 provider 的立场：目标访问策略归服务 |
-| `model` | 仅 search（跟随会话模型与固定模型） | search `src/model/`：三种协议的请求与解析、路由推导（DeepSeek 集中在 `deepseek.ts`）、跨命名空间读取预算、凭据与执行；走 search 的有界传输 | 各厂商当前的 API；跟随 DeepSeek 时与 DSH 自带的 DeepSeek 搜索一致 |
+| `model` | 仅 search（跟随会话模型与固定模型） | search `src/model/`：Messages、Responses、Chat 与仅固定连接的 Codex Alpha 协议请求与解析、路由推导（DeepSeek 集中在 `deepseek.ts`）、跨命名空间读取预算、凭据与执行；走 search 的有界传输 | 各厂商当前的 API；跟随 DeepSeek 时与 DSH 自带的 DeepSeek 搜索一致 |
 | `local` | 仅 fetch | DSH `HttpFetchProvider` 加本插件注入的解析器，每次调用按当前参数新建 | 白名单为空时等于原生 public-only |
 
 执行层（两侧形状相同）：

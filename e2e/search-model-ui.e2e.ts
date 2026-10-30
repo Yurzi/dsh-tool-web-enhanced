@@ -7,9 +7,9 @@ import type { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type {} from '../packages/search-enhanced/src/host/remote.ts'
 import { PROFILE_PACKAGE, SEARCH, rowConfigKey } from 'dsh-tool-web-enhanced-core/shared'
 import { afterAll, afterEach, beforeAll, describe, expect, inject, it } from 'vitest'
-import { MODEL_PROTOCOLS } from '../packages/search-enhanced/src/catalog.ts'
+import { MODEL_PROTOCOLS, type ModelProtocol } from '../packages/search-enhanced/src/catalog.ts'
 import { en as text, zh } from '../packages/search-enhanced/src/client/locales.ts'
-import { messagesAnswer, modelDocument, modelFixture, piAiFixture, piAiRows } from './fixtures/search-model.ts'
+import { alphaDocument, alphaFixture, messagesAnswer, modelDocument, modelFixture, piAiFixture, piAiRows } from './fixtures/search-model.ts'
 import { type App, browserRequired, chromiumPath, openApp, recordBrowserFailure } from './harness/browser.ts'
 import { isolatedContext, addPlugins, artifacts, composedRows, enterIsolatedEnvironment, profilePatchPath } from './harness/environment.ts'
 import { bootHost } from './harness/host.ts'
@@ -43,13 +43,13 @@ async function currentConversation(page: Page): Promise<string> {
   return id
 }
 
-async function modelEditor(settings: Locator, page: Page, endpoint: string) {
+async function modelEditor(settings: Locator, page: Page, endpoint: string, protocol: ModelProtocol = 'anthropic-messages') {
   await settings.getByRole('button', { name: text['custom.addStructured'], exact: true }).click()
   const editor = settings.getByRole('form', { name: text['editor.titleNew'], exact: true })
   await editor.getByRole('textbox', { name: text['editor.label'], exact: true }).fill(modelFixture.label)
   await editor.getByRole('textbox', { name: text['editor.id'], exact: true }).fill('e2e-model')
   await editor.getByRole('button', { name: text['editor.adapter'], exact: true }).click()
-  await page.getByRole('menuitem', { name: text['model.format'].replace('{protocol}', MODEL_PROTOCOLS['anthropic-messages'].label), exact: true }).click()
+  await page.getByRole('menuitem', { name: text['model.format'].replace('{protocol}', MODEL_PROTOCOLS[protocol].label), exact: true }).click()
   await editor.getByRole('textbox', { name: text['model.id'], exact: true }).fill(modelFixture.model)
   await editor.getByRole('textbox', { name: text['editor.endpoint'], exact: true }).fill(endpoint)
   await editor.getByRole('textbox', { name: text['editor.credentialRef'], exact: true }).fill(modelFixture.credentialRef)
@@ -167,7 +167,8 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Model search co
     await settings.getByRole('button', { name: configureName, exact: true }).click()
     const row = settings.getByRole('listitem').filter({ has: app.page.getByRole('button', { name: configureName, exact: true }) })
     await row.getByText(text['services.sessionModel.note'], { exact: true }).waitFor()
-    for (const protocol of Object.values(MODEL_PROTOCOLS)) await row.getByRole('group', { name: new RegExp(protocol.label) }).first().waitFor()
+    for (const key of ['anthropic-messages', 'openai-responses', 'openai-chat-completions'] as const) await row.getByRole('group', { name: new RegExp(MODEL_PROTOCOLS[key].label) }).first().waitFor()
+    expect(await row.getByRole('group', { name: /Codex Alpha/u }).count()).toBe(0)
     const editor = await modelEditor(settings, app.page, api.url)
     await editor.getByLabel(text['editor.apiKey'], { exact: true }).fill(modelFixture.key)
     const save = editor.getByRole('button', { name: text['editor.save'], exact: true })
@@ -188,6 +189,42 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Model search co
     const reopened = await openSearchSettings(app.page)
     await reopened.getByRole('switch', { name: text['services.enable'].replace('{name}', modelFixture.label), exact: true }).waitFor()
     expect(config()).toMatchObject(expected)
+    expect(app.errors).toEqual([])
+    await closeGui()
+    enterIsolatedEnvironment(e2e.env)
+    const host = await bootHost(e2e)
+    try { expect(await host.ctx.credentials.describe(customKey)).toMatchObject({ configured: true }) } finally { await host.dispose() }
+    expect(api.requests).toEqual([])
+  })
+
+  it('saves Codex Alpha as a trusted fixed protocol and retains it after a cold GUI restart', async () => {
+    const endpoint = new URL('v1', api.url).href
+    server = await startWeb(e2e)
+    app = await openApp(server.url)
+    const settings = await openSearchSettings(app.page)
+    const editor = await modelEditor(settings, app.page, endpoint, 'codex-alpha')
+    await editor.getByRole('textbox', { name: text['editor.label'], exact: true }).fill(alphaFixture.label)
+    await editor.getByRole('textbox', { name: text['editor.id'], exact: true }).fill('e2e-codex-alpha')
+    await editor.getByRole('textbox', { name: text['model.id'], exact: true }).fill(alphaFixture.model)
+    await editor.getByLabel(text['editor.apiKey'], { exact: true }).fill(modelFixture.key)
+    const save = editor.getByRole('button', { name: text['editor.save'], exact: true })
+    expect(await save.isDisabled()).toBe(true)
+    await editor.getByRole('checkbox', { name: text['editor.trust'].replace('{ref}', modelFixture.credentialRef), exact: true }).check()
+    await app.screenshot('search-model-codex-alpha-editor')
+    await save.click()
+    await editor.waitFor({ state: 'hidden' })
+    const config = () => composedRows(e2e).find(candidate => candidate.id === SEARCH.rowId)!.config
+    const expected = { connections: alphaDocument(endpoint).connections }
+    await expect.poll(config).toMatchObject(expected)
+    expect(JSON.stringify(config())).not.toContain(modelFixture.key)
+    await closeGui()
+
+    server = await startWeb(e2e)
+    app = await openApp(server.url)
+    const reopened = await openSearchSettings(app.page)
+    await reopened.getByRole('switch', { name: text['services.enable'].replace('{name}', alphaFixture.label), exact: true }).waitFor()
+    expect(config()).toMatchObject(expected)
+    await app.screenshot('search-model-codex-alpha-persisted')
     expect(app.errors).toEqual([])
     await closeGui()
     enterIsolatedEnvironment(e2e.env)

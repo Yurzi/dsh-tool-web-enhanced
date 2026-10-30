@@ -73,7 +73,7 @@ flowchart LR
 
 ### 自定义连接
 
-两侧都可以新建 `kind: adapter` 的自定义连接：选目录里的一个 adapter（search 七项、fetch 五项），配自己的标签、凭据名称、可选的自建端点和参数，总是用 API key。search 另可新建 `kind: model` 的固定模型连接：选三种协议之一，写模型 id、端点与凭据名称（见 [model 后端](#model-后端)）。
+两侧都可以新建 `kind: adapter` 的自定义连接：选目录里的一个 adapter（search 七项、fetch 五项），配自己的标签、凭据名称、可选的自建端点和参数，总是用 API key。search 另可新建 `kind: model` 的固定模型连接：选受支持的协议，写模型 id、端点与凭据名称（见 [model 后端](#model-后端)）。
 
 自建端点、以及固定模型连接，都必须写 `trustedEndpoint: true`：查询与密钥会发往运维给的地址，所以要显式确认。规则见[配置文档](#配置文档)。
 
@@ -348,7 +348,7 @@ list_web_fetch_providers
 ~~~
 
 - `sessionProvider`：本步原生工具使用的连接（冻结的计划），不一定在 `providers` 里；`sessionProviderTurnedOff`：它现在是否不可选（已停用或已删除），文本的末行据此生成；`freshness`：本步冻结的会话实时性（仅 search）。
-- `name` 是连接的标签。`use` 是目录里的英文短语，只在会改变选择的项上有：`deepseek-messages`、`session-model`、`openalex`、`semanticscholar` 与三种协议的固定模型连接；自定义 adapter 连接沿用所选 adapter 的。
+- `name` 是连接的标签。`use` 是目录里的英文短语，只在会改变选择的项上有：`deepseek-messages`、`session-model`、`openalex`、`semanticscholar` 与四种协议的固定模型连接；自定义 adapter 连接沿用所选 adapter 的。
 - `sendsTo` 是已措辞的接收方：`this machine`（fetch `local`）、`the service behind the session model`（能确定时附会话下一次请求的 LLM 服务商 id）、目录里的服务名，或运维端点的主机名（只写主机名）。运维端点指不同于目录端点的自建端点或 native 的 `baseURL`；keyless 总是发往目录端点，按目录端点算；固定模型连接写它的端点主机名。
 - `appliesFreshness`（仅 search）：该连接按当前访问方式是否应用实时性（见[实时性](#实时性)）。
 - `notice`（仅 fetch `local`，白名单非空时）：白名单说明，与系统提示同一规范化与 2000 字符上限，主语换成 `this provider`（系统提示里仍是 `web_fetch`），因为会话的 `web_fetch` 可能走的是远程服务。
@@ -597,9 +597,9 @@ URL 原样交给服务（不规范化、不解码），目标能否访问由服�
 | `builtin:session-model`（会话模型） | 每次调用按本次请求的模型路由推导 | 会话路由自己的凭据 | 不需要：会话本身已把内容发往这个端点 |
 | `custom:*`，`kind: model`（固定模型） | 设置里的协议、模型、端点 | `credentialRef`，只经 DSH Credentials | 必须 `trustedEndpoint: true` |
 
-查询以 `Perform a web search for the query: <query>` 发送，与 DSH 原生 DeepSeek 搜索相同。
+Messages、Responses 与 Chat 的查询以 `Perform a web search for the query: <query>` 发送，与 DSH 原生 DeepSeek 搜索相同；Codex Alpha 使用原始查询作为用户输入与 `commands.search_query[].q`。
 
-#### 三种协议的缺省
+#### 协议的缺省
 
 缺省跟随各厂商当前的 API 标准；其他兼容服务的差异由运维用参数调整。
 
@@ -608,10 +608,11 @@ URL 原样交给服务（不规范化、不解码），目标能否访问由服�
 | `anthropic-messages` | 端点去尾斜杠，路径不以 `/v1` 结尾时补 `/v1`，再接 `/messages` | `x-api-key`（账号为 `x-dsh-auth-token`），`anthropic-version: 2023-06-01` | `max_tokens: 4096`，工具 `web_search_20260318`，`max_uses: 5` |
 | `openai-responses` | `<端点>/responses`（端点要写到 `/v1`） | Bearer | 工具 `web_search`，`tool_choice: auto`，请求 `web_search_call.action.sources`，`store: false`，不发 token 上限 |
 | `openai-chat-completions` | `<端点>/chat/completions` | Bearer | `web_search_options: {}`，不发 token 上限 |
+| `codex-alpha`（仅固定连接） | `<端点>/alpha/search`，端点为 API 根地址（例如含 `/v1`） | Bearer | `commands.search_query`、`allowed_callers: [direct]`、`external_web_access: true`、`max_output_tokens: 2048` |
 
 #### 按协议的参数
 
-参数名跨协议唯一。固定模型连接只接受自己协议的那部分；会话模型连接接受全部，按本次推导出的协议取用、其余忽略。除上一节列出的显式缺省外，未设置的可选参数不发送。
+参数名跨协议唯一。固定模型连接只接受自己协议的那部分；会话模型连接接受三种可跟随协议的并集，按本次推导出的协议取用、其余忽略。Codex Alpha 仅支持 `maxTokens`（1–128 000，缺省 2048），不新增会话模型参数分组。除上一节列出的显式缺省外，未设置的可选参数不发送。
 
 | 参数 | 取值 | Messages | Responses | Chat |
 | --- | --- | --- | --- | --- |
@@ -628,6 +629,29 @@ URL 原样交给服务（不规范化、不解码），目标能否访问由服�
 | `userCity` / `userRegion` / `userCountry` / `userTimezone` | 近似位置；国家为两字母，发送前转大写 | ✓ | ✓ | ✓ |
 
 设置页上，会话模型行没有访问方式与凭据控件，参数按适用的协议分组显示；固定模型表单在自定义连接区的格式列表里（“模型搜索 · <协议>”），多一个模型 id 字段，端点必填，并按协议说明端点写法与在 DeepSeek 上的可用性。
+
+#### Codex Alpha 固定模型连接
+
+`codex-alpha` 是独立的 Alpha JSON 搜索协议，不是 Responses 或 Chat Completions 的别名。只用于显式创建的固定模型连接，不自动映射会话模型，也不读取 OpenAI Provider 配置或登录态。配置示例（搜索行设置）：
+
+```yaml
+version: 2
+connections:
+  custom:alpha:
+    kind: model
+    protocol: codex-alpha
+    label: Codex Alpha Search
+    model: gpt-5.6-luna
+    endpoint: https://gateway.example/v1
+    credentialRef: CODEX_ALPHA_API_KEY
+    trustedEndpoint: true
+    options:
+      maxTokens: 2048
+```
+
+先在 DSH Credentials 中保存 `CODEX_ALPHA_API_KEY`，再在连接菜单或 `/setup-search custom:alpha` 中选用。模型必须显式填写，示例模型不是对所有网关的可用性保证。`endpoint` 填 API 根地址，去掉尾斜杠后追加 `/alpha/search`；不要重复填写该后缀。省略 `maxTokens` 时仍发送 `max_output_tokens: 2048`。
+
+响应要求 `output` 为字符串，映射为答案正文并移除 Alpha 私有引用标记；`results` 可缺省或为 `null`，否则须为数组。来源仅取结构化结果的 HTTP(S) URL，经现有来源规范化与去重；不从答案文本猜测链接。仍走 2 MiB、90 s 的有界传输、取消与凭据去敏，禁止重定向，无重试或回退。不注册新的全局 provider，不修改 `web` 路由、默认搜索选择、抓取连接或 CIDR 白名单。
 
 #### 跟随会话模型
 
@@ -798,10 +822,10 @@ Host 日志分两层，按是否可能经手本次请求的凭据区分：
   - 原因：下一次请求的模型只有运行中的 Agent 才有。不在运行的子 Agent 会话按会话头直接读写存储、不恢复它的 Agent（DSH 把这类会话留给子 Agent 路由，`sessionController.resolveAgent` 会拒为 `session/agent-busy`），所以没有模型可依：会话模型连接无从推导，native 判断不了本次路由是否为 `deepseek-account`，按 (provider, model) 记的模型记忆也无从查起（见[架构 · 选择范式](architecture.md#选择范式)）。
 - **跟随会话模型的范围有限**
   - 限制：能跟随哪些路由见[跟随会话模型](#跟随会话模型)：走 OAuth / 订阅的路由不支持；三种协议之外的厂商搜索（Gemini 原生、Kimi、智谱 / DashScope 的厂商字段、Perplexity）不支持；不能“跟随会话但换一个模型”。要用别的模型，就建[固定模型连接](#model-后端)。
-  - 原因：跟随只读 DSH 的公开模型目录与 Settings、不读凭据：DeepSeek 两条官方路由之外，凭据只能是路由的 `apiKeyEnv` 或目录声明的唯一一个非 OAuth 环境变量名，OAuth / 订阅路由没有这样的 API key。model 后端只实现 Anthropic Messages、OpenAI Responses 与 Chat Completions 三种协议的请求与解析。跟随的路由（端点、凭据与模型）整体取自会话，所以 `builtin:session-model` 只接受 `label`、`disabled`、`options`。
+  - 原因：跟随只读 DSH 的公开模型目录与 Settings、不读凭据：DeepSeek 两条官方路由之外，凭据只能是路由的 `apiKeyEnv` 或目录声明的唯一一个非 OAuth 环境变量名，OAuth / 订阅路由没有这样的 API key。会话跟随只支持 Anthropic Messages、OpenAI Responses 与 Chat Completions；另实现了仅用于固定连接的 Codex Alpha 协议。跟随的路由（端点、凭据与模型）整体取自会话，所以 `builtin:session-model` 只接受 `label`、`disabled`、`options`。
 - **Anthropic 缺省工具版本可能被拒**
   - 限制：`web_search_20260318` 缺省经代码执行调用搜索，不支持程序化工具调用的模型会被拒（HTTP 400）；把 `allowedCallers` 设为 `direct`，或选较旧的工具版本。跟随 DeepSeek 路由时缺省是 `web_search_20250305`，不受影响。
-  - 原因：缺省跟随厂商当前的 API 标准（见[三种协议的缺省](#三种协议的缺省)），Messages 的缺省工具因此是 `web_search_20260318`；它缺省经代码执行调用，是上游 Anthropic Messages API 对这一工具版本的规定。
+  - 原因：缺省跟随厂商当前的 API 标准（见[协议的缺省](#协议的缺省)），Messages 的缺省工具因此是 `web_search_20260318`；它缺省经代码执行调用，是上游 Anthropic Messages API 对这一工具版本的规定。
 - **匿名路由有缺口**
   - 限制：部分服务没有匿名路由，或匿名时少几项参数与实时性（见[search 目录](#search-目录10-项)、[fetch 目录](#fetch-目录7-项)与[实时性](#实时性)）；需要时改用个人密钥。
   - 原因：上游服务的匿名接口本身如此（例如 Semantic Scholar 与 Tinyfish 抓取只有 API key 路由，Tinyfish 没有有据可查的匿名抓取路由；Exa 的实时性只在 API key 路由上生效）；目录只写核实过的访问方式与参数。AnySearch 有匿名档，但免费账号注册即可用，本插件只提供个人 key（见[候选](plan.md#候选与待定)）。

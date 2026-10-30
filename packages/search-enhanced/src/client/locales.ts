@@ -249,6 +249,7 @@ export const en = {
   'model.protocol.anthropic-messages': "Anthropic's server-side web search. Endpoint such as https://api.anthropic.com (/v1 is added). For DeepSeek use https://api.deepseek.com/anthropic and set Search tool version to web_search_20250305 or web_search_20260209.",
   'model.protocol.openai-responses': "OpenAI's web_search tool. Endpoint such as https://api.openai.com/v1 (include /v1). DeepSeek runs it only on deepseek-v4-pro and returns no sources.",
   'model.protocol.openai-chat-completions': "For OpenAI search models such as gpt-5-search-api and compatible gateways. Endpoint such as https://api.openai.com/v1 (include /v1). DeepSeek's Chat Completions has no server-side search; for DeepSeek use Anthropic Messages.",
+  'model.protocol.codex-alpha': 'Codex Alpha Search, for fixed custom connections only; it never follows the conversation model. Enter the API base URL, e.g. https://gateway.example/v1; /alpha/search is appended. Explicitly set the search model, e.g. gpt-5.6-luna, and a DSH Credentials key reference. This is not OpenAI Responses; max output tokens defaults to 2048.',
   'draft.model': 'Enter a model ID of up to 200 characters without control characters.',
 
   'option.model.maxTokens': 'Max output tokens',
@@ -256,6 +257,7 @@ export const en = {
   'option.model.maxTokens.anthropicHint': 'Defaults to 4096.',
   'option.model.maxTokens.responsesHint': 'No limit is sent unless set; at least 16.',
   'option.model.maxTokens.chatHint': 'No limit is sent unless set.',
+  'option.model.maxTokens.alphaHint': 'Defaults to 2048 for this fixed Codex Alpha connection.',
   'option.model.anthropicTool': 'Search tool version',
   'option.model.anthropicTool.hint': 'Defaults to web_search_20260318, or web_search_20250305 when the conversation model is on a DeepSeek route. DeepSeek accepts only web_search_20250305 and web_search_20260209.',
   'option.model.anthropicTool.fixedHint': 'Defaults to web_search_20260318. DeepSeek accepts only web_search_20250305 and web_search_20260209.',
@@ -543,6 +545,7 @@ export const zh: Record<LocaleKey, string> = {
   'model.protocol.anthropic-messages': 'Anthropic 的服务端网页搜索。接口地址如 https://api.anthropic.com（会自动补 /v1）。用于 DeepSeek 时请填写 https://api.deepseek.com/anthropic，并把搜索工具版本设为 web_search_20250305 或 web_search_20260209。',
   'model.protocol.openai-responses': 'OpenAI 的 web_search 工具。接口地址如 https://api.openai.com/v1（需要写上 /v1）。DeepSeek 只在 deepseek-v4-pro 上执行，且不返回来源。',
   'model.protocol.openai-chat-completions': '用于 OpenAI 搜索模型（如 gpt-5-search-api）与兼容网关。接口地址如 https://api.openai.com/v1（需要写上 /v1）。DeepSeek 的 Chat Completions 没有服务端网页搜索，DeepSeek 请用 Anthropic Messages。',
+  'model.protocol.codex-alpha': 'Codex Alpha Search 仅用于固定自定义模型连接，不跟随会话模型。填写 API 根地址，如 https://gateway.example/v1；会追加 /alpha/search。显式填写搜索模型，如 gpt-5.6-luna，并引用 DSH Credentials 中的密钥。它不是 OpenAI Responses；最大输出 Token 缺省为 2048。',
   'draft.model': '请填写模型 ID（不超过 200 个字符，不含控制字符）。',
 
   'option.model.maxTokens': '最大输出 Token',
@@ -550,6 +553,7 @@ export const zh: Record<LocaleKey, string> = {
   'option.model.maxTokens.anthropicHint': '缺省 4096。',
   'option.model.maxTokens.responsesHint': '不设时不发送上限；至少为 16。',
   'option.model.maxTokens.chatHint': '不设时不发送上限。',
+  'option.model.maxTokens.alphaHint': '此固定 Codex Alpha 连接缺省为 2048。',
   'option.model.anthropicTool': '搜索工具版本',
   'option.model.anthropicTool.hint': '缺省 web_search_20260318；会话模型跟随 DeepSeek 路由时为 web_search_20250305。DeepSeek 只接受 web_search_20250305 与 web_search_20260209。',
   'option.model.anthropicTool.fixedHint': '缺省 web_search_20260318。DeepSeek 只接受 web_search_20250305 与 web_search_20260209。',

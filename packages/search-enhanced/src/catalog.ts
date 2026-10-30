@@ -56,6 +56,10 @@ export const MODEL_PROTOCOLS = {
     label: 'OpenAI Chat Completions', use: 'the model searches and answers',
     options: { maxTokens, searchContextSize, ...location },
   },
+  'codex-alpha': {
+    label: 'Codex Alpha Search', use: 'the model searches and answers',
+    options: { maxTokens },
+  },
 } as const satisfies Record<string, ProtocolDescriptor>
 export type ModelProtocol = keyof typeof MODEL_PROTOCOLS
 
@@ -73,6 +77,7 @@ export const MODEL_OPTIONS = {
  * in model/deepseek.ts, unless the operator explicitly selects a tool version.
  */
 export const MODEL_DEFAULTS = {
+  alphaMaxTokens: 2048,
   maxTokens: 4096,
   maxUses: 5,
   anthropicTool: 'web_search_20260318',

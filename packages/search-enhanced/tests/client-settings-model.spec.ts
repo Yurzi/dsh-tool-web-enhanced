@@ -35,6 +35,10 @@ describe('search catalog on the settings page', () => {
     // A fixed connection's hints speak of its own protocol only.
     expect(['anthropic-messages', 'openai-responses', 'openai-chat-completions'].map(protocol => protocolCopy(protocol as ModelProtocol).options.maxTokens?.hint))
       .toEqual(['option.model.maxTokens.anthropicHint', 'option.model.maxTokens.responsesHint', 'option.model.maxTokens.chatHint'])
+    expect(protocolCopy('codex-alpha').options.maxTokens?.hint).toBe('option.model.maxTokens.alphaHint')
+    expect(en['option.model.maxTokens.alphaHint']).toContain('2048')
+    expect(zh['option.model.maxTokens.alphaHint']).toContain('2048')
+    expect(SESSION_MODEL_GROUPS.every(group => !group.title.includes('Codex Alpha'))).toBe(true)
     expect(protocolCopy('anthropic-messages').options.anthropicTool?.hint).toBe('option.model.anthropicTool.fixedHint')
     expect(en['option.model.anthropicTool.fixedHint']).not.toMatch(/conversation|OpenAI/u)
     expect(optionCopy('session-model').options.maxTokens?.hint).toBe('option.model.maxTokens.hint')

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { isRecord, postJson, type SearchRow } from 'dsh-tool-web-enhanced-core/host'
 import { MODEL_DEFAULTS, type ModelProtocol } from '../catalog.ts'
 import type { HttpRequest } from '../search/http.ts'
@@ -11,6 +12,7 @@ export function modelUrl(protocol: ModelProtocol, baseURL: string): string {
   const base = baseURL.slice(0, end)
   switch (protocol) {
     case 'anthropic-messages': return base + (new URL(base).pathname.endsWith('/v1') ? '' : '/v1') + '/messages'
+    case 'codex-alpha': return base + '/alpha/search'
     case 'openai-responses': return base + '/responses'
     case 'openai-chat-completions': return base + '/chat/completions'
   }
@@ -18,6 +20,15 @@ export function modelUrl(protocol: ModelProtocol, baseURL: string): string {
 
 export function modelRequest(route: ModelRoute, options: ModelOptions, query: string, secret: string): HttpRequest {
   const url = modelUrl(route.protocol, route.baseURL)
+  if (route.protocol === 'codex-alpha') {
+    return postJson(url, { authorization: 'Bearer ' + secret }, {
+      id: randomUUID(), model: route.model,
+      input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: query }] }],
+      commands: { search_query: [{ q: query }] },
+      settings: { allowed_callers: ['direct'], external_web_access: true },
+      max_output_tokens: options.maxTokens ?? MODEL_DEFAULTS.alphaMaxTokens,
+    })
+  }
   const prompt = 'Perform a web search for the query: ' + query
   const approximate = optionalFields({ city: options.userCity, region: options.userRegion, country: options.userCountry === undefined ? undefined : options.userCountry.toUpperCase(), timezone: options.userTimezone })
   const hasLocation = Object.keys(approximate).length > 0
@@ -84,6 +95,7 @@ const answer = (rows: readonly SearchRow[], parts: readonly string[]): ModelOutc
 export function parseModelResponse(protocol: ModelProtocol, payload: unknown): ModelOutcome {
   if (!isRecord(payload)) return invalid()
   switch (protocol) {
+    case 'codex-alpha': return parseAlpha(payload)
     case 'anthropic-messages': return parseMessages(payload)
     case 'openai-responses': return parseResponses(payload)
     case 'openai-chat-completions': return parseChat(payload)
@@ -92,6 +104,14 @@ export function parseModelResponse(protocol: ModelProtocol, payload: unknown): M
 
 function records(value: unknown): Record<string, unknown>[] {
   return Array.isArray(value) ? value.filter(isRecord) : []
+}
+
+function parseAlpha(payload: Record<string, unknown>): ModelOutcome {
+  if (typeof payload.output !== 'string' || (payload.results != null && !Array.isArray(payload.results))) return invalid()
+  const rows = records(payload.results).map(row => ({ url: row.url, title: row.title }))
+  // Alpha reference ids cannot be resolved by DSH; structured results are the sources.
+  const content = payload.output.replace(/\uE200cite\uE202[^\uE201]*\uE201(?:\s*\[wordlim:\s*\d+\])?/gu, '').trim()
+  return answer(rows, content === '' ? [] : [content])
 }
 
 function parseMessages(payload: Record<string, unknown>): ModelOutcome {
