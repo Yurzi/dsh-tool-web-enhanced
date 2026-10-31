@@ -30,12 +30,37 @@ describe('Codex Alpha protocol', () => {
     expect(parseModelResponse('codex-alpha', {
       output: ' Answer citeturn0search0 [wordlim: 100] ',
       results: [{ url: 'https://a.test', title: 'A' }, null, 'ignored'],
-    })).toEqual({ kind: 'answer', content: 'Answer', rows: [{ url: 'https://a.test', title: 'A' }] })
+    })).toEqual({ kind: 'answer', content: ' Answer  ', rows: [{ url: 'https://a.test', title: 'A' }] })
   })
 
   it.each([undefined, null, []])('accepts answer-only results (%j)', results => {
     expect(parseModelResponse('codex-alpha', { output: 'Answer', results })).toEqual({ kind: 'answer', content: 'Answer', rows: [] })
-    expect(parseModelResponse('codex-alpha', { output: '', results })).toEqual({ kind: 'answer', content: undefined, rows: [] })
+    expect(parseModelResponse('codex-alpha', { output: '', results })).toEqual({ kind: 'answer', content: '', rows: [] })
+  })
+
+  it.each(['    print("x")\n', '', '  \n  ', 'Aciteturn0search0 B', 'Aciteunfinished'])('preserves answer text apart from complete citations (%j)', output => {
+    expect(parseModelResponse('codex-alpha', { output, results: [] })).toEqual({
+      kind: 'answer', content: output.replace('citeturn0search0', ''), rows: [],
+    })
+  })
+
+  it('handles repeated unclosed citation prefixes within a generous CPU budget', () => {
+    const output = 'cite'.repeat(16_384)
+    const start = performance.now()
+    const result = parseModelResponse('codex-alpha', { output, results: [] })
+    const elapsed = performance.now() - start
+    expect(result).toEqual({ kind: 'answer', content: output, rows: [] })
+    // This is a performance bound, not a timer used to synchronize behaviour.
+    expect(elapsed).toBeLessThan(1000)
+  })
+
+  it.each([
+    ['Aciteone\n [wordlim: 100]B', 'AB'],
+    ['Aciteone  [wordlim: nope]B', 'A  [wordlim: nope]B'],
+    ['Aciteone  BcitetwoC', 'A  BC'],
+    ['Aciteone\n', 'A\n'],
+  ])('removes only complete citation metadata (%j)', (output, content) => {
+    expect(parseModelResponse('codex-alpha', { output })).toEqual({ kind: 'answer', content, rows: [] })
   })
 
   it.each([null, [], {}, { output: [] }, { output: 'Answer', results: {} }])('rejects incompatible payloads (%j)', payload => {

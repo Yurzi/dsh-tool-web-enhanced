@@ -1,5 +1,5 @@
 import { WebError, type WebSearchRequest, type WebSearchResult } from '@deepseek-ai/dsh-web'
-import { UNSUPPORTED_REASON_TEXT, redactDiagnostic, secretMatcher, storedApiKey, type SecretMatcher } from 'dsh-tool-web-enhanced-core/host'
+import { UNSUPPORTED_REASON_TEXT, redactDiagnostic, redactSecrets, secretMatcher, storedApiKey, type SecretMatcher } from 'dsh-tool-web-enhanced-core/host'
 import { credentialMissing, credentialInvalid, abortable, searchError, throwIfAborted, type OnDiagnostic } from '../search/errors.ts'
 import { requestJson, withDeadline } from '../search/http.ts'
 import { SourceList } from '../search/sources.ts'
@@ -39,7 +39,9 @@ export async function executeModelSearch(target: ModelSearchTarget, request: Web
       }
       const list = new SourceList()
       for (const row of outcome.rows) list.add(row)
-      return { sources: list.sources, ...(outcome.content === undefined ? {} : { content: outcome.content }), truncated: false }
+      // Protocol cleanup can join credential fragments that were separate on the wire.
+      const content = outcome.content === undefined ? undefined : redactSecrets(outcome.content, matcher)
+      return { sources: list.sources, ...(content === undefined ? {} : { content }), truncated: false }
     })
   } catch (error) {
     if (!(error instanceof WebError) && deps.onDiagnostic !== undefined) {

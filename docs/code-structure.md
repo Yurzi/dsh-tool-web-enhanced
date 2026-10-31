@@ -155,7 +155,7 @@ src/
 | search/[execute](<../packages/search-enhanced/src/search/execute.ts>) · [http](<../packages/search-enhanced/src/search/http.ts>) · [errors](<../packages/search-enhanced/src/search/errors.ts>) | 调度 adapter / model 执行并组装结果；HTTP / MCP 传输参数与消息；搜索错误与凭据提示。 |
 | model/[types](<../packages/search-enhanced/src/model/types.ts>) · [bounds](<../packages/search-enhanced/src/model/bounds.ts>) | 模型路由、鉴权与支持状态类型；跨命名空间读取的路由字段约束。 |
 | model/[route](<../packages/search-enhanced/src/model/route.ts>) · [deepseek](<../packages/search-enhanced/src/model/deepseek.ts>) | 从固定连接或 Session 公共路由重建执行目标；集中推导 DeepSeek 路由与 Messages 方言。 |
-| model/[protocols](<../packages/search-enhanced/src/model/protocols.ts>) · [execute](<../packages/search-enhanced/src/model/execute.ts>) | 四种协议（含仅固定连接的 `codex-alpha`）请求生成与回答、来源解析；解析本次鉴权并执行有界请求。 |
+| model/[protocols](<../packages/search-enhanced/src/model/protocols.ts>) · [execute](<../packages/search-enhanced/src/model/execute.ts>) | 四种协议（含仅固定连接的 `codex-alpha`）请求生成与回答、来源解析；Alpha 以线性、有界扫描清理完整引用及关联标签，其余正文原样保留；解析本次鉴权并执行有界请求，解析后再次对最终回答去敏。 |
 | client/[index.tsx](<../packages/search-enhanced/src/client/index.tsx>) · [section](<../packages/search-enhanced/src/client/section.ts>) · [command](<../packages/search-enhanced/src/client/command.ts>) | 安装浏览器面、设置注入、`/setup-search` 的 decoration 与 Host 命令执行后的重读、可选 UI section；搜索选择与 freshness 的菜单 section；/setup-search 选择框的选项（含 freshness）。 |
 | client/[connections](<../packages/search-enhanced/src/client/connections.ts>) · [credentials](<../packages/search-enhanced/src/client/credentials.ts>) · [locales](<../packages/search-enhanced/src/client/locales.ts>) | 连接、状态、来源与写入结果文案；凭据引用与共享状态观察器；中英文词典。 |
 | client/[selection](<../packages/search-enhanced/src/client/selection.ts>) · [route](<../packages/search-enhanced/src/client/route.ts>) · [pairings](<../packages/search-enhanced/src/client/pairings.ts>) · [injected](<../packages/search-enhanced/src/client/injected.ts>) | 把 core 的选择 store、路由状态、模型记忆绑定到搜索 Remote 与字段；设置页注入类型。 |
@@ -389,8 +389,8 @@ core 的测试夹具：[fixtures/enhanced.ts](<../packages/core/tests/fixtures/e
 | [enhanced-search.spec.ts](<../packages/search-enhanced/tests/enhanced-search.spec.ts>) | 经真实 `WebRuntime` 与能力执行：按 id 调 adapter、native、固定模型与会话模型，不改会话选择；去敏与上游说明在提示之后；并行两个 provider；列出随设置变化而定义不变；就绪子句（含读不到时）；每个调用 Agent 的身份。 |
 | [host.spec.ts](<../packages/search-enhanced/tests/host.spec.ts>) | 真实 Host 的选择、记忆、继承、冻结与恢复；子 Agent 会话的写入从下一请求步生效、不写记忆，顶层与用户 fork 写记忆；没有下一请求模型时会话模型连接为 `no-model`、native 只看 API key。 |
 | [mcp.spec.ts](<../packages/search-enhanced/tests/mcp.spec.ts>) | 搜索 MCP 执行与错误边界。 |
-| [model-execute.spec.ts](<../packages/search-enhanced/tests/model-execute.spec.ts>) | model 请求、鉴权、回答来源与凭据处理；API key 与账号令牌解析的依赖异常一律固定化。 |
-| [codex-alpha.spec.ts](<../packages/search-enhanced/tests/codex-alpha.spec.ts>) | Alpha 专用请求、默认预算、字符串答案与固定连接解析。 |
+| [model-execute.spec.ts](<../packages/search-enhanced/tests/model-execute.spec.ts>) | model 请求、鉴权、回答来源与凭据处理；解析拼接后最终回答的再次去敏；API key 与账号令牌解析的依赖异常一律固定化。 |
+| [codex-alpha.spec.ts](<../packages/search-enhanced/tests/codex-alpha.spec.ts>) | Alpha 专用请求、默认预算与固定连接解析；完整引用及关联标签清理、未闭合标记与重复前缀、正文空白和空字符串保留。 |
 | [model-protocols.spec.ts](<../packages/search-enhanced/tests/model-protocols.spec.ts>) | 模型 URL、协议请求与响应解析。 |
 | [model-route.spec.ts](<../packages/search-enhanced/tests/model-route.spec.ts>) | 固定与 Session 路由、DeepSeek 方言与不支持状态。 |
 | [native.spec.ts](<../packages/search-enhanced/tests/native.spec.ts>) | 原生鉴权、端点与请求级安全边界。 |

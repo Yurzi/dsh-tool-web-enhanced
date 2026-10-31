@@ -5,6 +5,7 @@
 ### dsh-web-search-enhanced
 
 - New: independent `codex-alpha` protocol for fixed custom model connections. Operators explicitly set a search model (for example `gpt-5.6-luna`), an API base URL (with `/alpha/search` appended), a DSH Credentials reference and endpoint trust. `maxTokens` defaults to 2048. Alpha answer text and structured sources use the existing model-search execution protections; Alpha is not automatically mapped from the conversation model and does not reuse an OpenAI Provider sign-in. The settings page includes English and Chinese protocol and token-limit hints. No profile routing, shared core/UI, or fetch behavior change.
+- Fixed: Alpha citation cleanup now uses a bounded linear scan, removes only complete citation markers and their associated `wordlim` labels, and leaves unterminated markers unchanged. All remaining answer text is preserved verbatim, including leading/trailing whitespace and empty strings. Model search re-screens the final parsed answer for this request's credential so citation cleanup or text concatenation cannot reconstruct it in the returned answer.
 
 ## v0.1.3 (2026-10-27)
 

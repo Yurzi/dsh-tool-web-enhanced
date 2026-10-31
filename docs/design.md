@@ -651,7 +651,7 @@ connections:
 
 先在 DSH Credentials 中保存 `CODEX_ALPHA_API_KEY`，再在连接菜单或 `/setup-search custom:alpha` 中选用。模型必须显式填写，示例模型不是对所有网关的可用性保证。`endpoint` 填 API 根地址，去掉尾斜杠后追加 `/alpha/search`；不要重复填写该后缀。省略 `maxTokens` 时仍发送 `max_output_tokens: 2048`。
 
-响应要求 `output` 为字符串，映射为答案正文并移除 Alpha 私有引用标记；`results` 可缺省或为 `null`，否则须为数组。来源仅取结构化结果的 HTTP(S) URL，经现有来源规范化与去重；不从答案文本猜测链接。仍走 2 MiB、90 s 的有界传输、取消与凭据去敏，禁止重定向，无重试或回退。不注册新的全局 provider，不修改 `web` 路由、默认搜索选择、抓取连接或 CIDR 白名单。
+响应要求 `output` 为字符串，映射为答案正文；只删除完整的 Alpha 私有引用标记（`cite…`）及关联的 `[wordlim: N]` 标签，未闭合标记保持原样。引用清理在线性、有界扫描中完成，其余正文原样保留，不裁剪首尾空白，也不把空字符串变为缺失文本；执行层在解析完成后对最终回答再次去敏，避免清理标记后重新拼出凭据。`results` 可缺省或为 `null`，否则须为数组。来源仅取结构化结果的 HTTP(S) URL，经现有来源规范化与去重；不从答案文本猜测链接。仍走 2 MiB、90 s 的有界传输与取消，禁止重定向，无重试或回退。不注册新的全局 provider，不修改 `web` 路由、默认搜索选择、抓取连接或 CIDR 白名单。
 
 #### 跟随会话模型
 
@@ -681,9 +681,9 @@ connections:
 
 #### 回答透传
 
-- 模型的回答原样作为 `content`：按出现顺序拼接文本块，相邻文本块直接相连（引用切开的句子拼回原样），中间隔着工具块时插入一个空行；不去空白、不截断（长度由 `maxTokens` 与 2 MiB 上限约束）。唯一的改动是把本次请求的凭据替换为 `[redacted]`。
+- 模型的回答原样作为 `content`：按出现顺序拼接文本块，相邻文本块直接相连（引用切开的句子拼回原样），中间隔着工具块时插入一个空行；不去空白、不截断（长度由 `maxTokens` 与 2 MiB 上限约束），保留空字符串与缺失文本的区别。Alpha 仅额外删除完整引用标记及关联的 `wordlim` 标签，未闭合标记不改写，除此之外同样保留原文。所有 model 协议均在解析完成后对最终回答再次去敏，把本次请求的凭据替换为 `[redacted]`，包括解析拼接后重新组成的凭据。
 - 不替 Agent 下结论：不判定“没有搜索”，工具报错块也不改写成错误，照样返回回答与已有来源。
-- 来源只取协议的结构化字段：Messages 的 `web_search_result`（摘要取引用它的 `cited_text`）与 `web_search_result_location` 引用；Responses 的 `action.sources` 与 `url_citation` 注释；Chat 的 `url_citation` 注释与兼容网关的顶层 `citations`。之后同样经来源过滤。
+- 来源只取协议的结构化字段：Messages 的 `web_search_result`（摘要取引用它的 `cited_text`）与 `web_search_result_location` 引用；Responses 的 `action.sources` 与 `url_citation` 注释；Chat 的 `url_citation` 注释与兼容网关的顶层 `citations`；Alpha 的 `results`。之后同样经来源过滤。
 - 回复不是该协议的形状时报 `WEB_PROVIDER_ERROR`（“<label> returned an incompatible model search response…”）。
 - 费用与时延：服务端搜索按次计费，一次搜索还消耗数千输入 token；`maxUses` 缺省 5，可能超过 tool-web 缺省 30 s 的工具超时（`web_search_enhanced` 为 100 s），需要时调小。
 

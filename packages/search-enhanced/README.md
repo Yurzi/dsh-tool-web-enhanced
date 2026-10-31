@@ -86,7 +86,10 @@ to `2048` and is sent as `max_output_tokens`.
 
 Alpha is an independent JSON protocol, not OpenAI Responses. Its `output`
 becomes answer text and its structured `results` become normalized sources;
-private citation markers are removed. It uses the existing bounded transport,
+complete private citation markers and their associated `wordlim` labels are
+removed in a linear scan. Unterminated markers and all remaining text, including
+whitespace and empty strings, are preserved. The final parsed answer is screened
+again for this request's credential. It uses the existing bounded transport,
 redaction, cancellation and error handling, without retry or fallback.
 It never follows or automatically maps the conversation model, borrows an
 OpenAI Provider sign-in, or changes the default connection. Choose the new

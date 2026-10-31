@@ -52,8 +52,21 @@ describe('model search execution', () => {
     })
     try {
       await expect(executeModelSearch(target(server.url, 'codex-alpha'), request, dependencies())).resolves.toEqual({
-        sources: [{ url: 'https://a.test', title: '[redacted]' }], content: 'Answer [redacted]', truncated: false,
+        sources: [{ url: 'https://a.test', title: '[redacted]' }], content: 'Answer [redacted] ', truncated: false,
       })
+    } finally { await server.close() }
+  })
+
+  it('redacts credentials reassembled by Alpha citation removal through the real transport', async () => {
+    const key = 'ABCDEF123456'
+    const server = await localServer((_req, res) => {
+      res.setHeader('content-type', 'application/json')
+      res.end(JSON.stringify({ output: '  ABCDEFciteturn0search0123456\n', results: [] }))
+    })
+    try {
+      await expect(executeModelSearch(target(server.url, 'codex-alpha'), request, {
+        apiKey: async () => key, accountToken: async () => undefined,
+      })).resolves.toEqual({ sources: [], content: '  [redacted]\n', truncated: false })
     } finally { await server.close() }
   })
 

@@ -110,8 +110,27 @@ function parseAlpha(payload: Record<string, unknown>): ModelOutcome {
   if (typeof payload.output !== 'string' || (payload.results != null && !Array.isArray(payload.results))) return invalid()
   const rows = records(payload.results).map(row => ({ url: row.url, title: row.title }))
   // Alpha reference ids cannot be resolved by DSH; structured results are the sources.
-  const content = payload.output.replace(/\uE200cite\uE202[^\uE201]*\uE201(?:\s*\[wordlim:\s*\d+\])?/gu, '').trim()
-  return answer(rows, content === '' ? [] : [content])
+  return answer(rows, [stripAlphaCitations(payload.output)])
+}
+
+function stripAlphaCitations(value: string): string {
+  const prefix = '\uE200cite\uE202'
+  const wordLimit = /\s*\[wordlim:\s*\d+\]/uy
+  const parts: string[] = []
+  let cursor = 0
+  for (;;) {
+    const start = value.indexOf(prefix, cursor)
+    if (start === -1) break
+    const end = value.indexOf('\uE201', start + prefix.length)
+    // Leave the unclosed tail untouched instead of rescanning it at every prefix.
+    if (end === -1) break
+    parts.push(value.slice(cursor, start))
+    cursor = end + 1
+    wordLimit.lastIndex = cursor
+    if (wordLimit.test(value)) cursor = wordLimit.lastIndex
+  }
+  parts.push(value.slice(cursor))
+  return parts.join('')
 }
 
 function parseMessages(payload: Record<string, unknown>): ModelOutcome {
