@@ -620,7 +620,7 @@ describe('model connections on the settings page', () => {
     const form = h.container.querySelector('form')!
     click(form.querySelector('button[aria-label="' + tZh('editor.adapter') + '"]'))
     const items = [...document.querySelectorAll('[role="menuitem"]')].map(item => item.textContent)
-    expect(items.slice(-3)).toEqual(['Anthropic Messages', 'OpenAI Responses', 'OpenAI Chat Completions'].map(protocol => tZh('model.format', { protocol })))
+    expect(items.slice(-4)).toEqual(['Anthropic Messages', 'OpenAI Responses', 'OpenAI Chat Completions', 'Codex Alpha Search'].map(protocol => tZh('model.format', { protocol })))
     click(byText(document.body, '[role="menuitem"]', tZh('model.format', { protocol: 'OpenAI Chat Completions' })))
     expect(form.textContent).toContain(tZh('model.protocol.openai-chat-completions'))
     expect(form.textContent).toContain('DeepSeek 请用 Anthropic Messages')

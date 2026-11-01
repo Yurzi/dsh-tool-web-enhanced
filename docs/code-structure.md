@@ -155,11 +155,11 @@ src/
 | search/[execute](<../packages/search-enhanced/src/search/execute.ts>) · [http](<../packages/search-enhanced/src/search/http.ts>) · [errors](<../packages/search-enhanced/src/search/errors.ts>) | 调度 adapter / model 执行并组装结果；HTTP / MCP 传输参数与消息；搜索错误与凭据提示。 |
 | model/[types](<../packages/search-enhanced/src/model/types.ts>) · [bounds](<../packages/search-enhanced/src/model/bounds.ts>) | 模型路由、鉴权与支持状态类型；跨命名空间读取的路由字段约束。 |
 | model/[route](<../packages/search-enhanced/src/model/route.ts>) · [deepseek](<../packages/search-enhanced/src/model/deepseek.ts>) | 从固定连接或 Session 公共路由重建执行目标；集中推导 DeepSeek 路由与 Messages 方言。 |
-| model/[protocols](<../packages/search-enhanced/src/model/protocols.ts>) · [execute](<../packages/search-enhanced/src/model/execute.ts>) | 协议请求生成与回答、来源解析；解析本次鉴权并执行有界请求。 |
+| model/[protocols](<../packages/search-enhanced/src/model/protocols.ts>) · [execute](<../packages/search-enhanced/src/model/execute.ts>) | 四种协议（含仅固定连接的 `codex-alpha`）请求生成与回答、来源解析；Alpha 以线性、有界扫描清理完整引用及关联标签，其余正文原样保留；解析本次鉴权并执行有界请求，解析后再次对最终回答去敏。 |
 | client/[index.tsx](<../packages/search-enhanced/src/client/index.tsx>) · [section](<../packages/search-enhanced/src/client/section.ts>) · [command](<../packages/search-enhanced/src/client/command.ts>) | 安装浏览器面、设置注入、`/setup-search` 的 decoration 与 Host 命令执行后的重读、可选 UI section；搜索选择与 freshness 的菜单 section；/setup-search 选择框的选项（含 freshness）。 |
 | client/[connections](<../packages/search-enhanced/src/client/connections.ts>) · [credentials](<../packages/search-enhanced/src/client/credentials.ts>) · [locales](<../packages/search-enhanced/src/client/locales.ts>) | 连接、状态、来源与写入结果文案；凭据引用与共享状态观察器；中英文词典。 |
 | client/[selection](<../packages/search-enhanced/src/client/selection.ts>) · [route](<../packages/search-enhanced/src/client/route.ts>) · [pairings](<../packages/search-enhanced/src/client/pairings.ts>) · [injected](<../packages/search-enhanced/src/client/injected.ts>) | 把 core 的选择 store、路由状态、模型记忆绑定到搜索 Remote 与字段；设置页注入类型。 |
-| client/settings/[SettingsPage](<../packages/search-enhanced/src/client/settings/SettingsPage.tsx>) · [model](<../packages/search-enhanced/src/client/settings/model.ts>) | 组合设置页、文档诊断与 Reset；把目录与 model 协议转为设置页事实和文案。 |
+| client/settings/[SettingsPage](<../packages/search-enhanced/src/client/settings/SettingsPage.tsx>) · [model](<../packages/search-enhanced/src/client/settings/model.ts>) | 组合设置页、文档诊断与 Reset；把目录与 model 协议转为设置页事实和文案；Alpha 有独立 token 缺省提示，且不进入会话模型参数分组。 |
 
 其余设置模块是 core 工厂的搜索绑定：[CredentialEditor](<../packages/search-enhanced/src/client/settings/CredentialEditor.tsx>)、[CustomConnections](<../packages/search-enhanced/src/client/settings/CustomConnections.tsx>)、[DefaultsSection](<../packages/search-enhanced/src/client/settings/DefaultsSection.tsx>)、[EnhancedToolsSection](<../packages/search-enhanced/src/client/settings/EnhancedToolsSection.tsx>)、[OptionsEditor](<../packages/search-enhanced/src/client/settings/OptionsEditor.tsx>)、[PairingsSection](<../packages/search-enhanced/src/client/settings/PairingsSection.tsx>)、[ServicesSection](<../packages/search-enhanced/src/client/settings/ServicesSection.tsx>)、[parts](<../packages/search-enhanced/src/client/settings/parts.tsx>)、[sparse](<../packages/search-enhanced/src/client/settings/sparse.ts>)；CSS Modules 与声明文件提供局部样式和导入类型。
 
@@ -278,6 +278,7 @@ src/
 | [fetch-allowlist.e2e.ts](<../e2e/fetch-allowlist.e2e.ts>) | 回环授权、User-Agent 与运行时提示 | 否 | 套件 |
 | [remote-fetch-api.e2e.ts](<../e2e/remote-fetch-api.e2e.ts>) | 回环夹具记录与响应切换 | 否 | 不使用 DSH |
 | [fetch-remote.e2e.ts](<../e2e/fetch-remote.e2e.ts>) | 自定义远程抓取的真实 Host 往返 | 否 | 独立 |
+| [search-codex-alpha.e2e.ts](<../e2e/search-codex-alpha.e2e.ts>) | Alpha 固定模型的真实 Host 与 Agent 增强工具正文、来源及协议请求 | 否 | 独立 |
 | [search-model.e2e.ts](<../e2e/search-model.e2e.ts>) | 固定模型及 Session 路由的真实 Host 协议请求 | 否 | 独立 |
 | [plugins-page.e2e.ts](<../e2e/plugins-page.e2e.ts>) | 组合包标题、图标元数据及插件行 | 是 | 套件 |
 | [settings-page.e2e.ts](<../e2e/settings-page.e2e.ts>) | 设置页 allowlist 校验及稀疏保存 | 是 | 套件 |
@@ -304,16 +305,16 @@ src/
 | [setup-commands-ui.e2e.ts](<../e2e/setup-commands-ui.e2e.ts>) | 先跑一轮回环对话再在 Web 打开会话：斜杠菜单行与原来的选择框（截图）；带参数执行后命令卡显示输出、菜单与按钮反映新选择；展开命令卡看到路由警告；ui 行停用时选择框与带参数执行照常；插件行停用时命令与选择框一起消失。记录请求与 WebSocket 帧作证据 | 是 | 独立 |
 | [tui-completion.e2e.ts](<../e2e/tui-completion.e2e.ts>) | 已安装的 dsh-TUI（根 devDependency）与本 bundle：Web profile 叠入 TUI bundle、经 `bootHost` 检查真实 `tuiCommandTrees` 里两棵补全树与 Host 命令输出；独立的 TUI profile（dsh-base → dsh-tui → 本 bundle）里经真实 PTY 启动正式 `dsh-tui` 入口，Tab 补全插入原样的 `custom:MyEngine` 并执行，另一次不带参数执行看到连接列表与路由行 | 否（PTY） | 独立 |
 
-当前 e2e 基线为 29 个文件、183 个测试（最终 `pnpm run test:e2e`）。
+当前 e2e 基线为 30 个文件、186 个测试（最终 `pnpm run test:e2e`）。
 
 ## 测试清单
 
-当前测试基线为 **107 个文件、2407 个测试**（最终 `pnpm run check`，不含 e2e）；逐包数量如下，参数化用例按实际展开计数。每行对应一个测试文件；tests/fixtures/ 下的辅助模块不计入。
+当前测试基线为 **108 个文件、2421 个测试**（最终 `pnpm run check`，不含 e2e）；逐包数量如下，参数化用例按实际展开计数。每行对应一个测试文件；tests/fixtures/ 下的辅助模块不计入。
 
 | 包 | 测试文件 | 通过测试 |
 | --- | ---: | ---: |
 | core | 38 | 719 |
-| search-enhanced | 30 | 862 |
+| search-enhanced | 31 | 876 |
 | fetch-enhanced | 31 | 732 |
 | ui | 7 | 86 |
 | profile | 1 | 8 |
@@ -388,7 +389,8 @@ core 的测试夹具：[fixtures/enhanced.ts](<../packages/core/tests/fixtures/e
 | [enhanced-search.spec.ts](<../packages/search-enhanced/tests/enhanced-search.spec.ts>) | 经真实 `WebRuntime` 与能力执行：按 id 调 adapter、native、固定模型与会话模型，不改会话选择；去敏与上游说明在提示之后；并行两个 provider；列出随设置变化而定义不变；就绪子句（含读不到时）；每个调用 Agent 的身份。 |
 | [host.spec.ts](<../packages/search-enhanced/tests/host.spec.ts>) | 真实 Host 的选择、记忆、继承、冻结与恢复；子 Agent 会话的写入从下一请求步生效、不写记忆，顶层与用户 fork 写记忆；没有下一请求模型时会话模型连接为 `no-model`、native 只看 API key。 |
 | [mcp.spec.ts](<../packages/search-enhanced/tests/mcp.spec.ts>) | 搜索 MCP 执行与错误边界。 |
-| [model-execute.spec.ts](<../packages/search-enhanced/tests/model-execute.spec.ts>) | model 请求、鉴权、回答来源与凭据处理；API key 与账号令牌解析的依赖异常一律固定化。 |
+| [model-execute.spec.ts](<../packages/search-enhanced/tests/model-execute.spec.ts>) | model 请求、鉴权、回答来源与凭据处理；解析拼接后最终回答的再次去敏；API key 与账号令牌解析的依赖异常一律固定化。 |
+| [codex-alpha.spec.ts](<../packages/search-enhanced/tests/codex-alpha.spec.ts>) | Alpha 专用请求、默认预算与固定连接解析；完整引用及关联标签清理、未闭合标记与重复前缀、正文空白和空字符串保留。 |
 | [model-protocols.spec.ts](<../packages/search-enhanced/tests/model-protocols.spec.ts>) | 模型 URL、协议请求与响应解析。 |
 | [model-route.spec.ts](<../packages/search-enhanced/tests/model-route.spec.ts>) | 固定与 Session 路由、DeepSeek 方言与不支持状态。 |
 | [native.spec.ts](<../packages/search-enhanced/tests/native.spec.ts>) | 原生鉴权、端点与请求级安全边界。 |

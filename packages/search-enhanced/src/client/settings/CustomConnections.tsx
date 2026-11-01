@@ -18,6 +18,7 @@ export const CustomConnectionsSection = createCustomConnectionsSection<SearchSet
       'anthropic-messages': 'model.protocol.anthropic-messages',
       'openai-responses': 'model.protocol.openai-responses',
       'openai-chat-completions': 'model.protocol.openai-chat-completions',
+      'codex-alpha': 'model.protocol.codex-alpha',
     },
     keys: {
       'model.format': 'model.format',

@@ -117,11 +117,11 @@ export PNPM_HOME=$PWD/.pnpm-home \
 
 给 search 的 `model` 后端加一种线上协议：
 
-1. `src/catalog.ts` 的 `MODEL_PROTOCOLS` 加一项：键（自定义连接的 `protocol` 值）、`label`、`use`（该协议的固定模型连接在列出工具里的用途）、`options`，厂商规定至多设一个的参数对写进 `exclusive`。参数名跨协议唯一：同名参数必须是同一个规则对象，因为 `session-model` 接受并集 `MODEL_OPTIONS`（它的展开列表要加上新协议）。缺省值写进 `MODEL_DEFAULTS`，只按厂商当前标准写。
+1. `src/catalog.ts` 的 `MODEL_PROTOCOLS` 加一项：键（自定义连接的 `protocol` 值）、`label`、`use`（该协议的固定模型连接在列出工具里的用途）、`options`，厂商规定至多设一个的参数对写进 `exclusive`。参数名跨协议唯一：同名参数必须是同一个规则对象，因为 `session-model` 接受可跟随协议的并集 `MODEL_OPTIONS`（仅固定连接的协议不加入其展开列表；`codex-alpha` 复用 `maxTokens`）。缺省值写进 `MODEL_DEFAULTS`，只按厂商当前标准写。
 2. `src/model/types.ts` 的 `ModelOptions` 加上新参数（`model-protocols.spec.ts` 有它与 `MODEL_OPTIONS` 的类型级相等断言）。
-3. `src/model/protocols.ts` 的 `modelUrl`、`modelRequest`（先写缺省，再按 `optionalFields` 只发设置了的参数）、`parseModelResponse`（回答原样拼接，来源只取协议的结构化字段，形状不对返回 `invalid`）各加一个分支；`switch` 穷尽，漏写即编译失败。
+3. `src/model/protocols.ts` 的 `modelUrl`、`modelRequest`（先写缺省，再按 `optionalFields` 只发设置了的参数）、`parseModelResponse`（回答原样拼接，来源只取协议的结构化字段，形状不对返回 `invalid`）各加一个分支；`switch` 穷尽，漏写即编译失败。Alpha 的唯一协议清理是以线性、有界扫描删除完整引用标记及关联的 `wordlim` 标签；未闭合标记保持原样，其余正文不裁剪空白、不把空串折成缺失文本。
 4. 要让跟随会话模型认它：`src/model/route.ts` 的 `protocolOf` 加上 DSH 路由配置里的 `api` 名；只对 DeepSeek 有意义的值写进 `src/model/deepseek.ts`，不在别处按 provider 分支。
-5. 浏览器：`client/settings/CustomConnections.tsx` 的 `notes`（指向协议说明的 locale 键），`client/settings/model.ts` 的 `MODEL_COPY`、`PROTOCOL_HINTS`（`Record<ModelProtocol, …>`）与 `VALUE_LABELS`，以及 `locales.ts` 的对应键。设置文法、格式列表与按协议分组的参数（`protocolGroups`）由 `MODEL_PROTOCOLS` 驱动。
+5. 浏览器：`client/settings/CustomConnections.tsx` 的 `notes`（指向协议说明的 locale 键），`client/settings/model.ts` 的 `MODEL_COPY`、`PROTOCOL_HINTS`（`Record<ModelProtocol, …>`）与 `VALUE_LABELS`，以及 `locales.ts` 的对应键。设置文法、格式列表与固定模型的参数由 `MODEL_PROTOCOLS` 驱动；会话模型的 `SESSION_MODEL_GROUPS` 只包含可跟随协议，不包含仅固定连接的 `codex-alpha`。
 6. 测试：`model-protocols.spec.ts`（请求形状、缺省、解析与畸形响应）；`model-execute.spec.ts` 用本地 HTTP 服务假扮该 API（鉴权头、缺 key 不发请求、拒绝重定向、取消）；`settings.spec.ts`；跟随时加 `model-route.spec.ts`。夹具照官方文档构造，从不向真实服务发请求。
 
 ### 在列出工具里出现
@@ -135,7 +135,7 @@ export PNPM_HOME=$PWD/.pnpm-home \
 
 ### 新的鉴权方式
 
-上游说明与诊断的去敏只认得交给它的凭据（core `host/redaction.ts`）。加新的请求头或令牌种类时，把这次请求实际发送的凭据放进 `Upstream.matcher`（`secretMatcher([凭据])`；adapter 在 `runAdapter`，model 后端在 `src/model/execute.ts`）；`native` 经调用级的 `nativeAuth(ctx, ref, secrets)` 记录交给 DSH 的凭据。漏交的凭据不会被去除。adapter 的 2xx 解析结果也在 `runAdapter` 返回前整体去敏，不能只处理原始 JSON 的字符串值：OpenAlex 等协议会把属性名还原成正文；非 2xx 交给 `parseFailure` 的 `json` 在传输里先去敏，说明按整段原始回复筛查，outcome 不再二次处理。回归测试应经真实执行层覆盖这种形状。后端不自己拼上游文字，附带说明由 core 的 `upstreamSuffix` 统一生成。
+上游说明与诊断的去敏只认得交给它的凭据（core `host/redaction.ts`）。加新的请求头或令牌种类时，把这次请求实际发送的凭据放进 `Upstream.matcher`（`secretMatcher([凭据])`；adapter 在 `runAdapter`，model 后端在 `src/model/execute.ts`）；`native` 经调用级的 `nativeAuth(ctx, ref, secrets)` 记录交给 DSH 的凭据。漏交的凭据不会被去除。adapter 的 2xx 解析结果也在 `runAdapter` 返回前整体去敏，不能只处理原始 JSON 的字符串值：OpenAlex 等协议会把属性名还原成正文；非 2xx 交给 `parseFailure` 的 `json` 在传输里先去敏，说明按整段原始回复筛查，outcome 不再二次处理。model 后端也在解析完成后对最终回答再次去敏，防止引用清理或文本拼接重新组成凭据。回归测试应经真实执行层覆盖这些形状。后端不自己拼上游文字，附带说明由 core 的 `upstreamSuffix` 统一生成。
 
 新的日志按两层写（规则见[功能设计 · Host 日志](design.md#host-日志)）：可能经手本次请求凭据的后端把失败交给执行层的 `onDiagnostic`，只以 debug 级记 `redactDiagnostic` 的去敏副本；控制面（Remote、Host 命令、行设置、存储、可见性与捕获，从不经手请求凭据）用 `ctx.logger.warn('… %s', error)` 连同原始错误记录，调用方只得到固定措辞。
 
