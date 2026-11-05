@@ -35,7 +35,7 @@ export function pluginBuild(configUrl: string): UserConfig[] {
   const host: UserConfig = {
     name: manifest.name,
     entry: { index: 'src/index.ts' },
-    outDir: 'lib', format: ['esm'], platform: 'node', target: 'node22', fixedExtension: false, dts: false, clean: false,
+    outDir: 'lib', format: ['esm'], platform: 'node', target: 'node24.9', fixedExtension: false, dts: false, clean: false,
     deps: { neverBundle: isHostExternal, alwaysBundle: specifier => !isHostExternal(specifier) },
     define: { __PLUGIN_VERSION__: JSON.stringify(manifest.version) },
     plugins: [standardDecorators()],

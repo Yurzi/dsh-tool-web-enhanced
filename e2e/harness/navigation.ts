@@ -7,9 +7,28 @@ import { expect } from 'vitest'
 import { en as uiText } from '../../packages/ui/src/client/locales.ts'
 import { en as fetchText } from '../../packages/fetch-enhanced/src/client/locales.ts'
 
+/** Open native Plugins through the desktop rail or mobile drawer, then verify the drawer no longer covers the page. */
+export async function openPluginsPanel(page: Page, language: 'en' | 'zh' = 'en'): Promise<void> {
+  const navigation = page.getByRole('navigation', { name: language === 'zh' ? '全局面板' : 'Global panels', exact: true })
+  const opener = page.getByRole('button', { name: language === 'zh' ? '打开侧边栏' : 'Open sidebar', exact: true })
+  const drawer = await page.evaluate(() => window.innerWidth < 768)
+  if (drawer && !await navigation.isVisible()) await opener.click()
+  await navigation.waitFor()
+  await navigation.getByRole('button', { name: language === 'zh' ? '插件' : 'Plugins', exact: true }).click()
+  if (drawer) {
+    await expect.poll(async () => {
+      if (!await opener.isVisible()) return false
+      return opener.evaluate(element => {
+        const box = element.getBoundingClientRect()
+        return element.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2))
+      })
+    }).toBe(true)
+  }
+}
+
 /** Navigate through the public Plugins UI, including its existing back controls. */
 export async function openBundle(page: Page): Promise<Locator> {
-  await page.getByRole('navigation', { name: 'Global panels' }).getByRole('button', { name: 'Plugins', exact: true }).click()
+  await openPluginsPanel(page)
   const back = page.getByRole('button', { name: 'Back to Web Tools Enhanced', exact: true })
   if (await back.isVisible()) await back.click()
   const detail = page.locator('[data-plugin-detail="' + PROFILE_PACKAGE + '"]')
@@ -43,6 +62,20 @@ export async function openFetchSettings(page: Page, local = true): Promise<Locat
   return settings
 }
 
+/** Choose a real workspace with the native sidebar picker, including its asynchronous initial scan. */
+export async function chooseWorkspaceDirectory(page: Page, directory: string): Promise<void> {
+  await page.getByRole('button', { name: 'Add workspace', exact: true }).click()
+  const picker = page.getByRole('dialog', { name: 'Select Workspace Directory', exact: true })
+  await expect.poll(() => picker.getByRole('button', { name: 'Open', exact: true }).isEnabled()).toBe(true)
+  await picker.getByRole('button', { name: 'Edit path', exact: true }).click()
+  const path = picker.getByRole('textbox', { name: 'Edit path', exact: true })
+  await path.fill(directory)
+  await path.press('Enter')
+  await picker.getByRole('button', { name: 'Edit path', exact: true }).waitFor()
+  await picker.getByRole('button', { name: 'Open', exact: true }).click()
+  await picker.waitFor({ state: 'hidden' })
+}
+
 /** Create through DSH's sidebar; read its existing conversation identity attribute. */
 export async function newSession(page: Page): Promise<string> {
   const conversation = page.locator('[data-conversation-session]:visible')
@@ -53,20 +86,7 @@ export async function newSession(page: Page): Promise<string> {
   if (await chooseWorkspace.isVisible()) {
     const directory = join(run, 'browser-workspace')
     mkdirSync(directory, { recursive: true })
-    // The recent-workspace query may replace the placeholder while we click.
-    // The sidebar action stays mounted and always opens the directory flow.
-    await page.getByRole('button', { name: 'Add workspace', exact: true }).click()
-    const picker = page.getByRole('dialog', { name: 'Select Workspace Directory', exact: true })
-    // Initial directory scans commit the breadcrumb editor state. Wait for the
-    // public Open action to become ready before entering a path.
-    await expect.poll(() => picker.getByRole('button', { name: 'Open', exact: true }).isEnabled()).toBe(true)
-    await picker.getByRole('button', { name: 'Edit path', exact: true }).click()
-    const path = picker.getByRole('textbox', { name: 'Edit path', exact: true })
-    await path.fill(directory)
-    await path.press('Enter')
-    await picker.getByRole('button', { name: 'Edit path', exact: true }).waitFor()
-    await picker.getByRole('button', { name: 'Open', exact: true }).click()
-    await picker.waitFor({ state: 'hidden' })
+    await chooseWorkspaceDirectory(page, directory)
   }
   await conversation.waitFor()
   await expect.poll(() => conversation.getAttribute('data-conversation-session')).not.toBe(previous)

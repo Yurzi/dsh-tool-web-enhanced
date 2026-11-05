@@ -1,4 +1,5 @@
 import { useId, useState } from 'react'
+import { hasAllowlistRules } from '../../local/rules.ts'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { WriteSettings } from 'dsh-tool-web-enhanced-core/client'
 import type { Translate } from '../connections.ts'
@@ -122,6 +123,7 @@ export function AllowlistEditor({ allowCidrs, allowHostnames, disabled, revision
     <section className={css.editor} aria-label={t('allowlist.title')} aria-busy={busy}>
       <h4 className={css.title}>{t('allowlist.title')}</h4>
       <p className={css.hint}>{t('allowlist.description')}</p>
+      <p className={css.hint}>{t(hasAllowlistRules({ allowCidrs, allowHostnames }) ? 'allowlist.mode.filtered' : 'allowlist.mode.any')}</p>
       <div className={css.fields}>
         <RuleField field="allowCidrs" text={draft.cidrs} reading={cidrs} disabled={locked} onChange={text => change('cidrs', text)} t={t} />
         <RuleField field="allowHostnames" text={draft.hostnames} reading={hostnames} disabled={locked} onChange={text => change('hostnames', text)} t={t} />

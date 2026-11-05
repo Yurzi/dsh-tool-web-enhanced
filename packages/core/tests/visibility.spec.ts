@@ -2,7 +2,6 @@ import { Context } from '@deepseek-ai/cordis'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import Agents, { type Agent } from '@deepseek-ai/dsh-agent'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import Projections from '@deepseek-ai/dsh-session-projection'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { scopeOf } from '@deepseek-ai/dsh-scope'
 import Tools, { defineTool } from '@deepseek-ai/dsh-tools'
@@ -22,7 +21,6 @@ async function host() {
   const ctx = new Context()
   cleanups.push(() => ctx.fiber.dispose())
   await mountAgentLoopTestDependencies(ctx, { tools: { mode: 'native' } })
-  await ctx.plugin(Projections)
   await ctx.plugin(AgentLoop)
   const create = async (id: string) => {
     const handle = await ctx.agents.create({ sessionId: SessionId(id) })
@@ -178,10 +176,11 @@ it('waits for late tools services, then re-registers against a replacement servi
   expect(h.builds()).toBe(1)
   const oldTools = ctx.tools
   // Public plugin removal triggers the dependent injection disposer before replacement.
-  ctx.registry.delete(Tools)
+  const toolsFibers = [...ctx.registry.get(Tools)!.fibers]
+  for (const fiber of toolsFibers) await fiber.dispose()
   await ctx.fiber.await()
   expect(names.every(name => oldTools.get(name) === undefined)).toBe(true)
-  await ctx.plugin(Tools, { mode: 'native' })
+  await ctx.plugin(Tools)
   await ctx.fiber.await()
   expect(names.every(name => ctx.tools.get(name) !== undefined)).toBe(true)
   expect(h.builds()).toBe(1)
@@ -191,7 +190,8 @@ it('withdraws and re-registers the pair when the Agents service is replaced', as
   const { ctx } = await host()
   const h = await controller(ctx)
   expect(names.every(name => ctx.tools.get(name) !== undefined)).toBe(true)
-  ctx.registry.delete(Agents)
+  const agentFibers = [...ctx.registry.get(Agents)!.fibers]
+  for (const fiber of agentFibers) await fiber.dispose()
   await ctx.fiber.await()
   expect(names.every(name => ctx.tools.get(name) === undefined)).toBe(true)
   await ctx.plugin(Agents)

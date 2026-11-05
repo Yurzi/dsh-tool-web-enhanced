@@ -13,7 +13,6 @@ import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-test
 import AgentPresets from '@deepseek-ai/dsh-agent-preset-registry'
 import { SessionId, SessionLogOffset, type SessionStore } from '@deepseek-ai/dsh-session'
 import * as SessionPersistenceJsonl from '@deepseek-ai/dsh-session-persistence-jsonl'
-import Projections from '@deepseek-ai/dsh-session-projection'
 import Storage from '@deepseek-ai/dsh-storage'
 import * as StorageDomain from '@deepseek-ai/dsh-storage-domain'
 import * as StorageJson from '@deepseek-ai/dsh-storage-json'
@@ -62,7 +61,6 @@ async function presetHost(persistence = false) {
   await ctx.plugin(Loader)
   // rc.1 testkit still works on rc.2 after supplying the new public projection dependency.
   await mountAgentLoopTestDependencies(ctx, { tools: { mode: 'native' } })
-  await ctx.plugin(Projections)
   await ctx.plugin(AgentLoop)
   await mountWebSettings(ctx, root)
   await ctx.plugin(Storage)

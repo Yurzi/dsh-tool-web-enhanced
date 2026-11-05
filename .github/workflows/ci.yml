@@ -12,20 +12,30 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  PNPM_HOME: ${{ github.workspace }}/.pnpm-home
+  XDG_CACHE_HOME: ${{ github.workspace }}/.xdg/cache
+  XDG_DATA_HOME: ${{ github.workspace }}/.xdg/data
+  XDG_STATE_HOME: ${{ github.workspace }}/.xdg/state
+  XDG_RUNTIME_DIR: ${{ github.workspace }}/.xdg/runtime
+  npm_config_cache: ${{ github.workspace }}/.npm-cache
+
 jobs:
   check:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        node: ['22.19.0', '24']
+        node: ['24.9.0', '24', '26']
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
+        with:
+          dest: ${{ env.PNPM_HOME }}
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile --strict-peer-dependencies
       - run: pnpm run check
       # The e2e suite runs locally only (docs/development.md).

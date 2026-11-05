@@ -12,6 +12,7 @@ import { FETCH, PROFILE_PACKAGE, SEARCH, UI, type PluginIdentity } from 'dsh-too
 import { afterAll, afterEach, beforeAll, describe, expect, inject, it } from 'vitest'
 import { composedRows, enterIsolatedEnvironment, profileDir } from './harness/environment.ts'
 import { type Host, bootHost } from './harness/host.ts'
+import { startFetchTarget } from './harness/http.ts'
 
 const e2e = inject('e2e')
 const fixture = (name: string) => join(import.meta.dirname, 'fixtures', name)
@@ -65,9 +66,12 @@ describe('runtime', () => {
       .rejects.toMatchObject({ code: 'WEB_PROVIDER_CREDENTIAL_MISSING' })
   })
 
-  it('routes web_fetch to the fetch plugin with the native public-only policy', async () => {
-    await expect(host.web.fetch({ url: 'http://127.0.0.1:9/' }, AbortSignal.timeout(15_000)))
-      .rejects.toMatchObject({ code: 'WEB_BLOCKED_URL' })
+  it('routes web_fetch to local with the upstream any-address default', async () => {
+    const target = await startFetchTarget()
+    try {
+      expect(await host.web.fetch({ url: target.url }, AbortSignal.timeout(15_000))).toMatchObject({ statusCode: 200 })
+      expect(target.userAgents).toHaveLength(1)
+    } finally { await target.close() }
   })
 })
 
@@ -89,10 +93,14 @@ describe('plugin rows switched off', () => {
     enterIsolatedEnvironment(e2e.env)
     host = await bootHost(e2e, files)
     const { web } = host
-    const search = web.search({ query: 'deepseek harness' }, AbortSignal.timeout(15_000))
-    const fetch = web.fetch({ url: 'http://127.0.0.1:9/' }, AbortSignal.timeout(15_000))
-    // The web row still names a switched-off seat, so that capability fails loudly rather than falling back.
-    await expect(search).rejects.toMatchObject({ code: off.includes(SEARCH) ? 'WEB_PROVIDER_CONFIGURED_MISSING' : 'WEB_PROVIDER_CREDENTIAL_MISSING' })
-    await expect(fetch).rejects.toMatchObject({ code: off.includes(FETCH) ? 'WEB_PROVIDER_CONFIGURED_MISSING' : 'WEB_BLOCKED_URL' })
+    const target = await startFetchTarget()
+    try {
+      // A switched-off seat fails loudly rather than falling back. Await each rejection immediately.
+      await expect(web.search({ query: 'deepseek harness' }, AbortSignal.timeout(15_000)))
+        .rejects.toMatchObject({ code: off.includes(SEARCH) ? 'WEB_PROVIDER_CONFIGURED_MISSING' : 'WEB_PROVIDER_CREDENTIAL_MISSING' })
+      const fetch = web.fetch({ url: target.url }, AbortSignal.timeout(15_000))
+      if (off.includes(FETCH)) await expect(fetch).rejects.toMatchObject({ code: 'WEB_PROVIDER_CONFIGURED_MISSING' })
+      else expect(await fetch).toMatchObject({ statusCode: 200 })
+    } finally { await target.close() }
   })
 })

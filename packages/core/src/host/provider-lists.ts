@@ -3,11 +3,13 @@ import type { Session } from '@deepseek-ai/dsh-session'
 import type { SessionStorage } from './storage.ts'
 import { parentOf, sessionOrigin } from './session-origin.ts'
 
-/** Live setup/created events do not make a new conversation a restored one. */
+/** Public lifecycle offsets distinguish a fresh ordinary fork from its persisted resume. */
 export function isNewConversation(session: Session): boolean {
   const origin = sessionOrigin(session.header)
-  return parentOf(origin) === undefined && !origin.seeded
-    && session.firstLiveSeq === 0 && session.firstLifecycleSeq === 0
+  if (origin.kind === 'subagent') return false
+  // A new fork owns its marker/closers at the inherited cut; restore begins after them.
+  if (origin.seeded) return session.firstLifecycleSeq === session.inheritedEventCount
+  return session.firstLiveSeq === 0 && session.firstLifecycleSeq === 0
 }
 
 /** Immutable conversation authorization, sharing the selection queue and storage lifetime. */

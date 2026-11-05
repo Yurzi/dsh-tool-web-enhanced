@@ -1,4 +1,6 @@
 /** web_search_enhanced end to end: real Settings rows, WebRuntime, storage and Agents; local HTTP servers stand in for every upstream. */
+import { mountSessionController } from '../../core/tests/fixtures/session-controller.ts'
+import { toolCall } from '../../core/tests/fixtures/tool-call.ts'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
@@ -11,12 +13,10 @@ import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import SessionController from '@deepseek-ai/dsh-api-session-controller'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import Projections from '@deepseek-ai/dsh-session-projection'
 import Settings from '@deepseek-ai/dsh-settings'
 import Storage from '@deepseek-ai/dsh-storage'
 import * as StorageDomain from '@deepseek-ai/dsh-storage-domain'
@@ -92,14 +92,13 @@ async function host(config: SearchSettings, routes: Record<string, unknown> = {}
   onTestFinished(() => ctx.fiber.dispose())
   ctx.provide('launchEnvironment', createLaunchEnvironmentSnapshot([{ source: 'process', values: {} }]))
   await mountAgentLoopTestDependencies(ctx, { tools: { mode: 'native' } })
-  await ctx.plugin(Projections)
   await ctx.plugin(AgentLoop)
   await ctx.plugin(Storage)
   await ctx.plugin(StorageJson, { root: join(root, 'storage') })
   await ctx.plugin(StorageDomain, { backend: 'json' })
   await ctx.plugin(TypertRegistry)
   ctx.provide('fileUploads', { registerAgentResolver: () => () => {} } as never)
-  void new SessionController(ctx, { nativeOpen: false })
+  await mountSessionController(ctx, root)
   const credentials = new MemoryCredentials(ctx)
   for (const [ref, value] of Object.entries(KEYS)) await credentials.set(credentialRef(ref), value)
 
@@ -150,7 +149,7 @@ async function host(config: SearchSettings, routes: Record<string, unknown> = {}
     await ctx.waterfall('agent/request', { agent, turn: 1, step: index, signal: new AbortController().signal } as never, (async () => ({ provider: 'p', model: 'm' })) as never)
   }
   const call = (agent: Agent, name: string, args: Record<string, unknown>) =>
-    ctx.tools.execute({ callId: ToolCallId(`call-${++calls}`), name, arguments: args, agent, signal: new AbortController().signal })
+    toolCall(ctx, { callId: ToolCallId(`call-${++calls}`), name, arguments: args, agent, signal: new AbortController().signal })
   return { ctx, credentials, conversation, step, call }
 }
 

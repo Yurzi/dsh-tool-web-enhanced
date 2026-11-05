@@ -6,13 +6,23 @@ import { allowlistNotice } from '../src/prompt.ts'
 const systemNotice = (rules: AllowlistRules) => allowlistNotice(rules, 'web_fetch')
 
 describe('operator allowlist notice', () => {
-  it('is empty without CIDRs, even with hostname restrictions', () => {
-    expect(systemNotice({ allowCidrs: [], allowHostnames: ['internal.test'] })).toBe('')
+  it('explicitly describes default any mode without claiming address filtering', () => {
+    const notice = systemNotice({ allowCidrs: [], allowHostnames: [] })
+    expect(notice).toContain('no plugin address filtering is enabled')
+    expect(notice).toContain('Upstream URL, redirect, timeout, and size limits still apply.')
+    expect(notice).not.toContain('only public')
+  })
+
+  it('activates public-only preflight for hostname-only rules without granting access', () => {
+    const notice = systemNotice({ allowCidrs: [], allowHostnames: ['internal.test'] })
+    expect(notice).toContain('only public addresses pass')
+    expect(notice).toContain('Hostname rules alone do not grant non-public access.')
+    expect(notice).toContain('initial target only')
   })
 
   it('preserves the predecessor wording and all remaining safety checks', () => {
     expect(systemNotice({ allowCidrs: ['198.18.0.0/15'], allowHostnames: [] })).toBe(
-      'The operator has authorized web_fetch to reach non-public addresses within [198.18.0.0/15]. All other URL, DNS, redirect, and transport safety checks still apply.',
+      'The operator has authorized web_fetch to reach non-public addresses within [198.18.0.0/15]. This plugin checks the initial target only; upstream fetching may resolve DNS again and follow redirects without rechecking these rules. Proxy-resolved hostnames are governed by the proxy. Upstream URL, redirect, timeout, and size limits still apply.',
     )
   })
 
@@ -39,7 +49,7 @@ describe('operator allowlist notice', () => {
     expect(notice).toContain('see the fetch settings page')
     expect(notice).toContain('Only URLs whose hostname matches a configured hostname rule')
     expect(notice).toContain('partial list')
-    expect(notice).toContain('All other URL, DNS, redirect, and transport safety checks still apply.')
+    expect(notice).toContain('This plugin checks the initial target only; upstream fetching may resolve DNS again and follow redirects without rechecking these rules. Proxy-resolved hostnames are governed by the proxy. Upstream URL, redirect, timeout, and size limits still apply.')
   })
 
   it('summarizes CIDR-only exceptions without inventing hostname restrictions', () => {
@@ -69,13 +79,13 @@ describe('operator allowlist notice', () => {
 
   it('explains optional hostname narrowing without treating hostnames as permissions', () => {
     expect(systemNotice({ allowCidrs: ['10.0.0.0/8', 'fd00::/8'], allowHostnames: ['internal.test', '*.svc.test'] })).toBe(
-      'The operator has authorized web_fetch to reach non-public addresses within [10.0.0.0/8, fd00::/8]. Only URLs whose hostname matches [internal.test, *.svc.test] may use these exceptions. All other URL, DNS, redirect, and transport safety checks still apply.',
+      'The operator has authorized web_fetch to reach non-public addresses within [10.0.0.0/8, fd00::/8]. Only URLs whose hostname matches [internal.test, *.svc.test] may use these exceptions. This plugin checks the initial target only; upstream fetching may resolve DNS again and follow redirects without rechecking these rules. Proxy-resolved hostnames are governed by the proxy. Upstream URL, redirect, timeout, and size limits still apply.',
     )
   })
 
   it('names the subject the listing gives it, in the full and the summarized form', () => {
     expect(allowlistNotice({ allowCidrs: ['10.0.0.0/8'], allowHostnames: ['internal.test'] }, 'this provider')).toBe(
-      'The operator has authorized this provider to reach non-public addresses within [10.0.0.0/8]. Only URLs whose hostname matches [internal.test] may use these exceptions. All other URL, DNS, redirect, and transport safety checks still apply.',
+      'The operator has authorized this provider to reach non-public addresses within [10.0.0.0/8]. Only URLs whose hostname matches [internal.test] may use these exceptions. This plugin checks the initial target only; upstream fetching may resolve DNS again and follow redirects without rechecking these rules. Proxy-resolved hostnames are governed by the proxy. Upstream URL, redirect, timeout, and size limits still apply.',
     )
     const allowCidrs = Array.from({ length: 200 }, (_, index) => `10.${index}.0.0/16`)
     const summary = allowlistNotice({ allowCidrs, allowHostnames: [] }, 'this provider')

@@ -5,7 +5,6 @@ import { Context } from '@deepseek-ai/cordis'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
-import Projections from '@deepseek-ai/dsh-session-projection'
 import Storage from '@deepseek-ai/dsh-storage'
 import * as StorageDomain from '@deepseek-ai/dsh-storage-domain'
 import * as StorageJson from '@deepseek-ai/dsh-storage-json'
@@ -25,7 +24,6 @@ async function setup(records: Record<string, StoredSelection> = {}) {
   const ctx = new Context()
   cleanups.push(() => ctx.fiber.dispose())
   await mountAgentLoopTestDependencies(ctx, { tools: { mode: 'native' } })
-  await ctx.plugin(Projections)
   await ctx.plugin(AgentLoop)
   await ctx.plugin(Storage)
   await ctx.plugin(StorageJson, { root })
@@ -39,7 +37,7 @@ async function setup(records: Record<string, StoredSelection> = {}) {
   const sessions = new SearchSessions(ctx, () => settings, storage, pairings, new SearchRestriction(ctx))
   const agent = async (id: string, parent?: string) => {
     const handle = await ctx.agents.create({ sessionId: SessionId(id), agentOptions: { provider: 'p', model: 'm' },
-      ...(parent === undefined ? {} : { meta: { parentSession: SessionId(parent), isSeeded: true }, inheritedEventCount: SessionLogOffset(0), seed: [] }),
+      ...(parent === undefined ? {} : { meta: { origin: 'subagent', parentSession: SessionId(parent), isSeeded: true }, inheritedEventCount: SessionLogOffset(0), seed: [] }),
     })
     cleanups.push(() => handle.dispose())
     return handle.agent
@@ -96,7 +94,7 @@ describe('persistent selection semantics', () => {
     expect(await h.sessions.current(liveSession(await h.agent('legacy-memory')))).toMatchObject({ source: 'default', selection: { connectionId: 'builtin:openalex' } })
   })
 
-  it.each(['default', 'model'] as const)('a fork with no parent record reports %s on repeated reads', async source => {
+  it.each(['default', 'model'] as const)('a subagent_fork with no parent record reports %s on repeated reads', async source => {
     const h = await setup()
     if (source === 'model') await h.pairings.set({ provider: 'p', model: 'm' }, null)
     const fork = await h.agent('orphan', 'missing-parent')
@@ -115,7 +113,7 @@ describe('persistent selection semantics', () => {
     expect(await reopened.current(liveSession(fork))).toMatchObject({ source: 'default' })
   })
 
-  it('a fork resolves its live parent before freezing inherited revision-zero state', async () => {
+  it('a subagent_fork resolves its live parent before freezing inherited revision-zero state', async () => {
     const h = await setup()
     const parent = await h.agent('parent')
     await h.sessions.current(liveSession(parent))
@@ -127,7 +125,7 @@ describe('persistent selection semantics', () => {
     expect((await h.sessions.current(liveSession(parent))).selection.connectionId).toBe('builtin:firecrawl')
   })
 
-  it('a fork inherits persisted parent choices even when the parent is not running', async () => {
+  it('a subagent_fork inherits persisted parent choices even when the parent is not running', async () => {
     const h = await setup({ parent: { connectionId: null, revision: 2, freshness: 'realtime' } })
     const fork = await h.agent('fork', 'parent')
     expect(await h.sessions.current(liveSession(fork))).toEqual({ source: 'inherited', selection: { connectionId: null, revision: 0, options: { freshness: 'realtime' } } })

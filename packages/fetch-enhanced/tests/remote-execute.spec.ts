@@ -1,3 +1,4 @@
+import { toolCall } from '../../core/tests/fixtures/tool-call.ts'
 import type { IncomingHttpHeaders } from 'node:http'
 import { WebError } from '@deepseek-ai/dsh-web'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
@@ -53,7 +54,7 @@ describe('fetch remote execution and bounded transport', () => {
     const h = await composeFetch({ connections: { 'custom:injection': { kind: 'adapter', adapter: 'firecrawl', label: 'Injection fixture', credentialRef: 'TEST_KEY', endpoint, trustedEndpoint: true } } })
     applyWebFetchTool(h.ctx, 30_000, 200_000)
     await h.select('custom:injection')
-    const result = await h.ctx.agents.withInitiator(h.agent, () => h.ctx.tools.execute({ callId: ToolCallId('untrusted-' + boundary), name: 'web_fetch', arguments: { url: 'http://localhost/private' }, agent: h.agent, signal: new AbortController().signal }))
+    const result = await h.ctx.agents.withInitiator(h.agent, () => toolCall(h.ctx, { callId: ToolCallId('untrusted-' + boundary), name: 'web_fetch', arguments: { url: 'http://localhost/private' }, agent: h.agent, signal: new AbortController().signal }))
     expect(result).toMatchObject({ isError: true, error: { info: { code: 'WEB_PROVIDER_ERROR' } } })
     expect(result.content).toEqual([{ type: 'text', text: expect.stringContaining('\n\nInjection fixture responded (untrusted): ' + injection) }])
   })

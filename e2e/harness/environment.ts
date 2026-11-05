@@ -179,8 +179,8 @@ export function addPlugins(e2e: Pick<E2EContext, 'cli' | 'env'>, specs: readonly
 /** Initialize a true base-only custom profile through app-boot's public API. */
 export function createBaseProfile(e2e: E2EContext, name: string): void {
   const require = createRequire(join(e2e.install, 'node_modules/@deepseek-ai/dsh/package.json'))
-  const app = require('@deepseek-ai/dsh-app-boot') as { initProfile(directory: string, bundles: readonly string[]): void; DEFAULT_PROFILE_BUNDLES: readonly string[] }
-  app.initProfile(profileDir(e2e, name), app.DEFAULT_PROFILE_BUNDLES)
+  const app = require('@deepseek-ai/dsh-app-boot') as { initProfile(directory: string, bundles: readonly string[]): void }
+  app.initProfile(profileDir(e2e, name), ['@deepseek-ai/dsh-base'])
 }
 
 /** One row of a composed entry list. */

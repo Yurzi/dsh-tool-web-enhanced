@@ -1,11 +1,11 @@
 /** web_fetch_enhanced and list_web_fetch_providers over a stand-in EnhancedAccess, next to the real tool-web web_fetch. */
+import { toolCall } from '../../core/tests/fixtures/tool-call.ts'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import Projections from '@deepseek-ai/dsh-session-projection'
 import * as ToolWeb from '@deepseek-ai/dsh-tool-web'
 import type { ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import WebRuntime, { WebError, type WebFetchRequest, type WebFetchResult } from '@deepseek-ai/dsh-web'
@@ -28,7 +28,6 @@ async function host(access: Partial<Access>, provider: (request: WebFetchRequest
   const ctx = new Context()
   cleanups.push(() => ctx.fiber.dispose())
   await mountAgentLoopTestDependencies(ctx, { tools: { mode: 'native' } })
-  await ctx.plugin(Projections)
   await ctx.plugin(AgentLoop)
   await ctx.plugin(WebRuntime, {})
   await ctx.plugin({ inject: ['web'], apply: (scope: Context) => { scope.web.registerFetchProvider({ id: 'fake', available: () => true, fetch: provider }) } })
@@ -42,7 +41,7 @@ async function host(access: Partial<Access>, provider: (request: WebFetchRequest
   const { agent } = handle
   let calls = 0
   const run = (name: string, args: Record<string, unknown>, options: { agent?: Agent | undefined } = { agent }) =>
-    ctx.tools.execute({ callId: ToolCallId(`c${++calls}`), name, arguments: args, ...options.agent === undefined ? {} : { agent: options.agent }, signal: new AbortController().signal })
+    toolCall(ctx, { callId: ToolCallId(`c${++calls}`), name, arguments: args, ...options.agent === undefined ? {} : { agent: options.agent }, signal: new AbortController().signal })
   return { ctx, agent, run }
 }
 

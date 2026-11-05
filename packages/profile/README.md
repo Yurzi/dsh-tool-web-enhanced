@@ -1,5 +1,7 @@
 # dsh-tool-web-enhanced-profile
 
+Requires DSH `>=0.2.2-rc.1 <0.3.0-0` and Node `>=24.9.0`. Development and isolated end-to-end tests target the exact published DSH `0.2.2-rc.1` release.
+
 A DeepSeek Harness **bundle** — the package users install. It carries no code:
 its [`cordis.patch.yml`](cordis.patch.yml) mounts the two plugins it depends
 on and selects their providers in the shared `web` row, the way

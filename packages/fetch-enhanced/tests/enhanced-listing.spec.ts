@@ -19,7 +19,7 @@ it('names who receives the URL, by hostname for an operator endpoint', () => {
       'custom:mirror': { kind: 'adapter', adapter: 'exa', label: 'Mirror', credentialRef: 'MIRROR_KEY' },
     },
   })).toEqual({
-    'builtin:local': { use: undefined, recipient: { kind: 'this-machine' } },
+    'builtin:local': { use: undefined, recipient: { kind: 'this-machine' }, notice: expect.stringContaining('no plugin address filtering is enabled') },
     'builtin:deepseek-fetch-api': { use: undefined, recipient: { kind: 'service', service: 'DeepSeek Fetch API', host: 'tools.proxy.example' } },
     'builtin:exa': { use: undefined, recipient: { kind: 'service', service: 'Exa', host: undefined } },
     'builtin:firecrawl': { use: undefined, recipient: { kind: 'service', service: 'Firecrawl', host: undefined } },
@@ -31,9 +31,10 @@ it('names who receives the URL, by hostname for an operator endpoint', () => {
   })
 })
 
-it('gives local the allowlist notice for "this provider" only when CIDRs are allowed', () => {
+it('gives local the allowlist notice for "this provider" in default, hostname-only and CIDR modes', () => {
   const allowed = facts({ connections: { 'builtin:local': { options: { allowCidrs: ['10.0.0.0/8'], allowHostnames: ['*.corp.example'] } } } })
-  expect(allowed['builtin:local']?.notice).toBe('The operator has authorized this provider to reach non-public addresses within [10.0.0.0/8]. Only URLs whose hostname matches [*.corp.example] may use these exceptions. All other URL, DNS, redirect, and transport safety checks still apply.')
+  expect(allowed['builtin:local']?.notice).toBe('The operator has authorized this provider to reach non-public addresses within [10.0.0.0/8]. Only URLs whose hostname matches [*.corp.example] may use these exceptions. This plugin checks the initial target only; upstream fetching may resolve DNS again and follow redirects without rechecking these rules. Proxy-resolved hostnames are governed by the proxy. Upstream URL, redirect, timeout, and size limits still apply.')
   const hostnamesOnly = facts({ connections: { 'builtin:local': { options: { allowHostnames: ['internal.test'] } } } })
-  expect(Object.keys(hostnamesOnly['builtin:local'] as object)).not.toContain('notice')
+  expect(hostnamesOnly['builtin:local']?.notice).toContain('only public addresses pass')
+  expect(facts({})['builtin:local']?.notice).toContain('no plugin address filtering is enabled')
 })

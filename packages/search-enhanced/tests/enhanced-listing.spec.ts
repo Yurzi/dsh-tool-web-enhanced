@@ -3,7 +3,6 @@ import { Context } from '@deepseek-ai/cordis'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import Projections from '@deepseek-ai/dsh-session-projection'
 import { afterEach, expect, it } from 'vitest'
 import { searchEnhanced } from '../src/tools/index.ts'
 import { resolveSettings } from '../src/settings/resolve.ts'
@@ -17,7 +16,6 @@ async function facts(document: unknown) {
   const ctx = new Context()
   cleanups.push(() => ctx.fiber.dispose())
   await mountAgentLoopTestDependencies(ctx, { tools: { mode: 'native' } })
-  await ctx.plugin(Projections)
   await ctx.plugin(AgentLoop)
   await ctx.fiber.await()
   const handle = await ctx.agents.create({ sessionId: SessionId('s'), agentOptions: { provider: 'anthropic', model: 'claude-x' } })

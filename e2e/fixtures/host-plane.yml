@@ -15,3 +15,12 @@
   config: {}
 - id: modules
   disabled: true
+# rc.1 adds these GUI-only consumers of the disabled Web services.
+- id: open-in-app
+  disabled: true
+- id: directory-picker
+  disabled: true
+- id: harness-dev-context
+  disabled: true
+- id: client-hmr
+  disabled: true

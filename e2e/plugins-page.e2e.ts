@@ -12,6 +12,7 @@ import { PROFILE_PACKAGE } from 'dsh-tool-web-enhanced-core/shared'
 import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest'
 import { type App, browserRequired, chromiumPath, openApp } from './harness/browser.ts'
 import { artifacts } from './harness/environment.ts'
+import { openPluginsPanel } from './harness/navigation.ts'
 import { type WebServer, startWeb } from './harness/web.ts'
 
 const e2e = inject('e2e')
@@ -34,7 +35,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Plugins page', 
 
   it('lists the bundle with its own title, both plugin rows, and the menu row', async () => {
     const { page } = app
-    await page.getByRole('navigation', { name: 'Global panels' }).getByRole('button', { name: 'Plugins' }).click()
+    await openPluginsPanel(page)
     const card = page.locator(`[data-plugin-package="${PROFILE_PACKAGE}"]`)
     await card.getByText('Web Tools Enhanced').waitFor()
     await card.getByRole('button', { name: /^View / }).click()

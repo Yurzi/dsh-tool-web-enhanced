@@ -1,4 +1,6 @@
-/** Real rc.2 Agents and Web preset ancestry; scripted model transport, no timer-based synchronization. */
+/** Real rc.1 Agents and Web preset ancestry; scripted model transport, no timer-based synchronization. */
+import { mountSessionController } from '../../core/tests/fixtures/session-controller.ts'
+import { assembleStep } from '../../core/tests/fixtures/step.ts'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
@@ -9,14 +11,12 @@ import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 import Settings, { type SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
-import { assembleContextFor, installModelSelection, type ModelSelectionRef } from '@deepseek-ai/dsh-agent'
+import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import AgentPresets from '@deepseek-ai/dsh-agent-preset-registry'
-import SessionController from '@deepseek-ai/dsh-api-session-controller'
 import TypertRegistry from '@deepseek-ai/dsh-typert-registry'
 import { LlmAdapter, ToolCallId, createUserMessage, type GenerateOptions, type StreamChunk } from '@deepseek-ai/dsh-llm'
 import { SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
-import Projections from '@deepseek-ai/dsh-session-projection'
 import Storage from '@deepseek-ai/dsh-storage'
 import * as StorageDomain from '@deepseek-ai/dsh-storage-domain'
 import * as StorageJson from '@deepseek-ai/dsh-storage-json'
@@ -52,9 +52,8 @@ async function presetHost(routes: Record<string, unknown> = {}, options: { enhan
   cleanups.push(() => ctx.fiber.dispose())
   ctx.baseUrl = pathToFileURL(process.cwd() + '/').href
   await ctx.plugin(Loader)
-  // rc.1 testkit still works on rc.2 after supplying the new public projection dependency.
+  // Match the exact rc.1 testkit and its public projection dependency.
   await mountAgentLoopTestDependencies(ctx, { tools: { mode: 'native' } })
-  await ctx.plugin(Projections)
   await ctx.plugin(AgentLoop)
   await mountWebSettings(ctx, root, routes)
   await ctx.plugin(Storage)
@@ -75,7 +74,7 @@ async function presetHost(routes: Record<string, unknown> = {}, options: { enhan
   const plugin = await ctx.plugin({ inject: ['web'], apply: (scope: Context) => installSearch(scope, () => resolveSettings(document)) })
   const create = (id: string, parent?: string) => ctx.agents.create({
     sessionId: SessionId(id), agentOptions: { provider: 'fixture', model: 'fixture' },
-    ...(parent === undefined ? {} : { meta: { parentSession: SessionId(parent), isSeeded: true }, inheritedEventCount: SessionLogOffset(0), seed: [] }),
+    ...(parent === undefined ? {} : { meta: { parentSession: SessionId(parent), origin: 'subagent', isSeeded: true }, inheritedEventCount: SessionLogOffset(0), seed: [] }),
     setup: async agentCtx => { await ctx.agentPresets.mount(agentCtx) },
   })
   const configure = async (value: SearchSettings) => {
@@ -117,7 +116,7 @@ it('hides an ancestor Web preset tool from only the off Agent, never relying on 
   expect(ctx.tools.get('web_search')).toBeUndefined()
 })
 
-it('a seeded fork inherits off before its first request assembles tools', async () => {
+it('a seeded subagent_fork inherits off before its first request assembles tools', async () => {
   const { ctx, create } = await presetHost()
   const fork = await create('off-fork', 'off')
   cleanups.push(() => fork.dispose())
@@ -235,6 +234,8 @@ class TextAdapter extends LlmAdapter {
 }
 
 async function mountRemote(ctx: Context) {
+  const root = await mkdtemp(join(tmpdir(), 'web-controller-'))
+  cleanups.push(() => rm(root, { recursive: true, force: true }))
   await ctx.plugin(TypertRegistry)
   // Search never performs uploads; retain only the public peripheral resolver registration.
   const uploadResolvers = new Set<unknown>()
@@ -242,7 +243,7 @@ async function mountRemote(ctx: Context) {
     uploadResolvers.add(resolver)
     return () => { uploadResolvers.delete(resolver) }
   } } as never)
-  void new SessionController(ctx, { nativeOpen: false })
+  await mountSessionController(ctx, root)
   await ctx.fiber.await()
 }
 
@@ -294,13 +295,11 @@ it('a real Web preset Agent follows A then B, rejects an unsupported next model,
   const handle = await create('follow-model')
   cleanups.push(() => handle.dispose())
   const { agent } = handle
-  const selection: ModelSelectionRef = { current: undefined, assembled: undefined }
-  // Same public installer used by SessionController; no route fields are copied into search plans.
-  const disposeSelection = installModelSelection(agent.ctx, selection)
+  // Same public installer used by SessionController; the Agent owns its selection.
+  const disposeSelection = installModelSelection(agent.ctx)
   cleanups.push(async () => { disposeSelection() })
   const select = (model: string) => {
-    selection.current = { provider: 'fixture', model }
-    agent.session.append('model/selection', selection.current)
+    agent.model.select({ provider: 'fixture', model })
   }
   const results: ToolExecutionResult[] = []
   agent.ctx.on('tools/result', (exec, result) => { if (exec.name === 'web_search') results.push(result) })
@@ -373,7 +372,7 @@ it.each(['standard', 'minimal'] as const)('offers real enhanced definitions thro
   const { ctx, create } = await presetHost({}, { enhancedTools: true, preset })
   const handle = await create('enhanced-' + preset)
   cleanups.push(() => handle.dispose())
-  const assembly = await ctx.systemPrompt.assemble(assembleContextFor(handle.agent, new AbortController().signal))
+  const assembly = await assembleStep(ctx, handle.agent)
   for (const name of enhancedNames) expect(assembly.tools.map(tool => tool.name)).toContain(name)
   expect(assembly.tools.some(tool => tool.name === 'web_search')).toBe(preset === 'standard')
 })
@@ -435,7 +434,7 @@ it.each([false, true])('inherits the provider list into a child before its first
     setup: scope => { ctx.agentPresets.composeFrom(scope, parent.agent.ctx) },
   })
   cleanups.push(() => child.dispose())
-  const assembly = await ctx.systemPrompt.assemble(assembleContextFor(child.agent, new AbortController().signal))
+  const assembly = await assembleStep(ctx, child.agent)
   for (const name of enhancedNames) expect(assembly.tools.map(tool => tool.name)).toContain(name)
 })
 
@@ -444,7 +443,7 @@ it('includes both enhanced definitions in the shipped PTC SDK, never as direct m
   const { ctx, create } = await presetHost({}, { enhancedTools: true, preset })
   const handle = await create('enhanced-ptc')
   cleanups.push(() => handle.dispose())
-  const assembly = await ctx.systemPrompt.assemble(assembleContextFor(handle.agent, new AbortController().signal))
+  const assembly = await assembleStep(ctx, handle.agent)
   expect(assembly.tools.map(tool => tool.name)).toEqual(['run_code'])
   const sdk = assembly.sections.find(section => section.name === 'tools:sdk')!.text
   for (const name of enhancedNames) expect(sdk).toContain(name)

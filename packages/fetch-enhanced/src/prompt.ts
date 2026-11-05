@@ -4,19 +4,24 @@ import type {} from '@deepseek-ai/dsh-system-prompt'
 import { isSelectable, routeFacts, type CapabilityRuntime } from 'dsh-tool-web-enhanced-core/host'
 import { FETCH } from 'dsh-tool-web-enhanced-core/shared'
 import type { AllowlistRules } from './local/address-policy.ts'
-import { describeProblem, parseCidr, parseHostnameRule } from './local/rules.ts'
+import { describeProblem, hasAllowlistRules, parseCidr, parseHostnameRule } from './local/rules.ts'
 import type { FetchOptions } from './host/options.ts'
 import type { ResolvedSettings } from './settings/types.ts'
 
 const NOTICE_BUDGET = 2000
-const SAFETY_NOTICE = ' All other URL, DNS, redirect, and transport safety checks still apply.'
+const SAFETY_NOTICE = ' This plugin checks the initial target only; upstream fetching may resolve DNS again and follow redirects without rechecking these rules. Proxy-resolved hostnames are governed by the proxy. Upstream URL, redirect, timeout, and size limits still apply.'
 
 /**
- * Explain only the operator-authorized exceptions, retaining every other safety check.
+ * Explain whether the opt-in address preflight is enabled and its transport limits.
  * `subject` is who may reach them: `web_fetch` in the system prompt, `this provider` in list_web_fetch_providers.
  */
 export function allowlistNotice({ allowCidrs, allowHostnames }: AllowlistRules, subject: string): string {
-  if (allowCidrs.length === 0) return ''
+  if (!hasAllowlistRules({ allowCidrs, allowHostnames })) {
+    return `${subject} follows the upstream address policy: no plugin address filtering is enabled. Upstream URL, redirect, timeout, and size limits still apply.`
+  }
+  if (allowCidrs.length === 0) {
+    return `The operator has enabled initial-address filtering for ${subject}: only public addresses pass this plugin's preflight. Hostname rules alone do not grant non-public access.${SAFETY_NOTICE}`
+  }
   const cidrs = [...new Set(allowCidrs.map(rule => {
     const parsed = parseCidr(rule)
     if (!parsed.ok) throw new Error(`web-fetch-enhanced: allowCidrs entry ${describeProblem(parsed.problem)}`)

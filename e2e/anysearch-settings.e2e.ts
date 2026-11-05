@@ -6,7 +6,7 @@ import searchMeta from '../packages/search-enhanced/locale/zh.json'
 import fetchMeta from '../packages/fetch-enhanced/locale/zh.json'
 import { type App, browserRequired, chromiumPath, openApp, recordBrowserFailure } from './harness/browser.ts'
 import { isolatedContext, addPlugins } from './harness/environment.ts'
-import { openSearchSettings, openFetchSettings } from './harness/navigation.ts'
+import { openPluginsPanel, openSearchSettings, openFetchSettings } from './harness/navigation.ts'
 import { reviewScreenshot } from './harness/review.ts'
 import { type WebServer, startWeb } from './harness/web.ts'
 
@@ -49,7 +49,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('AnySearch setti
       settings = capability === 'search' ? await openSearchSettings(page) : await openFetchSettings(page, false)
     } else {
       // DSH owns the navigation labels; our plugin metadata supplies the row title.
-      await page.getByRole('navigation', { name: '全局面板', exact: true }).getByRole('button', { name: '插件', exact: true }).click()
+      await openPluginsPanel(page, 'zh')
       const bundle = page.locator('[data-plugin-detail="' + PROFILE_PACKAGE + '"]')
       await page.locator('[data-plugin-package="' + PROFILE_PACKAGE + '"]').getByRole('button', { name: /^查看/ }).click()
       const title = capability === 'search' ? searchMeta.meta.title : fetchMeta.meta.title

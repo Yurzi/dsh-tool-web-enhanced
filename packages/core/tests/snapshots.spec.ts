@@ -1,7 +1,6 @@
 import { Context } from '@deepseek-ai/cordis'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
-import Projections from '@deepseek-ai/dsh-session-projection'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { afterEach, expect, it } from 'vitest'
 import { Snapshots } from '../src/host/plans.ts'
@@ -13,7 +12,6 @@ async function setup() {
   const ctx = new Context()
   cleanups.push(() => ctx.fiber.dispose())
   await mountAgentLoopTestDependencies(ctx, { tools: { mode: 'native' } })
-  await ctx.plugin(Projections)
   await ctx.plugin(AgentLoop)
   const handle = await ctx.agents.create({ sessionId: SessionId('snapshot') })
   cleanups.push(() => handle.dispose())

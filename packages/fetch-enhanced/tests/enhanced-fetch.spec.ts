@@ -1,4 +1,5 @@
 /** web_fetch_enhanced end to end over the real composition host (Settings rows, WebRuntime, storage, Agents); local servers stand in for targets and services. */
+import { toolCall } from '../../core/tests/fixtures/tool-call.ts'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
@@ -28,7 +29,7 @@ async function host(services: { crawl: string; native: string }) {
   const h = await composeFetch(settingsFor(services))
   await h.request()
   const call = (name: string, args: Record<string, unknown>, agent: Agent = h.agent) =>
-    h.ctx.tools.execute({ callId: ToolCallId(`call-${++calls}`), name, arguments: args, agent, signal: new AbortController().signal })
+    toolCall(h.ctx, { callId: ToolCallId(`call-${++calls}`), name, arguments: args, agent, signal: new AbortController().signal })
   const conversation = async () => {
     const handle = await h.ctx.agents.create({ sessionId: SessionId(`later-${++calls}`) })
     onTestFinished(() => handle.dispose())
@@ -100,7 +101,7 @@ it.each([
     connections: { 'custom:anysearch': { kind: 'adapter', adapter: 'anysearch', label: 'Team reader', credentialRef: 'TEST_KEY', endpoint, trustedEndpoint: true } },
   })
   await h.request()
-  const result = await h.ctx.tools.execute({
+  const result = await toolCall(h.ctx, {
     callId: ToolCallId('anysearch-hint-' + status), name: 'web_fetch_enhanced',
     arguments: { url: 'https://example.com/page', provider: 'custom:anysearch' }, agent: h.agent, signal: new AbortController().signal,
   })
@@ -132,7 +133,7 @@ it('lists who receives the URL and the local allowlist for "this provider", foll
   const h = await host({ crawl: await unused(), native: await unused() })
   const schemas = () => JSON.stringify(h.ctx.tools.schemas().filter(schema => schema.name.includes('fetch_')))
   const before = schemas()
-  const notice = (cidr: string) => `The operator has authorized this provider to reach non-public addresses within [${cidr}]. All other URL, DNS, redirect, and transport safety checks still apply.`
+  const notice = (cidr: string) => `The operator has authorized this provider to reach non-public addresses within [${cidr}]. This plugin checks the initial target only; upstream fetching may resolve DNS again and follow redirects without rechecking these rules. Proxy-resolved hostnames are governed by the proxy. Upstream URL, redirect, timeout, and size limits still apply.`
   const first = await h.call('list_web_fetch_providers', {})
   expect(text(first).split('\n')).toEqual([
     `builtin:local — Local HTTP · ready · selected for this session · fetches from this machine · ${notice('127.0.0.0/8')}`,
@@ -150,7 +151,7 @@ it('lists who receives the URL and the local allowlist for "this provider", foll
   ])
   const third = await h.call('list_web_fetch_providers', {})
   expect(text(third).split('\n')).toEqual([
-    'builtin:local — Local HTTP · ready · selected for this session · fetches from this machine',
+    'builtin:local — Local HTTP · ready · selected for this session · fetches from this machine · this provider follows the upstream address policy: no plugin address filtering is enabled. Upstream URL, redirect, timeout, and size limits still apply.',
     'builtin:deepseek-fetch-api — DeepSeek Fetch API · ready · URLs go to 127.0.0.1',
     'custom:crawl — Crawl · ready · URLs go to 127.0.0.1',
     "This session's selection, builtin:local, is turned off; web_fetch will fail until the user changes it.",

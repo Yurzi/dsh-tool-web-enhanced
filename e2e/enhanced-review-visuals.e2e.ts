@@ -13,7 +13,7 @@ import { type App, browserRequired, chromiumPath, openApp, recordBrowserFailure 
 import { isolatedContext, addPlugins, composedRows, profileDir, profilePatchPath } from './harness/environment.ts'
 import { captureEnhancedToolReview } from './harness/enhanced-tool-review.ts'
 import { modelViewport } from './harness/model-visuals.ts'
-import { newSession, openBundle, openConnections, openConnectionTab, openSearchSettings, openFetchSettings } from './harness/navigation.ts'
+import { openPluginsPanel, newSession, openBundle, openConnections, openConnectionTab, openSearchSettings, openFetchSettings } from './harness/navigation.ts'
 import { reviewScreenshot } from './harness/review.ts'
 import { expectTheme, setTheme } from './harness/theme.ts'
 import { type WebServer, startWeb } from './harness/web.ts'
@@ -47,7 +47,7 @@ async function center(target: Locator): Promise<void> {
 async function openSettings(page: Page, capability: typeof SEARCH, locale: View['locale']): Promise<Locator> {
   // DSH's navigation labels and the plugin's metadata have separate locale owners.
   if (locale === 'en-US') return capability === SEARCH ? openSearchSettings(page) : openFetchSettings(page, false)
-  await page.getByRole('navigation', { name: '全局面板', exact: true }).getByRole('button', { name: '插件', exact: true }).click()
+  await openPluginsPanel(page, 'zh')
   const back = page.getByRole('button', { name: /^返回/ }).filter({ hasText: '增强网页工具' })
   if (await back.isVisible()) await back.click()
   const bundle = page.locator('[data-plugin-detail="' + PROFILE_PACKAGE + '"]')
@@ -275,8 +275,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('M5 supplemental
       const copy = view.locale === 'zh-CN' ? uiZh : uiEn
       // CLI installation alone does not open guidance: the manager deliberately
       // presents it only after explicit enablement on the public bundle list.
-      await page.getByRole('navigation', { name: view.locale === 'zh-CN' ? '全局面板' : 'Global panels', exact: true })
-        .getByRole('button', { name: view.locale === 'zh-CN' ? '插件' : 'Plugins', exact: true }).click()
+      await openPluginsPanel(page, view.locale === 'zh-CN' ? 'zh' : 'en')
       const card = page.locator('[data-plugin-package="' + PROFILE_PACKAGE + '"]')
       const enabled = card.getByRole('switch')
       await enabled.waitFor()

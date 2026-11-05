@@ -16,6 +16,10 @@
 | **M6 dsh-tui** | 已完成 | [`/setup-search`、`/setup-fetch`](design.md#setup-search-与-setup-fetch) 改为两个插件各自注册的 Host 命令，Web GUI 与 dsh-TUI 都能用：不带参数显示当前选择与来源、路由状态与启用的连接，`off`、连接 id 与 search 的实时性按 Remote `set` 的同一套写入（core `writeSelection`）；浏览器以 `commandUi.decorate` 保留原来的选择框，带参数的一行交给 Host 命令，执行后重读该会话；dsh-TUI 里命令参数有补全（core `terminal.ts`，本地结构类型、独立的注入作用域）；ui 包不参与 TUI，profile 补丁不变；真实 `CommandRuntime` 上的 Host 组合测试、真实 `CommandUiRuntime` 上的浏览器测试，e2e 覆盖真实 Host、Web GUI 与经真实 PTY 驱动的 dsh-TUI |
 | **M7 adapter 失败分类与 AnySearch** | 已完成 | adapter wire 加可选的非 2xx 失败分类 `parseFailure`：传输不认识任何服务，只读非 2xx 的前 16 KiB、按本次凭据筛查后交出 `FailureResponse`，并给出通用状态措辞；上游说明的类型 `UpstreamDetail` 带品牌、只能由 core 构造，2000 字符的截断推迟到成文时；现有服务给模型的文字不变（见[架构 · core 的 provider wires 与 runAdapter](architecture.md#core-的-provider-wires-与-runadapter)）。search 与 fetch 各加内置连接 `builtin:anysearch`：REST，只用个人 API key，缺省停用；search 有 `zone` / `language` 连接参数，fetch 按 `error_code` 分出 URL 无效、目标被拒、内容类型不支持等类别，402 一律不附说明；单元测试经本地 HTTP 覆盖，e2e 经回环服务驱动真实 Agent 并截取两侧设置页 |
 
+## 精确 rc.1 升级（v0.1.4）
+
+本轮迁移精确 DSH 0.2.2-rc.1/Cordis 4.1/Node >=24.9.0 的 manifests、CI、打包与隔离环境，以及 Agent 模型、effective config、普通 fork/子 Agent 状态与 Native/PTC admission。local 改为显式规则 opt-in 的初始预检：二次 DNS/rebinding 与不逐跳复验是已接受的边界，不规划私有 dispatcher 或新增传输依赖。本次按维护者授权准备 profile/ui 0.1.4、search/fetch 0.2.4 发布，不更新运行中 GUI；发布放行以新版本产物的 check、完整 GUI/TUI e2e、干净 frozen 安装与 peer 单实例审计为准。
+
 ## 接下来
 
 没有排定的里程碑；下一步从[候选与待定](#候选与待定)中选。

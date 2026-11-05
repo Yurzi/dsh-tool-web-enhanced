@@ -8,7 +8,7 @@ import { zh as uiZh } from '../packages/ui/src/client/locales.ts'
 import { firecrawlResponse } from './fixtures/remote-fetch.ts'
 import { type App, browserRequired, chromiumPath, openApp, recordBrowserFailure } from './harness/browser.ts'
 import { isolatedContext, addPlugins, composedRows, profilePatchPath } from './harness/environment.ts'
-import { openConnectionTab, newSession, openBundle, openConnections, openFetchSettings } from './harness/navigation.ts'
+import { openPluginsPanel, openConnectionTab, newSession, openBundle, openConnections, openFetchSettings } from './harness/navigation.ts'
 import { startRemoteFetchApi } from './harness/remote-fetch-api.ts'
 import { expectTheme, setTheme, type ThemePreference } from './harness/theme.ts'
 import { type WebServer, startWeb } from './harness/web.ts'
@@ -176,7 +176,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('UI review setti
     let settings = await openFetchSettings(app.page, false)
     if (view === 'zh-settings') {
       await reopenWithLocale('zh-CN')
-      await app.page.getByRole('navigation', { name: '全局面板', exact: true }).getByRole('button', { name: '插件', exact: true }).click()
+      await openPluginsPanel(app.page, 'zh')
       const card = app.page.locator('[data-plugin-package="' + PROFILE_PACKAGE + '"]')
       await card.getByRole('button', { name: /^查看/ }).click()
       const bundle = app.page.locator('[data-plugin-detail="' + PROFILE_PACKAGE + '"]')

@@ -1,28 +1,23 @@
 /** Real Agents, Session Controller, Gateway, selection domain and JSON backend. */
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { Context, type Message } from '@deepseek-ai/cordis'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
-import AgentDefaultModel from '@deepseek-ai/dsh-agent-default-model'
 import * as SessionPersistenceJsonl from '@deepseek-ai/dsh-session-persistence-jsonl'
-import Gateway from '@deepseek-ai/dsh-api-gateway'
-import SessionController from '@deepseek-ai/dsh-api-session-controller'
 import { SessionId, SessionLogOffset, type SessionStore } from '@deepseek-ai/dsh-session'
-import Projections from '@deepseek-ai/dsh-session-projection'
 import Storage from '@deepseek-ai/dsh-storage'
 import * as StorageDomain from '@deepseek-ai/dsh-storage-domain'
 import * as StorageJson from '@deepseek-ai/dsh-storage-json'
 import { RemoteError, type PeerId, type PeerScope } from '@deepseek-ai/dsh-typert-protocol'
-import TypertRegistry from '@deepseek-ai/dsh-typert-registry'
+import { mountSessionController } from './fixtures/session-controller.ts'
 import { afterEach, describe, expect, it } from 'vitest'
 import { selectionContract, type ConnectionView, type ProviderView } from '../src/shared/selection.ts'
 import type { OptionsCodec } from '../src/host/capability.ts'
 import type { SessionModel } from '../src/host/model.ts'
 import { Pairings } from '../src/host/pairings.ts'
-import { createConnectionsService } from '../src/host/remote.ts'
+import { createConnectionsService, type ConnectionsService } from '../src/host/remote.ts'
 import { ToolRestriction } from '../src/host/restriction.ts'
 import { liveSession, Sessions } from '../src/host/sessions.ts'
 import { SessionStorage } from '../src/host/storage.ts'
@@ -39,7 +34,6 @@ async function host(options: {
   providerView?: () => ProviderView
   describe?: (settings: unknown, model: SessionModel | undefined) => Promise<ConnectionView[]>
   persistence?: boolean
-  query?: boolean
   invalidSettings?: boolean
 } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'remote-private-storage-token-'))
@@ -49,43 +43,20 @@ async function host(options: {
   const logs: Message[] = []
   ctx.logger.exporter({ levels: { default: 3 }, export: message => { logs.push(message) } })
   await mountAgentLoopTestDependencies(ctx, { tools: { mode: 'native' } })
-  await ctx.plugin(Projections)
   await ctx.plugin(AgentLoop)
   if (options.persistence) {
     await ctx.plugin(SessionPersistenceJsonl, { root: join(root, 'sessions'), compression: 'none' })
-    await ctx.plugin(AgentDefaultModel, { provider: 'fixture', model: 'm' })
-  }
-  if (options.query) {
-    // Peer-only resolution exposes the public instance type here, not the exported constructor type.
-    const require = createRequire(import.meta.resolve('@deepseek-ai/dsh-api-session-controller'))
-    type Query = Context['sessionQuery']
-    const { default: SessionQuery }: {
-      default: abstract new (ctx: Context) => Query
-    } = await import(require.resolve('@deepseek-ai/dsh-session-query'))
-    // Keep real exact reads for cold recovery/not-found; this fixture does not provide search.
-    class ExactReadQuery extends SessionQuery {
-      override searchSessions(..._args: Parameters<Query['searchSessions']>): ReturnType<Query['searchSessions']> {
-        throw new Error('remote fixture does not support session search')
-      }
-
-      override searchEvents(..._args: Parameters<Query['searchEvents']>): ReturnType<Query['searchEvents']> {
-        throw new Error('remote fixture does not support event search')
-      }
-    }
-    void new ExactReadQuery(ctx)
   }
   await ctx.plugin(Storage)
   await ctx.plugin(StorageJson, { root })
   await ctx.plugin(StorageDomain, { backend: 'json' })
-  await ctx.plugin(TypertRegistry)
-  void new Gateway(ctx, {})
   // As in the plugin Host suites, retain the unused public upload resolver registration.
   const uploadResolvers = new Set<unknown>()
   ctx.provide('fileUploads', { registerAgentResolver: (resolver: unknown) => {
     uploadResolvers.add(resolver)
     return () => { uploadResolvers.delete(resolver) }
   } } as never)
-  const controller = new SessionController(ctx, { nativeOpen: false })
+  const controller = await mountSessionController(ctx, root)
   const settings = { defaultConnection: 'builtin:local', enhancedTools: false, connections: new Map([
     ['builtin:local', { id: 'builtin:local', kind: 'local' as const, disabled: false }],
   ]) }
@@ -106,10 +77,16 @@ async function host(options: {
   const sessions = new Sessions(ctx, () => readSettings(), storage, pairings,
     new ToolRestriction(ctx, { tool: 'web_fetch', routed: () => false }), options.describe)
   const contract = selectionContract({ namespace, packageName: 'core-remote-test', options: {}, extras: {} })
-  const service = createConnectionsService(ctx, {
-    namespace, contract, sessions, pairings,
-    providerView: options.providerView ?? (() => ({ providerId: 'fixture', envProvider: null })),
-  })
+  let service!: ConnectionsService<Record<string, never>, ConnectionView>
+  let connectionScope!: Context
+  const connections = options.persistence ? ctx : ctx.isolate('sessionPersistence')
+  const connectionFiber = await connections.plugin({ inject: ['sessionController', 'typert', 'agents'], apply(scope: Context) {
+    connectionScope = scope
+    service = createConnectionsService(scope, {
+      namespace, contract, sessions, pairings,
+      providerView: options.providerView ?? (() => ({ providerId: 'fixture', envProvider: null })),
+    })
+  } })
   await ctx.fiber.await()
   const handle = await ctx.agents.create({ sessionId: SessionId('ordinary'), agentOptions: { provider: 'fixture', model: 'm' } })
   cleanups.push(() => handle.dispose())
@@ -126,7 +103,7 @@ async function host(options: {
     await rm(path, { force: true })
     await mkdir(path)
   }
-  return { ctx, root, logs, controller, storage, pairings, sessions, service, agent: handle.agent, invoke, blockWrites }
+  return { ctx, root, logs, controller, storage, pairings, sessions, service, connectionScope, connectionFiber, agent: handle.agent, invoke, blockWrites }
 }
 
 type Host = Awaited<ReturnType<typeof host>>
@@ -247,8 +224,14 @@ describe('connection Remote failure boundary', () => {
 
   it('preserves the real resolveAgent gateway/internal message and details on the browser wire', async () => {
     const h = await host()
-    // No session-query facility is mounted: the real controller reports its resume failure.
     const sessionId = SessionId('private-resume-session')
+    const handle = await h.ctx.agents.create({ sessionId, meta: { cwd: h.root } })
+    handle.agent.session.append('model/selection', { provider: 'fixture', model: 'm' })
+    await makeCold(h, handle)
+    const records = (await h.storage.domain()).table('selections')
+    const before = [...records.entries()]
+    const fault = new Error('private resume setup failure')
+    h.ctx.on('agent/created', () => { throw fault })
     const found = await h.controller.resolveAgent(sessionId)
     if (!('error' in found)) throw new Error('expected resume failure')
     expect(found.error.code).toBe('gateway/internal')
@@ -259,6 +242,9 @@ describe('connection Remote failure boundary', () => {
     expect(h.ctx.typertGateway.wireStream.failure(error)).toEqual({
       code: found.error.code, message: found.error.message, details: found.error.details,
     })
+    expect([...records.entries()]).toEqual(before)
+    expect(await h.pairings.list()).toEqual([])
+    expect(h.ctx.agents.get(sessionId)).toBeUndefined()
     expect(h.logs).toHaveLength(0)
   })
 
@@ -380,7 +366,7 @@ describe('connection Remote failure boundary', () => {
 
   it.each([false, true])('restores an ordinary JSONL cold Session through the real controller and writes model memory (user fork=%s)', async fork => {
     for (const method of ['get', 'set'] as const) {
-      const h = await host({ persistence: true, query: true })
+      const h = await host({ persistence: true })
       const original = await h.ctx.agents.create({
         sessionId: SessionId('cold-ordinary-' + method), agentOptions: { provider: 'fixture', model: 'm' },
         meta: { cwd: h.root, ...(fork ? { parentSession: h.agent.id, isSeeded: true } : {}) },
@@ -405,7 +391,7 @@ describe('connection Remote failure boundary', () => {
   })
 
   it.each(['get', 'set'] as const)('preserves the real controller not-found response for a missing JSONL Session during %s', async method => {
-    const h = await host({ persistence: true, query: true })
+    const h = await host({ persistence: true })
     const sessionId = SessionId('missing-session')
     expect(await h.ctx.sessionPersistence.stat(sessionId)).toBeUndefined()
     const found = await h.controller.resolveAgent(sessionId)
@@ -451,7 +437,7 @@ describe('connection Remote failure boundary', () => {
     const h = await host()
     const { handle } = await child(h, 'gone-child-write', false)
     await handle.dispose()
-    expect(h.ctx.get('sessionPersistence')).toBeUndefined()
+    expect(h.connectionScope.get('sessionPersistence')).toBeUndefined()
     const found = await h.controller.resolveAgent(handle.agent.id)
     if (!('error' in found)) throw new Error('expected a controller failure')
     const failure = await h.invoke('set', { sessionId: handle.agent.id, connectionId: null, expectedRevision: 0 })
@@ -459,6 +445,9 @@ describe('connection Remote failure boundary', () => {
     expect(h.ctx.typertGateway.wireStream.failure(failure)).toEqual(h.ctx.typertGateway.wireStream.failure(found.error))
     expect(h.ctx.agents.get(handle.agent.id)).toBeUndefined()
     expect(h.logs).toHaveLength(0)
+    expect(await h.invoke('provider')).toMatchObject({ providerId: 'fixture' })
+    await h.connectionFiber.dispose()
+    await expect(h.invoke('provider')).rejects.toThrow()
   })
 
   it('falls back to the controller once a child Agent is no longer live', async () => {

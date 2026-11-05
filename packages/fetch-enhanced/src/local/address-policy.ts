@@ -1,22 +1,16 @@
 import ipaddr from 'ipaddr.js'
 import { FETCH } from 'dsh-tool-web-enhanced-core/shared'
 import {
-  type Cidr, type HostnameRule, type IpAddress, type ParseResult,
+  type AllowlistRules, type Cidr, type HostnameRule, type IpAddress, type ParseResult,
   describeProblem, matchesCidr, normalizeHost, parseCidr, parseHostnameRule, stripIpv6Brackets,
 } from './rules.ts'
 
-/** The operator's exceptions to the public-only destination rule. */
-export interface AllowlistRules {
-  /** Non-public IPv4/IPv6 CIDRs that may be reached. */
-  readonly allowCidrs: readonly string[]
-  /** When non-empty, only these hostnames may use the CIDR exceptions. */
-  readonly allowHostnames: readonly string[]
-}
+export type { AllowlistRules } from './rules.ts'
 
 /**
- * Decides whether a resolved address may be connected to. Public unicast is
- * always allowed, exactly like the native provider. A non-public address must
- * fall inside a configured CIDR and, when hostname rules exist, belong to a
+ * The opt-in preflight policy: public unicast is always allowed.
+ * A non-public address must fall inside a configured CIDR and, when hostname
+ * rules exist, belong to a
  * URL whose hostname matches one of them.
  */
 export class AddressPolicy {

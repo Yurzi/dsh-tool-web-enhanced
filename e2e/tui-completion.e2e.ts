@@ -1,18 +1,34 @@
-import { mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { execFileSync } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { parse, stringify } from 'yaml'
 import { pathToFileURL } from 'node:url'
 import type {} from '@deepseek-ai/dsh-commands'
-import { PROFILE_PACKAGE } from 'dsh-tool-web-enhanced-core/shared'
+import { FETCH, SEARCH, PROFILE_PACKAGE } from 'dsh-tool-web-enhanced-core/shared'
 import { afterAll, afterEach, beforeAll, describe, expect, inject, it } from 'vitest'
-import { addPlugins, artifacts, createBaseProfile, enterIsolatedEnvironment, isolatedContext, profileDir } from './harness/environment.ts'
+import { addPlugins, artifacts, createBaseProfile, enterIsolatedEnvironment, isolatedContext, profileDir, dsh } from './harness/environment.ts'
 import { bootHost } from './harness/host.ts'
 import { startTerminal } from './harness/terminal.ts'
 import { startTextModelApi } from './harness/model-api.ts'
 import { reviewDirectory } from './harness/review.ts'
+import { auditHostRuntime } from './harness/host-runtime-peers.ts'
 
 const e2e = isolatedContext(inject('e2e'))
-const tuiRoot = realpathSync(join(import.meta.dirname, '../node_modules/@deepseek-harness-tui/dsh-tui'))
+let tuiRoot: string
+let webTuiRoot: string
+
+function installTui(profileName = 'web'): void {
+  dsh(e2e, ['--profile', profileName, '--dump-config'])
+  const file = join(profileDir(e2e, profileName), 'pnpm-workspace.yaml')
+  const config = parse(readFileSync(file, 'utf8')) as Record<string, unknown>
+  const workspace = parse(readFileSync(join(import.meta.dirname, '../pnpm-workspace.yaml'), 'utf8')) as { peerDependencyRules: { allowedVersions: Record<string, string> } }
+  const parents = ['@deepseek-harness-tui/dsh-tui@0.16.1>', 'dsh-working-activity@0.5.1>', '@deepseek-ai/dsh-invariants@0.1.7-rc.2>']
+  config.peerDependencyRules = { allowedVersions: Object.fromEntries(Object.entries(workspace.peerDependencyRules.allowedVersions).filter(([key]) => parents.some(parent => key.startsWith(parent)))) }
+  writeFileSync(file, stringify(config))
+  dsh(e2e, ['plugin', '--profile', profileName, 'allow-version', '@deepseek-harness-tui/dsh-tui@0.16.1', '--dsh-version', '0.2.2-rc.1', '--accept-risk'])
+  addPlugins(e2e, ['@deepseek-harness-tui/dsh-tui@0.16.1'], {}, profileName)
+}
 const fixture = (name: string) => join(import.meta.dirname, 'fixtures', name)
 const settings = fixture('setup-command-connections.yml')
 
@@ -25,26 +41,23 @@ describe('Published dsh-TUI with the installed enhanced web profile', () => {
     const { [PROFILE_PACKAGE]: profile, ...plugins } = e2e.tarballs
     if (profile === undefined) throw new Error('the global setup did not pack the profile bundle')
     addPlugins(e2e, [profile], plugins)
-    // Reuse the approved installed devDependency, never install a second TUI or touch a user profile.
-    const scope = join(profileDir(e2e), 'node_modules/@deepseek-harness-tui')
-    mkdirSync(scope, { recursive: true })
-    symlinkSync(tuiRoot, join(scope, 'dsh-tui'), 'dir')
-    const file = join(profileDir(e2e), 'package.json')
-    const manifest = JSON.parse(readFileSync(file, 'utf8')) as { dependencies: Record<string, string>; dsh: { profile: { bundles: string[] } } }
-    manifest.dependencies['@deepseek-harness-tui/dsh-tui'] = 'file:' + tuiRoot
-    manifest.dsh.profile.bundles.unshift('@deepseek-harness-tui/dsh-tui')
-    writeFileSync(file, JSON.stringify(manifest, null, 2))
+    // Install the real fixed package in this isolated profile, so its DSH peers share the Host graph.
+    installTui()
+    const require = createRequire(join(profileDir(e2e), 'package.json'))
+    webTuiRoot = dirname(require.resolve('@deepseek-harness-tui/dsh-tui/package.json'))
+    const packageMeta = JSON.parse(readFileSync(join(webTuiRoot, 'package.json'), 'utf8')) as { version: string; main: string; exports: { '.': { import: string } } }
+    expect(packageMeta.version).toBe('0.16.1')
+    expect(packageMeta.exports['.'].import).toBe('./' + packageMeta.main)
     // The launcher owns a separate TUI-only profile over dsh-base, as in a real installation.
     const tuiProfile = 'dsh-tui'
     createBaseProfile(e2e, tuiProfile)
     addPlugins(e2e, [profile], plugins, tuiProfile)
     const tuiDirectory = profileDir(e2e, tuiProfile)
-    const tuiScope = join(tuiDirectory, 'node_modules/@deepseek-harness-tui')
-    mkdirSync(tuiScope, { recursive: true })
-    symlinkSync(tuiRoot, join(tuiScope, 'dsh-tui'), 'dir')
+    installTui(tuiProfile)
+    const tuiRequire = createRequire(join(tuiDirectory, 'package.json'))
+    tuiRoot = dirname(tuiRequire.resolve('@deepseek-harness-tui/dsh-tui/package.json'))
     const tuiManifestPath = join(tuiDirectory, 'package.json')
-    const tuiManifest = JSON.parse(readFileSync(tuiManifestPath, 'utf8')) as typeof manifest
-    tuiManifest.dependencies['@deepseek-harness-tui/dsh-tui'] = 'file:' + tuiRoot
+    const tuiManifest = JSON.parse(readFileSync(tuiManifestPath, 'utf8')) as { dsh: { profile: { bundles: string[] } } }
     tuiManifest.dsh.profile.bundles = ['@deepseek-ai/dsh-base', '@deepseek-harness-tui/dsh-tui', PROFILE_PACKAGE]
     writeFileSync(tuiManifestPath, JSON.stringify(tuiManifest, null, 2))
     const userPatch = join(tuiDirectory, 'cordis.patch.yml')
@@ -56,6 +69,21 @@ describe('Published dsh-TUI with the installed enhanced web profile', () => {
     e2e.env.NPM_CONFIG_REGISTRY = model.url
     e2e.env.npm_config_registry = model.url
     enterIsolatedEnvironment(e2e.env)
+    execFileSync(process.execPath, [join(import.meta.dirname, 'harness/runtime-peer-probe.ts'), e2e.install, tuiProfile, fixture('disable-tui-frontend.yml'), join(artifacts, 'runtime-peers-tui-only.json')], { env: e2e.env, timeout: 45_000 })
+    {
+      const profileName = 'web'
+      const host = await bootHost(e2e, [fixture('disable-tui-frontend.yml')], () => {}, profileName)
+      try {
+        // The real Host installs rc.1's public package-resolution interception.
+        const report = auditHostRuntime(profileDir(e2e, profileName), ['@deepseek-harness-tui/dsh-tui', SEARCH.packageName, FETCH.packageName, '@deepseek-ai/dsh-agent'], host.resolution)
+        writeFileSync(join(artifacts, `runtime-peers-tui-${profileName}.json`), JSON.stringify(report, null, 2))
+        const peers = report.peers
+        expect(peers['@deepseek-ai/cordis']).toBeDefined()
+        const runtimeRequire = createRequire(join(profileDir(e2e, profileName), 'package.json'))
+        const { Context } = await import(pathToFileURL(runtimeRequire.resolve('@deepseek-ai/cordis')).href) as typeof import('@deepseek-ai/cordis')
+        expect(host.ctx).toBeInstanceOf(Context)
+      } finally { await host.dispose() }
+    }
   })
   afterEach(async () => {
     if (terminal !== undefined) { await terminal.close(); terminal = undefined }
@@ -67,7 +95,7 @@ describe('Published dsh-TUI with the installed enhanced web profile', () => {
 
   it('registers both completion trees in the real TUI service and executes through Host CommandRuntime', async () => {
     // The public service entry omits the declared host facade re-export; use the same explicit accessor as TUI Channel.
-    const { getHostCommandTrees } = await import(pathToFileURL(join(tuiRoot, 'lib/types/dsh-adapter/command-trees.js')).href) as {
+    const { getHostCommandTrees } = await import(pathToFileURL(join(webTuiRoot, 'lib/types/dsh-adapter/command-trees.js')).href) as {
       getHostCommandTrees: (runtime: unknown) => { children(path: readonly string[]): readonly { name: string; description: string }[] } | undefined
     }
     const host = await bootHost(e2e, [settings, fixture('tui-web-composition.yml'), fixture('disable-tui-frontend.yml')])

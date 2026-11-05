@@ -29,7 +29,7 @@ const copy = {
   'route.other': ['web_search 当前由 {provider} 提供，不是 {id}，这里的设置不会生效。请在插件页打开本组合包，改回 {id}。', 'web_search is served by {provider}, not {id}, so these settings have no effect. Open this bundle on the Plugins page and switch back to {id}.'],
   'pairings.hint': ['在会话里选择连接（包括关闭）时，会为该会话的模型记住这次选择，该模型的新会话会沿用它。清除后，还没有自行选择的会话改用默认连接。', "Choosing a connection in a conversation (including off) remembers it for that conversation's model; new conversations with that model start with it. After you clear it, conversations that have not chosen use the default connection."],
   'settings.invalid': ['设置无效，未保存。', 'Invalid settings; not saved.'],
-  'defaults.connectionHint': ['未自行选择的会话依次使用：父会话的选择（仅限分叉出的会话）、该模型上次的选择、默认连接。', "A conversation that hasn't chosen uses, in order: its parent's choice (forked conversations only), the last choice for its model, then the default."],
+  'defaults.connectionHint': ['未自行选择的会话依次使用该模型上次的选择、默认连接。仅 subagent_fork 继承父会话选择；普通分叉与 spawn 独立选择。', "A conversation that hasn't chosen uses its model's last choice, then the default. Only subagent_fork inherits a parent's choice; ordinary forks and spawn are independent."],
   'services.title': ['搜索连接', 'Search connections'],
   'selector.services': ['搜索连接', 'Search connections'],
   'defaults.showSelector': ['在输入框菜单中显示搜索连接', 'Show search connections in the composer menu'],

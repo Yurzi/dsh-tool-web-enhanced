@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { assembleStep } from '../packages/core/tests/fixtures/step.ts'
 import { appendFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
@@ -76,7 +77,7 @@ describe('Enhanced tools in real shipped compositions', () => {
           expect(names(host, fresh.agent)).toEqual([...enhanced].toSorted())
           await prepareRequest(host, old.agent)
           expect(names(host, old.agent)).toEqual([])
-          const assembly = await host.ctx.systemPrompt.assemble({ scope: fresh.agent })
+          const assembly = await assembleStep(host.ctx, fresh.agent)
           if (preset === 'ptc') {
             expect(assembly.tools.map(tool => tool.name)).toEqual(['run_code'])
             const sdk = assembly.sections.find(section => section.name === 'tools:sdk')

@@ -1,5 +1,6 @@
 /** Visual matrix against one isolated DSH server and one shared browser. */
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
+import { mkdtempSync } from 'node:fs'
 import { FETCH, SEARCH } from 'dsh-tool-web-enhanced-core/shared'
 import type { Locator } from 'playwright-core'
 import { afterAll, afterEach, beforeAll, describe, expect, inject, it } from 'vitest'
@@ -7,8 +8,8 @@ import { type App, browserRequired, chromiumPath, openApp, recordBrowserFailure 
 import { en as uiText } from '../packages/ui/src/client/locales.ts'
 import { en as searchText } from '../packages/search-enhanced/src/client/locales.ts'
 import { en as fetchText } from '../packages/fetch-enhanced/src/client/locales.ts'
-import { artifacts } from './harness/environment.ts'
-import { connectionButton, connectionTabs, openConnectionTab, newSession, openBundle, openConnections, openFetchSettings, openSearchSettings } from './harness/navigation.ts'
+import { artifacts, run } from './harness/environment.ts'
+import { connectionButton, connectionTabs, chooseWorkspaceDirectory, openConnectionTab, newSession, openBundle, openConnections, openFetchSettings, openSearchSettings } from './harness/navigation.ts'
 import { type WebServer, startWeb } from './harness/web.ts'
 import { expectTheme, setTheme, type ThemePreference } from './harness/theme.ts'
 
@@ -164,8 +165,23 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Screenshot matr
   it('collapses the connection button with the model selector instead of wrapping the composer row', async () => {
     const { page } = app
     await page.setViewportSize(desktop)
-    const sessionId = await newSession(page)
+    const active = page.locator('[data-conversation-session]:visible')
+    const previous = await active.count() === 0 ? null : await active.getAttribute('data-conversation-session')
+    // rc.1 reuses a blank draft in the same workspace. A real new workspace
+    // guarantees a different Session without weakening the shared newSession helper.
+    const directory = mkdtempSync(join(run, 'composer-layout-'))
+    await chooseWorkspaceDirectory(page, directory)
+    const workspace = page.getByRole('treeitem').filter({ has: page.getByText(basename(directory), { exact: true }) })
+    await workspace.hover()
+    await page.getByRole('button', { name: 'New session in ' + basename(directory), exact: true }).click()
+    await active.waitFor()
+    await expect.poll(() => active.getAttribute('data-conversation-session')).not.toBe(previous)
+    const sessionId = await active.getAttribute('data-conversation-session')
+    if (sessionId === null) throw new Error('No new workspace Session selected')
     const conversation = page.locator('[data-conversation-session="' + sessionId + '"]')
+    await expect.poll(() => conversation.getByRole('button', { name: 'Choose workspace', exact: true }).textContent()).toContain(basename(directory))
+    const model = conversation.getByRole('button', { name: 'Select model', exact: true })
+    await model.waitFor()
     const button = connectionButton(page)
     await expect.poll(() => button.getAttribute('aria-label')).toContain(fetchText['connection.local'])
     // DSH's own controls at both ends of the composer row.
@@ -185,6 +201,8 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Screenshot matr
           compact: getComputedStyle(element).getPropertyValue('--dsh-composer-model-text-display').trim() === 'none',
           labels: [...element.querySelectorAll('[data-capability]')].some(side => side.getBoundingClientRect().width > 0),
         }))
+        const modelCompact = await model.evaluate(element => getComputedStyle(element).getPropertyValue('--dsh-composer-model-text-display').trim() === 'none')
+        expect(compact).toBe(modelCompact)
         const row = await middle(button)
         const oneLine = Math.abs(row - await middle(commands)) < 6 && Math.abs(row - await middle(send)) < 6
         if (compact) compactWidths.push(width)

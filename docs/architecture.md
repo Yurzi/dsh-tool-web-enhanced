@@ -24,6 +24,8 @@
 
 本项目不做：覆盖或改写原生工具的定义（增强工具用新名字，理由见[组合](#组合profile-patch)）、改写 tool-web 的 HTML→Markdown 转换（增强工具直接调用 tool-web 导出的格式化函数）、切换会话连接的模型工具（显式参数覆盖它的全部用途，又不留下看不到的状态）、自动重试或自动 fallback（失败后由 Agent 用增强工具改换 provider）。
 
+当前开发、CI 与隔离 e2e 固定 DSH **0.2.2-rc.1**、Cordis **4.1.0**、include/loader **1.1.0**、Schemastery **3.19.0**；要求 Node **>=24.9.0**。发布包仍声明本小版本内的最低兼容边界，不以源码 HEAD 代替已发布包。
+
 ## DSH 的 web 接缝
 
 DSH 把 web 能力拆成四种角色，彼此只经 `ctx.web` 相连。本项目在“provider”与“组合”两个位置插入，其余原样复用；增强工具是 provider 插件自己的模型工具，直接调用本插件的能力，不经 `ctx.web`（见[增强工具的运行时](#增强工具的运行时)）。
@@ -196,10 +198,10 @@ search 与 fetch 共用一份 core 实现；两侧的差别只是目录数据与
 - **连接**：到某个后端的一种配置。`builtin:<键>` 来自插件目录，运维可做稀疏覆盖，目录项的 `optIn` 决定它缺省是否停用（[远程服务缺省停用](design.md#远程服务缺省停用)）；`custom:<name>` 由运维新建，建立时启用。连接与设置文档的字段见 [设计文档 · 配置文档](design.md#配置文档)。
 - **插件行设置**：一份两侧共用文法的文档（core `shared/settings.ts`），Host 与浏览器用同一个纯函数解析（插件的 `resolveSettings` 建在 core `resolveDocument` 上）。它决定会话**能**选什么，以及是否向新对话提供增强工具（`enhancedTools`）。
 - **会话选择**：`{ connectionId | null, revision, options }`，存在插件自己的存储域表 `selections`。读写以会话为目标（core `SessionTarget`）：`live` 是有运行中 Agent 的会话，带着这个 Agent（`liveSession(agent)`）；`cold` 是不在运行的子 Agent 会话，只有会话 id 与会话头，读写不碰 Agent。同一会话的读写排队执行，写入按 revision 比较；core 拥有 `connectionId`、`revision`、`inherited`，会话参数由能力的 `OptionsCodec` 编码（search 有 `freshness`，fetch 没有）。
-- **会话来源**：core `sessionOrigin` 只读会话头的公开字段，返回判别联合：`top-level`、`fork`（有 `parentSession`：用户 fork）与 `subagent`（`origin === 'subagent'`：spawn 与 subagent_fork），各带 `seeded`（`isSeeded`）。`origin` 先于父会话判断，与 DSH 判断子 Agent 路由归属的依据一致。继承父会话的选择（有父会话且 `seeded`）、复制父会话的对话列表（有父会话）、[新建的判断](#增强工具的运行时)与是否写模型记忆都经它。
+- **会话来源**：core `sessionOrigin` 只读会话头的公开字段，返回 `top-level` 或 `subagent`（仅 `origin === 'subagent'`：spawn 与 subagent_fork），各带 `seeded`（`isSeeded`）；只有 subagent 能携带可继承的 parent。普通用户 fork 和历史仅有 `parentSession` 的记录都独立。继承父选择（仅 seeded subagent）、复制父列表（仅 subagent）、[新建的判断](#增强工具的运行时)与是否写模型记忆都经它。
 - **模型记忆**：(provider, model) → 连接，存在表 `pairings`；选择落盘后才写记忆，记忆写失败只以 warn 级记日志（带原始错误），不影响这次选择。写不写由 `Sessions.change` 按会话决定，调用方不传参数：选了连接（不是只改会话参数）、会话来源不是 `subagent`、且知道下一次请求的模型时才写。
 
-未选择时由 core `Sessions` 解析出当前连接；选择来源、模型记忆与默认值的行为见[会话选择](design.md#会话选择)。下一次请求的模型（`nextModel`）只有 `live` 目标才有，`cold` 目标的模型为未知：默认来源不查模型记忆，连接视图也按未知描述——`Capability.describe(settings, model)` 与 core `credentialReadiness` 收的是这个模型而不是 Agent，跟随会话模型的连接为 `no-model`，native 只看 API key。
+未选择时由 core `Sessions` 解析出当前连接；选择来源、模型记忆与默认值的行为见[会话选择](design.md#会话选择)。下一次请求的模型（`nextModel`）只委托公开 `agent.model.current()`，不再读模型投影 pending 或 agentOptions；只有 `live` 目标才有，`cold` 目标的模型为未知：默认来源不查模型记忆，连接视图也按未知描述——`Capability.describe(settings, model)` 与 core `credentialReadiness` 收的是这个模型而不是 Agent，跟随会话模型的连接为 `no-model`，native 只看 API key。
 
 **冻结、复查与重建**
 
@@ -217,7 +219,7 @@ flowchart LR
 - **每步冻结**：`agent/request` 时按 (Agent, turn, step) 捕获计划，`agent/created` 再捕获一次，让还没发过请求的 Agent 也有计划。同一步的并发捕获共享一次读取，只有失败的捕获可以在同一步重试。Seat 用 `ctx.agents.currentInitiator()` 找到发起调用的 Agent，从不从工具参数推断。
 - **每次复查**：可选性只有一条规则（core `isSelectable`：存在且未停用），模型记忆、Remote 写入、每次 Seat 调用的复查与对话列表的快照都用它。停用与重新启用因此从下一次调用生效，不必等下一步。显式入口是唯一的例外：对话列表里的连接停用后在该对话里仍可用，只要求它仍存在（列表是对话开始时的授权，见[对话的 provider 列表](design.md#对话的-provider-列表)）。
 - **每次重建**：`target` 用当前连接新建执行目标，四种后端一律如此。search 的 `model` 连接的路由（协议、端点、凭据引用）也在这里推导，不进计划；跟随会话模型时取发起本次调用的那次请求的已解析路由。
-- **设置无效**：`settings()` 由 core `settingsRow` 包装，当前文档无效时抛 `InvalidSettingsError`（码为 `WEB_PROVIDER_CONFIGURED_UNAVAILABLE` 的 `WebError` 子类），诊断只在启动校验（warn 级）与 Loader 的 `internal/config` 写入钩子里进 Host 日志。插件照常激活，以便设置页修复。
+- **设置无效**：`settings()` 由 core `settingsRow` 包装，当前文档无效时抛 `InvalidSettingsError`（码为 `WEB_PROVIDER_CONFIGURED_UNAVAILABLE` 的 `WebError` 子类），诊断只在启动校验（warn 级）与 Loader 的 `internal/config` 写入钩子里进 Host 日志。插件照常激活，以便设置页修复。Cordis 4.1 传给 apply 的 config 本身就是 fiber.effectiveConfig，Volatile 引用跨分层保存保持不变；internal/config 监听器显式接受 (fiber, next) 并比对所属 fiber，不依赖 this 绑定。
 - **会话之外的调用**：没有发起 Agent 时按当时的 `defaultConnection` 与能力的初始参数计划。
 
 **可见性控制器**
@@ -321,9 +323,9 @@ flowchart LR
 
 列表的内容与之后设置变化的影响见[设计文档 · 对话的 provider 列表](design.md#对话的-provider-列表)；结构上：
 
-- **新建的判断**（core `isNewConversation`，经 `sessionOrigin`）：没有父会话（`header.parentSession` 为空）、不是 `header.isSeeded`、`firstLiveSeq === 0` 且 `firstLifecycleSeq === 0`。照 DSH `tool-subagent` 的 `selectForSession` 的语义，只用 Session 公开、未弃用的字段；不看事件序号，因为真实的 `sessionController.create` 在 `agent/created` 之前已经写入事件。恢复的非空会话不是新建；真正空的恢复会话两个字段都为 0，被当作新建（里面没有对话）。
-- **建立**：`agent/created` 时（`ProviderLists.create`）：已有记录就读它，从不改写（含空记录）；有父会话就复制父会话的记录；否则只对新建的会话写入一次——注册条件成立时写当时可选（`isSelectable`）的 id，不成立时写空数组。空记录读出来就是“没有列表”，它的作用是占住这个会话：同一进程里之后再为它创建 Agent 时不会在对话中途补建。建立失败只记一条固定文字的 warn 日志；随后由捕获计划或重算再读列表（见[可见性控制器](#选择范式)的同步时机），读不到只把该 Agent 的增强工具记为未读到并遮住，原生计划照常。
-- **继承**：有父会话的会话（用户 fork、spawn 与 subagent_fork；`sessionOrigin` 的 `parent`）等父会话的队列落定后复制父会话的记录；父会话没有记录，子会话也没有。
+- **新建的判断**（core `isNewConversation`）：subagent 不独立建立；普通非 seeded 要 `firstLiveSeq === 0` 且 `firstLifecycleSeq === 0`，普通 seeded fork 要 `firstLifecycleSeq === inheritedEventCount`。只用公开生命周期计数区分新 fork 与恢复，不猜私有来源。
+- **建立**：`agent/created` 时（`ProviderLists.create`）：已有记录就读它，从不改写（含空记录）；仅 subagent 的 parent 才复制父记录；否则只对新建的顶层会话（含普通 fork）写入一次——注册条件成立时写当时可选（`isSelectable`）的 id，不成立时写空数组。空记录读出来就是“没有列表”，它的作用是占住这个会话：同一进程里之后再为它创建 Agent 时不会在对话中途补建。建立失败只记一条固定文字的 warn 日志；随后由捕获计划或重算再读列表（见[可见性控制器](#选择范式)的同步时机），读不到只把该 Agent 的增强工具记为未读到并遮住，原生计划照常。
+- **继承**：仅 `origin: subagent` 的 spawn/subagent_fork 等父队列落定后复制列表。普通 fork 建立自己的当前列表；缺失、空、非空恢复记录都不回填。spawn 不继承选择，subagent_fork 继承选择；两者不写模型记忆。
 - **恢复**：读记录；没有记录（早于增强工具的会话）或记录为空（开关关闭时建立的对话）就没有列表。
 - **持久化**：表 `provider_lists`（会话 id → id 数组）与 `selections`、`pairings` 同在插件的存储域里，域的 version 仍是 1：新增的表对已有的域不需要迁移，旧域里它一开始是空的，所以升级前的会话都没有记录。每会话一条，写一次，不改写、不随设置迁移；读写与会话选择共用 `SessionStorage` 的每会话队列（`exclusive` / `settled`）与存储生命周期。
 
@@ -338,7 +340,7 @@ flowchart LR
 | `native` | search / fetch | 实例化 DSH 导出的 `DeepSeekSearchProvider`、`DeepSeekSearchApiProvider`、`DeepSeekFetchApiProvider`，凭据与端点解析照搬对应原生行（core `nativeAuth`、`nativeBackend`） | 与原生一致，只改写错误消息（core `restateNative`） |
 | `adapter` | search / fetch（含 `custom:*` 的 `kind: adapter`） | core 的 provider wire，由 `runAdapter` 执行 | 对齐 DSH 远程 provider 的立场：目标访问策略归服务 |
 | `model` | 仅 search（跟随会话模型与固定模型） | search `src/model/`：三种协议的请求与解析、路由推导（DeepSeek 集中在 `deepseek.ts`）、跨命名空间读取预算、凭据与执行；走 search 的有界传输 | 各厂商当前的 API；跟随 DeepSeek 时与 DSH 自带的 DeepSeek 搜索一致 |
-| `local` | 仅 fetch | DSH `HttpFetchProvider` 加本插件注入的解析器，每次调用按当前参数新建 | 白名单为空时等于原生 public-only |
+| `local` | 仅 fetch | 先按需做初始地址预检，再把原 URL 交给 DSH `HttpFetchProvider`，每次按当前参数新建 | 双空规则为上游 any；非空启用过滤，不固定 DNS/不逐跳复验 |
 
 执行层（两侧形状相同）：
 
@@ -346,7 +348,7 @@ flowchart LR
 - fetch：`target` 直接产出一个 `WebFetchProvider`：`createLocalBackend`、`createNativeFetchBackend`、`createRemoteBackend`（`runAdapter` 之后由 `page.ts` 把页面映射为 `WebFetchResult` 或措辞失败）。
 - 共同顺序：先查取消；执行；`WebError` 原样交出；其余异常以去敏副本进 debug 级诊断，改写为固定的 `WEB_PROVIDER_ERROR`；已取消时优先报 `WEB_ABORTED`。
 
-**为什么 `local` 是唯一做地址检查的后端**：只有经 HTTP(S) 直接访问目标的后端才需要、也才能检查目标地址。`local` 不重写传输，只注入解析器：直连请求校验完整 DNS 答案集与 NAT64，连接固定到已验证地址；IP 字面量在交给传输前先查（官方传输对它判为公网的字面量会直接交给代理）；经代理的域名由代理解析，规则无法约束，与上游一致。
+**为什么只有 `local` 提供地址预检**：远程服务自己访问目标，策略归服务；本机可在调用前执行操作员启用的初始规则。`local` 不改传输：双空规则跳过插件过滤，非空才校验初始 literal 或直连域名完整 DNS 答案（含 NAT64）。通过后原 URL 交上游，连接不固定，二次解析/rebinding 与后续重定向不受插件预检保证；代理域名的目标策略归代理，已放行私网 literal 也按上游决定是否代理。
 
 ### core 的 provider wires 与 runAdapter
 
@@ -493,7 +495,7 @@ search、fetch、ui 三个插件共用构建定义；profile 直接发布 patch 
 | 出站请求 | 本项目自己的请求一律用全局 `fetch`（继承 DSH 的代理策略）、`redirect: 'error'`；字节上限（先看 Content-Length，再在流上计数）与覆盖凭据、握手、读正文的整体截止时间；不自动重试、不自动 fallback | core `host/transport.ts` |
 | 端点信任 | 自定义端点与不同于目录端点的 `url` 参数（如 native 的 `baseURL`）都要 `trustedEndpoint: true`；固定 model 连接总是需要；内置 adapter 的端点不可改。设置文法拒绝 `__proto__` / `constructor` / `prototype` 键，并在解析前按预算拒绝过大的输入 | core `shared/settings.ts`、设置页骨架 |
 | 账号令牌 | 只经 `native` 后端（沿用 DSH provider：本次请求路由为 `deepseek-account` 且取得令牌时用令牌，否则用 API key），以及唯一的扩展：跟随 `deepseek-account` 路由的 search `model` 连接。后者只用账号令牌，只在本次请求已解析的路由确为 `deepseek-account` 时取得，只发往会话端点，发送前校验只含可见 ASCII 与空格（不 trim），不回退 API key | core `accountTokenFor`、search `model/execute.ts` |
-| 目标访问策略 | 只有 fetch 的 `local` 检查目标地址（白名单为空等于原生 public-only）；远程后端把目标访问策略交给服务，不检查目标 URL，界面写明 URL 或查询会发给谁 | fetch `src/local/`；连接说明 |
+| 目标访问策略 | 只有 fetch 的 `local` 可启用初始地址过滤（双空规则为上游 any；非空才预检，不固定 DNS/不逐跳复验）；远程后端把目标访问策略交给服务，不检查目标 URL，界面写明 URL 或查询会发给谁 | fetch `src/local/`；连接说明 |
 | 远程结果 | fetch 的远程正文一律为文本；服务没报告目标状态时记为请求的 URL 与 200（兼容映射），只有服务明确给出的状态码才成为非 2xx 结果；search 的来源只保留无用户信息的 http(s) URL（≤ 8192 字符），`native` 与 model 的结果同样过滤 | fetch `remote/page.ts`；search `sources.ts`、core `shared/url.ts` |
 | 会话与模型 | 会话只能在运维启用的连接之间选择；冻结的只是“哪个连接”，可选性与目标每次调用按当前设置判定；发起调用的会话来自 `currentInitiator()`；`available()` 只做本地判断 | core `installCapability`、`isSelectable` |
 | 显式调用 | 模型给的 `provider` 是不可信输入：工具代码先按连接 id 文法（1–128 字符且 `isConnectionId`）校验，不合文法不回显原值；只能落到本对话 provider 列表里仍存在的连接，之后一律使用列表里的 id；不能指定端点、凭据引用或参数。身份来自 `exec.agent`，目标与执行在 `withInitiator(call.agent)` 里；关闭与失败的计划照样拒绝；凭据、keyless、端点信任与去敏规则不变（同一执行层）；不写会话选择与模型记忆 | core 显式入口、两侧 `src/tools/` |

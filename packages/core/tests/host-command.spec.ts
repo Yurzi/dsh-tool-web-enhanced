@@ -6,7 +6,6 @@ import Loader from '@deepseek-ai/cordis-plugin-loader'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
-import Projections from '@deepseek-ai/dsh-session-projection'
 import { SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
 import Storage from '@deepseek-ai/dsh-storage'
 import * as StorageDomain from '@deepseek-ai/dsh-storage-domain'
@@ -29,7 +28,6 @@ async function host(options: { search?: object; fetch?: object; terminal?: boole
   cleanups.push(() => ctx.fiber.dispose())
   await ctx.plugin(Loader)
   await mountAgentLoopTestDependencies(ctx, { tools: { mode: 'native' } })
-  await ctx.plugin(Projections)
   await ctx.plugin(AgentLoop)
   await ctx.plugin(Storage)
   await ctx.plugin(StorageJson, { root: join(root, 'storage') })
@@ -182,8 +180,10 @@ it('shows inherited and model sources, then warns for a disabled selected connec
   const h = await host()
   expect(await h.run('/setup-search')).toMatchObject({ text: expect.stringContaining('OpenAlex (builtin:openalex) · the default connection') })
   await h.run('/setup-search builtin:exa')
-  const inherited = await h.create('fork', { parentSession: h.agent.id, isSeeded: true }, true)
+  const inherited = await h.create('subagent-fork', { parentSession: h.agent.id, origin: 'subagent', isSeeded: true }, true)
   expect(await h.run('/setup-search', inherited)).toMatchObject({ text: expect.stringContaining('Exa (builtin:exa) · copied from the parent session') })
+  const ordinaryFork = await h.create('user-fork', { parentSession: h.agent.id, isSeeded: true }, true)
+  expect(await h.run('/setup-search', ordinaryFork)).toMatchObject({ text: expect.stringContaining('Exa (builtin:exa) · remembered for this model') })
   const model = await h.create('same-model')
   expect(await h.run('/setup-search', model)).toMatchObject({ text: expect.stringContaining('Exa (builtin:exa) · remembered for this model') })
   await h.ctx.settings.mutate(SEARCH.rowId, [{ op: 'set', path: ['connections', 'builtin:exa', 'disabled'], value: true }])

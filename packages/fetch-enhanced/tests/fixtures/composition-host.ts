@@ -1,3 +1,4 @@
+import { mountSessionController } from '../../../core/tests/fixtures/session-controller.ts'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
@@ -8,11 +9,9 @@ import Loader from '@deepseek-ai/cordis-plugin-loader'
 import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
-import SessionController from '@deepseek-ai/dsh-api-session-controller'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import Projections from '@deepseek-ai/dsh-session-projection'
 import Settings from '@deepseek-ai/dsh-settings'
 import Storage from '@deepseek-ai/dsh-storage'
 import * as StorageDomain from '@deepseek-ai/dsh-storage-domain'
@@ -32,7 +31,6 @@ export async function composeFetch(config: FetchSettings) {
   onTestFinished(() => ctx.fiber.dispose())
   ctx.provide('launchEnvironment', createLaunchEnvironmentSnapshot([{ source: 'process', values: {} }]))
   await mountAgentLoopTestDependencies(ctx, { tools: { mode: 'native' } })
-  await ctx.plugin(Projections)
   await ctx.plugin(AgentLoop)
   await ctx.plugin(Storage)
   await ctx.plugin(StorageJson, { root: join(root, 'storage') })
@@ -44,7 +42,7 @@ export async function composeFetch(config: FetchSettings) {
     resolvers.add(resolver)
     return () => { resolvers.delete(resolver) }
   } } as never)
-  void new SessionController(ctx, { nativeOpen: false })
+  await mountSessionController(ctx, root)
   const credentials = new MemoryCredentials(ctx)
   await credentials.set(credentialRef('TEST_KEY'), 'composition-secret')
 

@@ -61,7 +61,7 @@ flowchart LR
 - **服务列表顶部**一行“远程服务默认关闭。” / “Remote services are off by default.”；没打开的服务行带“未启用” / “Off”标签。每个服务的接收方仍由它展开面板里的说明写（“搜索查询会发送给 {name}。”、“URL 会发送给 {name}，能否访问目标由对方决定。”），不另加同意语句，也不链接各服务的条款与隐私政策。
 - **菜单底部提示**：某个能力目录里的远程服务（`optIn` 的内置连接）全部停用时，该能力面板的底部显示“更多服务可在设置中打开” / “More services can be turned on in settings”，点击打开设置页。自定义连接不计；行设置还没读到或无效时不显示。
 - **首次启用提示**加一句：“远程服务默认关闭，需要时也在那里打开。” / “Remote services are off by default; turn them on there when you need them.”（接在“连接、密钥和默认值在插件设置里配置”之后，“那里”即插件设置）；只在升级预检没有发现问题时出现，有问题时整段换成预检提示（见[首次启用提示与组合包概览](#首次启用提示与组合包概览)）。
-- 从已发布的 profile 0.1.2 升级时的影响见[从 profile 0.1.2 升级](#从-profile-012-升级)。
+- 从上一个已发布的 profile 0.1.3 升级时的 Breaking 影响见[升级说明](#从-profile-013-升级v014)。
 
 ### 访问方式与就绪状态
 
@@ -88,7 +88,7 @@ flowchart LR
 | 来源 | 何时 |
 | --- | --- |
 | 本会话（This conversation） | 用户在这个会话里选过 |
-| 来自父会话 | fork 出的会话（用户 fork 与子 Agent 的 subagent_fork），复制父会话的选择 |
+| 来自父会话 | 仅子 Agent 的 subagent_fork 复制父选择；普通用户 fork 与 spawn 不继承，使用自己的模型记忆或默认连接 |
 | 该模型上次的选择 | 用户上次在同一模型的会话里选的连接（含“关闭”），且该连接仍存在、未停用 |
 | 默认连接 | 行设置的 `defaultConnection` |
 
@@ -256,9 +256,9 @@ fetch 的 `local` 有专门的编辑器，见 [fetch local](#fetch-local白名�
 每个对话有一份固定的 provider 列表，增强工具只接受其中的 id。原则照 DSH 子 agent 路由授权：运维的操作只影响新对话，对话里的 Agent 不会看到可选项中途增加。
 
 - **内容**：建立时可选（存在且未停用）的连接 id，按设置解析的顺序（内置按目录顺序，其后自定义）。空列表视同没有列表。
-- **新建的判断**：会话没有父会话（Session header 的 `parentSession` 为空）、不是 fork 的种子会话（不是 `isSeeded`），且 `firstLiveSeq` 与 `firstLifecycleSeq` 都为 0。DSH 在创建 Agent 之前已写入的事件不影响判断；恢复的非空会话不是新建；真正空的恢复会话（两者都为 0）里还没有对话，当作新建。
+- **新建的判断**：只使用 Session 公开字段。子 Agent 不建立独立列表；普通非 seeded 会话须 `firstLiveSeq === 0` 且 `firstLifecycleSeq === 0`，新用户 fork 则须 `firstLifecycleSeq === inheritedEventCount`，区分刚从继承截点创建的 fork 与有自己生命周期记录的恢复。历史 `parentSession` 本身不是继承授权。
 - **建立**：新建的顶层对话创建第一个 Agent 时写入一次：[注册条件](#注册与可见性)成立（确认路由到本插件、开关打开、设置有效）时写当时可选的 id，不成立时写一条空记录。所以条件不成立时建立的对话没有列表，同一会话之后再创建 Agent（例如开关打开以后）也不会在对话中途补建。已有的记录（含空记录）从不改写。
-- **继承**：子 Agent 的会话与 fork 出的会话复制父会话的记录；父会话没有列表，子会话也没有。
+- **继承**：只有 `origin: subagent` 的 spawn 与 subagent_fork 复制父列表；父记录缺失或为空则子也没有。新的普通用户 fork 按当前可选连接建立自己的列表，不复制父列表，也不继承父 off。已存在的选择（含历史 inherited revision 0）与列表（缺失/空/非空）的恢复都不迁移或回填。
 - **恢复**：恢复的对话读记录；没有记录的（升级前的会话）或记录为空的（开关关闭时建立的对话）就没有列表。
 - **存储**：插件存储域里每个会话一条，只写一次，不改写，也不随设置迁移；读写与会话选择一样按会话排队。
 - **之后的设置变化**：新启用或新建的连接不进入已有对话；对话开始后停用的连接仍在列表里，照样可用（见[已知限制](#已知限制)）；删除的连接在调用时报“已被删除”。端点、访问方式、凭据名称与参数每次调用按当前设置重建。列表只记 id：删除后用同一 id 重建的连接视同编辑，已有对话照样可用它，按新设置执行（见[已知限制](#已知限制)）。
@@ -568,7 +568,7 @@ URL 原样交给服务（不规范化、不解码），目标能否访问由服�
 
 ### fetch local：白名单与提示
 
-`builtin:local` 是唯一检查目标地址的连接：传输是 DSH 官方的 `HttpFetchProvider`（URL 策略、同源重定向与逐跳复查、代理、各项上限都是它的），本插件只注入地址解析器。
+`builtin:local` 是唯一提供可选目标地址预检的连接。传输直接使用 DSH 0.2.2-rc.1 官方 `HttpFetchProvider`；本插件不注入 resolver、不接管 dispatcher，URL、同源重定向、代理、超时与大小上限仍由它执行。
 
 | 参数 | 缺省（等于原生 `web-fetch-http` 行） |
 | --- | --- |
@@ -577,14 +577,14 @@ URL 原样交给服务（不规范化、不解码），目标能否访问由服�
 | `maxResponseBytes` / `maxBodyChars` | 5 000 000 字节 / 100 000 字符 |
 | `timeoutMs` / `maxRedirects` | 30 000 ms / 5 跳 |
 
-- **空白名单与原生 public-only 完全一致**。非空时：公网单播地址总是放行；非公网地址必须落在某条 CIDR 内，且有主机名规则时 URL 的主机名要匹配其中一条（`*.example.com` 只匹配子域）。主机名规则只收窄 CIDR 例外，不单独放行。
+- **Breaking：安全策略改为 opt-in**。`allowCidrs` 与 `allowHostnames` 均缺省或为空时，跟随上游 any-address 策略，不做插件地址过滤；这与旧版空白名单 public-only 不同。任一列表非空才启用预检：公网单播地址总是放行；非公网必须落在某条 CIDR 内，且配置主机名规则时 URL 主机名还须匹配其中一条（`*.example.com` 只匹配子域）。仅配主机名也会启用过滤，但不会单独授予内网访问。非法类型或规则仍被设置校验拒绝，不可误当空规则回退 any。
 - 规则文法：CIDR 写网络地址（`10.1.2.3/8` 会提示改为 `10.0.0.0/8`），IPv4 只接受四段十进制，不接受 IPv6 zone，IPv4-mapped 的 IPv6 要写成 IPv4。
-- 直连时一次解析、校验完整答案集（含 NAT64 转换后的 IPv4），任一地址不合规即拒绝，连接固定到已校验的地址；IP 字面量在交给传输前先检查。**走代理的域名由代理解析，白名单无法约束它们**，与上游行为一致，设置页写明了这一点。
+- 启用过滤时，只检查**初始目标**：IP 字面量先检查；直连域名解析并校验完整答案集（含 NAT64 转换后的 IPv4），任一地址不合规即拒绝。通过后将原 URL 交给上游，不固定连接地址；二次 DNS、检查至连接间的 rebinding 与后续同源重定向不受插件预检保证，这是已接受的边界。**走代理的域名由代理解析，插件不做本地 DNS，地址策略由代理负责**。获准的非公网 IP 字面量也不再强制绕代理直连，代理决策全部归上游。非空规则的整体截止时间覆盖预检至读取正文；调用方取消优先。
 - 白名单、User-Agent 与上限只有运维能改；会话只能选择用不用 `local`。
-- 设置页的白名单编辑器有显式“保存”，逐行诊断：语法错误、可一键套用的修正、重复行，以及不阻止保存的提醒（覆盖云元数据地址、覆盖回环、过宽（IPv4 短于 /8、IPv6 短于 /16）、公网范围本就可达）；保存时两个列表一次写入。User-Agent 编辑器可一键恢复缺省。
-- **给模型的提示**：本步用的是 `local`、`allowCidrs` 非空且确认 `web_fetch` 路由到本插件时，系统提示里加入一段运行时上下文，例如：
+- 设置页的白名单编辑器有显式“保存”，逐行诊断：语法错误、可一键套用的修正、重复行，以及不阻止保存的提醒（覆盖云元数据地址、覆盖回环、过宽（IPv4 短于 /8、IPv6 短于 /16）、公网范围不额外授予内网访问、但会启用过滤）；保存时两个列表一次写入，只有有效合并配置中的两列表都为空才关闭，不能把尚未保存的空草稿或 base 层残留规则显示成关闭。User-Agent 编辑器可一键恢复缺省。
+- **给模型的提示**：本步用的是 `local` 且确认 `web_fetch` 路由到本插件时，系统提示里说明默认 any 或启用过滤的状态；有 CIDR 时示例：
 
-  > The operator has authorized web_fetch to reach non-public addresses within [10.0.0.0/8]. Only URLs whose hostname matches [*.corp.example] may use these exceptions. All other URL, DNS, redirect, and transport safety checks still apply.
+  > The operator has authorized web_fetch to reach non-public addresses within [10.0.0.0/8]. Only URLs whose hostname matches [*.corp.example] may use these exceptions. This plugin checks the initial target only; upstream fetching may resolve DNS again and follow redirects without rechecking these rules. Proxy-resolved hostnames are governed by the proxy. Upstream URL, redirect, timeout, and size limits still apply.
 
   规则先规范化、去重；超过 2000 字符时改为计数摘要加部分示例。路由判断不了时不加。列出工具里同一段说明的主语改为 `this provider`，见[列出工具](#列出工具)。
 
@@ -633,7 +633,7 @@ URL 原样交给服务（不规范化、不解码），目标能否访问由服�
 
 每次调用重新推导，不缓存、不进冻结的计划；只读 DSH 的公开模型目录与 Settings，不读凭据、不联网：
 
-1. 会话模型取发起本次调用的那次请求已解析的路由。菜单与 `/setup-search` 的状态则按会话下一次请求的模型判断（不在运行的子 Agent 会话不知道这个模型，状态为 `no-model`）。
+1. 执行路由取发起本次调用的请求 `session.requestContext()`；下一请求模型只从公开 `agent.model.current()` 读取，包含未发请求前的配置 fallback、用户已选模型与持久化请求，不读取投影 pending 或缓存 agentOptions。菜单与 `/setup-search` 的状态则按会话下一次请求的模型判断（不在运行的子 Agent 会话不知道这个模型，状态为 `no-model`）。
 2. **DeepSeek 官方两条路由**（`deepseek-official`、`deepseek-account`）统一处理：协议恒为 Messages，模型就是会话模型；端点与会话一致——配置的 `baseURL` → 启动环境的 `DEEPSEEK_BASE_URL` → `https://api.deepseek.com/anthropic`；`deepseek-official` 用配置的 `apiKeyEnv`（缺省 `DEEPSEEK_API_KEY`），`deepseek-account` 用账号令牌、不回退 API key。
 3. **其他路由**（如 pi-ai）：协议取模型条目（`models[]` 或 `modelOverrides`）的 `api`，否则路由的 `api`，须为 `anthropic-messages`、`openai-responses` 或 `openai-completions`（即 Chat Completions）；端点取模型条目 → 路由 → 目录缺省的 `baseURL`，且不能由环境变量拼出；不能带自定义请求头；凭据为路由的 `apiKeyEnv`，或目录声明的唯一一个非 OAuth 环境变量名。
 4. 读别的插件命名空间时先按预算限制（模型 id ≤ 200 字符、端点与凭据名 ≤ 2000 字符、列表 ≤ 200 项），超出按原因判为不支持，不回显原值。
@@ -739,12 +739,13 @@ Host 日志分两层，按是否可能经手本次请求的凭据区分：
 
 菜单、`/setup-*` 的选择框与设置页经 `searchConnections` / `fetchConnections` 读写选择（带参数的 Host 命令不经它们，错误是命令输出里的固定英文，见 [/setup-search 与 /setup-fetch](#setup-search-与-setup-fetch)）：行设置无效报 `<ns>/invalid-settings`，选择已在别处改变报 `<ns>/conflict`，连接缺失或停用报 `<ns>/unavailable`，请求不合契约报 `gateway/bad-request`；会话不存在等 DSH 解析会话时的错误原样交出（如 `session/not-found`）；其余异常一律 `gateway/internal` 加固定消息，原始异常以 warn 级只进 Host 日志。
 
-## 从 profile 0.1.2 升级
+## 从 profile 0.1.3 升级（v0.1.4）
 
-从已发布的 profile 0.1.2（search 0.2.2、fetch 0.2.2、ui 0.1.2）升级时，设置文法与版本、会话选择、模型记忆与对话 provider 列表的存储都不变，已有文档与记录照常读取，没有 Breaking 变化。行为上的变化：
-
-- search 与 fetch 各多一个内置连接 `builtin:anysearch`（见 [search 的七个远程服务](#search-的七个远程服务)与 [fetch 的五个远程服务](#fetch-的五个远程服务)）：只用个人 API key `ANYSEARCH_API_KEY`，和其他远程服务一样[缺省停用](#远程服务缺省停用)，不在设置页打开就没有任何变化。不要与 AnySearch 官方的 `@anysearch/anysearch-dsh` 一起装（见[已知限制](#已知限制)）。
-- 现有服务给模型的文字与错误码不变。
+- **Breaking：最低 DSH 改为 0.2.2-rc.1、Node >=24.9.0**；开发、CI 与隔离安装只验证精确发布的 rc.1，不使用源码 HEAD。本轮版本为 profile/ui 0.1.4、search/fetch 0.2.4。
+- **Breaking：local 双空白名单从 public-only 改为上游 any-address**。至少一条有效 CIDR 或 hostname 才启用过滤；hostname-only 不授予内网访问。只有有效合并配置中的两列表都清空才关闭；非法设置仍拒绝。
+- local 只预检初始目标，不注入 resolver、不固定 DNS、不复验后续同源重定向；不能防御检查至连接间的 DNS rebinding。代理域名交代理，获准私网 IP 的代理决策也交上游。URL、同源重定向、超时和大小限制仍由官方 provider 执行。
+- **普通用户 fork 独立**：新 fork 不继承父 off/连接或列表，按自己的模型记忆/默认与当前可选连接建立；spawn 只继承列表，subagent_fork 继承选择与列表。已持久化选择（含旧 inherited revision 0）与列表（缺失/空/非空）原样恢复，不迁移、不回填。
+- 下一模型走公开 Agent.model.current()；执行仍用发起请求的 requestContext。配置保留 Cordis effectiveConfig 的 Volatile 引用，不将未合并 raw 层当有效配置。设置文法与存储版本不变，不自动重写配置；保留旧 public-only 行为须显式启用过滤。
 
 ## 从 0.1.x 升级
 
@@ -770,8 +771,11 @@ Host 日志分两层，按是否可能经手本次请求的凭据区分：
 
 ## 已知限制
 
-每条先写限制：用户能观察到的现象、影响范围与可行的变通；再写原因：上游行为、设计取舍或技术约束。上游的版本未另写时即本项目的 DSH 基线 `0.2.1-rc.2`。
+每条先写限制：用户能观察到的现象、影响范围与可行的变通；再写原因：上游行为、设计取舍或技术约束。上游的版本未另写时即本项目的 DSH 基线 `0.2.2-rc.1`。
 
+- **local 过滤是初始预检而非连接保证**
+  - 限制：规则为空时允许任意地址；非空也不能阻止预检与上游二次解析之间的 DNS rebinding，或对后续同源重定向逐跳复验。严格连接地址固定应使用隔离网络或受控代理。
+  - 原因：rc.1 HttpFetchProvider 无公开 resolver/transport 注入接口；维护者接受仅做初始预检，不接管 dispatcher、不新增传输依赖。
 - **`web` 行可被更晚的层覆盖**
   - 限制：其他 bundle 或用户层改写 `web` 行会压过 profile 的选择（只写一个字段时另一个也丢失），本插件随之收不到流量。例如 AnySearch 官方的 `@anysearch/anysearch-dsh` 的 profile 层把两个字段都写成 `anysearch`，不要与本组合包一起装。路由提示与升级预检会说明；本插件不做运行时自我修复。
   - 原因：DSH 的层叠语义：更晚的层覆盖更早的层，patch 整体替换目标行的 `config`、不做深合并（见[架构 · 组合](architecture.md#组合profile-patch)）。本仓库只有 profile 的 patch 写 `web` 行；更晚的层改写它也是退出本组合包的正常途径，所以不自我修复。

@@ -66,8 +66,8 @@ describe('fetch seat', () => {
   })
 
   it('is the provider the web row selects', async () => {
-    const { ctx } = await compose()
-    // The unique Seat reaches local public-only policy, not a missing registration.
+    const { ctx } = await compose({ connections: { 'builtin:local': { options: { allowHostnames: ['public-filter.invalid'] } } } })
+    // The unique Seat reaches explicit public-only preflight, not a missing registration.
     await expect(ctx.web.fetch({ url: 'http://127.0.0.1:9/' })).rejects.toMatchObject({ code: 'WEB_BLOCKED_URL' })
   })
 
@@ -148,6 +148,7 @@ describe('live configuration and public route data', () => {
     }
     await ctx.settings.update(FETCH.rowId, { showSelector: true })
     expect(ctx.settings.describe().find(row => row.ns === FETCH.rowId)!.value).toEqual({ showSelector: true })
+    await ctx.settings.update(FETCH.rowId, { connections: { 'builtin:local': { options: { allowHostnames: ['public-filter.invalid'] } } } })
     await expect(ctx.web.fetch({ url: 'http://127.0.0.1:9/' })).rejects.toMatchObject({ code: 'WEB_BLOCKED_URL' })
   })
 
@@ -198,7 +199,7 @@ it('keeps the settings page available for an invalid predecessor document withou
   await expect(result).rejects.not.toThrow('schemaVersion')
 })
 
-it('contributes a notice only for a local plan, nonempty CIDRs, and a confirmed route', async () => {
+it('contributes a notice for any or filtered local plans on a confirmed route', async () => {
   const local = { version: 2, connections: { 'builtin:local': { options: { allowCidrs: ['198.18.0.0/15'] } } } }
   const { ctx } = await settingsHost(local)
   await ctx.plugin(SystemPrompt)
@@ -210,7 +211,7 @@ it('contributes a notice only for a local plan, nonempty CIDRs, and a confirmed 
   await ctx.settings.update(FETCH.rowId, { defaultConnection: 'builtin:deepseek-fetch-api' })
   expect(await text()).toBe('')
   await ctx.settings.update(FETCH.rowId, { defaultConnection: 'builtin:local', connections: { 'builtin:local': { options: { allowCidrs: [] } } } })
-  expect(await text()).toBe('')
+  expect(await text()).toContain('no plugin address filtering is enabled')
   await ctx.settings.update(FETCH.rowId, { connections: local.connections })
   await ctx.settings.update('web', { fetchProvider: 'other' })
   expect(await text()).toBe('')

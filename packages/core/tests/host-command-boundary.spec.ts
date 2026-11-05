@@ -5,14 +5,13 @@ import { Context, type Message } from '@deepseek-ai/cordis'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
-import Projections from '@deepseek-ai/dsh-session-projection'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import Storage from '@deepseek-ai/dsh-storage'
 import * as StorageDomain from '@deepseek-ai/dsh-storage-domain'
 import * as StorageJson from '@deepseek-ai/dsh-storage-json'
 import WebRuntime, { WebError } from '@deepseek-ai/dsh-web'
 import TypertRegistry from '@deepseek-ai/dsh-typert-registry'
-import SessionController from '@deepseek-ai/dsh-api-session-controller'
+import { mountSessionController } from './fixtures/session-controller.ts'
 import { afterEach, expect, it } from 'vitest'
 import { installCapability, type CapabilityRuntime } from '../src/host/runtime.ts'
 import Gateway from '@deepseek-ai/dsh-api-gateway'
@@ -31,7 +30,6 @@ async function host(document: object = {}, describeGate?: () => Promise<void>, t
   const logs: Message[] = []
   ctx.logger.exporter({ levels: { default: 3 }, export: message => { logs.push(message) } })
   await mountAgentLoopTestDependencies(ctx, { tools: { mode: 'native' } })
-  await ctx.plugin(Projections)
   await ctx.plugin(AgentLoop)
   await ctx.plugin(Storage)
   await ctx.plugin(StorageJson, { root })
@@ -102,7 +100,7 @@ it('writes Host selection into the same Remote view and next request snapshot', 
     resolvers.add(resolver)
     return () => { resolvers.delete(resolver) }
   } } as never)
-  void new SessionController(h.ctx, { nativeOpen: false })
+  await mountSessionController(h.ctx, h.root)
   await h.ctx.fiber.await()
   expect(h.runtime.plan(h.agent)).toMatchObject({ kind: 'ready' })
   expect(await h.run(' off')).toMatchObject({ kind: 'success' })

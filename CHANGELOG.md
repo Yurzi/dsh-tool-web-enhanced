@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.1.4 (2026-11-05)
+
+### Breaking
+
+- Target exact published DSH **0.2.2-rc.1**, Cordis **4.1.0**, and Node **>=24.9.0** in development, CI and isolated testing. Published compatibility minimums and package verification agree.
+- Local fetch with both allowlist arrays absent/empty now follows upstream **any-address** policy instead of the old public-only default. Either non-empty list opts into initial-address filtering; hostname-only rules grant no private access. Clear both effective lists to disable filtering; invalid settings still reject.
+- New ordinary user forks start independent connection selection (model memory/default) and lists from currently selectable providers. Spawn inherits only the list; subagent_fork inherits selection and list. Persisted selections and lists, including empty/missing lists, are not migrated or backfilled.
+
+### dsh-tool-web-enhanced-profile 0.1.4
+
+- Mounts dsh-web-search-enhanced **0.2.4**, dsh-web-fetch-enhanced **0.2.4** and dsh-tool-web-enhanced-ui **0.1.4** with these three exact dependency versions in the packed profile; the profile patch is unchanged.
+
+### dsh-tool-web-enhanced-ui 0.1.4
+
+- Rebuild against the rc.1 Web platform with the updated Node and Cordis minimums, retaining the single shared composer menu, activation prompt and bundle overview.
+
+### dsh-web-search-enhanced 0.2.4
+
+- Use public Agent-owned next-model selection while preserving the initiating request route for execution. The connection hint distinguishes ordinary forks from subagent_fork.
+
+### dsh-web-fetch-enhanced 0.2.4
+
+- Local checks are an initial preflight before the unmodified rc.1 HttpFetchProvider, not DNS pinning or per-redirect validation. Accepted DNS rebinding/TOCTOU limits and upstream proxy routing are stated in the settings, model notices and documentation. URL, redirect, timeout and size limits remain upstream-owned.
+- The allowlist editor reports effective filtering mode, not an unsaved draft. Public-CIDR warnings explain that non-empty rules enable filtering even without granting private access. The connection hint distinguishes ordinary forks from subagent_fork.
+
+### Development and release
+
+- Keep effective Volatile configuration references across layered saves and use explicit Cordis config-event arguments.
+- Upgrade exact manifests/catalog/lock, CI Node matrix, Host build target, peer/engine packing constraints, real controller fixtures and Native/PTC batch/admission tests. Approved remote-access and attachment-local devDependencies support tests only.
+- TUI tests install fixed 0.16.1 normally in isolated profiles instead of linking the workspace graph, after the public exact-package/exact-DSH allow-version --accept-risk test authorization. Narrow fixed-parent peer exceptions cover the tested rc.1 combination, working-activity React 19.3.1 and independently versioned invariants 0.1.7-rc.2; this is not upstream-declared TUI support. Runtime realpath/module-identity audits and full PTY validation remain release gates.
+
+
 ## v0.1.3 (2026-10-27)
 
 ### dsh-tool-web-enhanced-profile 0.1.3

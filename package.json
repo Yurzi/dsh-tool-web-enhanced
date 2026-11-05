@@ -13,7 +13,7 @@
   "bugs": "https://github.com/Yurzi/dsh-tool-web-enhanced/issues",
   "packageManager": "pnpm@12.14.0",
   "engines": {
-    "node": "^22.19.0 || >=24.0.0"
+    "node": ">=24.9.0"
   },
   "scripts": {
     "build": "pnpm --recursive --filter \"./packages/**\" run build",
@@ -36,7 +36,9 @@
     "@deepseek-ai/dsh-agent-preset": "catalog:",
     "@deepseek-ai/dsh-agent-preset-registry": "catalog:",
     "@deepseek-ai/dsh-api-gateway": "catalog:",
+    "@deepseek-ai/dsh-api-remote-access": "catalog:",
     "@deepseek-ai/dsh-api-remotes": "catalog:",
+    "@deepseek-ai/dsh-attachment-local": "catalog:",
     "@deepseek-ai/dsh-api-session-controller": "catalog:",
     "@deepseek-ai/dsh-api-settings-controller": "catalog:",
     "@deepseek-ai/dsh-client-locale": "catalog:",

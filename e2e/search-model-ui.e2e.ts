@@ -13,7 +13,7 @@ import { messagesAnswer, modelDocument, modelFixture, piAiFixture, piAiRows } fr
 import { type App, browserRequired, chromiumPath, openApp, recordBrowserFailure } from './harness/browser.ts'
 import { isolatedContext, addPlugins, artifacts, composedRows, enterIsolatedEnvironment, profilePatchPath } from './harness/environment.ts'
 import { bootHost } from './harness/host.ts'
-import { connectionButton, openConnectionTab, newSession, openBundle, openConnections, openSearchSettings } from './harness/navigation.ts'
+import { openPluginsPanel, connectionButton, openConnectionTab, newSession, openBundle, openConnections, openSearchSettings } from './harness/navigation.ts'
 import { startModelApi } from './harness/model-api.ts'
 import { modelGroups, modelViewport } from './harness/model-visuals.ts'
 import { expectTheme, setTheme } from './harness/theme.ts'
@@ -302,7 +302,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Model search co
     const url = app.page.url()
     await app.close()
     app = await openApp(url, { locale: 'zh-CN', storageState, viewport: { width: 1280, height: 1100 } })
-    await app.page.getByRole('navigation', { name: '全局面板', exact: true }).getByRole('button', { name: '插件', exact: true }).click()
+    await openPluginsPanel(app.page, 'zh')
     await app.page.locator('[data-plugin-package="' + PROFILE_PACKAGE + '"]').getByRole('button', { name: /^查看/ }).click()
     await app.page.locator('[data-plugin-detail="' + PROFILE_PACKAGE + '"]').getByRole('button', { name: /^配置.*增强网页搜索$/ }).click()
     const settings = app.page.locator('[data-plugin-row-detail="' + rowConfigKey(SEARCH) + '"]')

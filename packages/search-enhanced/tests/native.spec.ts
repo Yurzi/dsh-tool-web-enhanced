@@ -6,7 +6,6 @@ import DeepSeekAccount from '@deepseek-ai/dsh-deepseek-account'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import Projections from '@deepseek-ai/dsh-session-projection'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import { WebError, type WebSearchProvider } from '@deepseek-ai/dsh-web'
 import { DEEPSEEK_DEFAULT_BASE_URL, DEEPSEEK_DEFAULT_MODEL, DeepSeekSearchProvider } from '@deepseek-ai/dsh-web-search-deepseek'
@@ -59,7 +58,6 @@ const withheld = serviceMessage + "\n\nDeepSeek's response was withheld because 
 
 async function securityAccountSession(ctx: Context) {
   await mountAgentLoopTestDependencies(ctx, { tools: { mode: 'native' } })
-  await ctx.plugin(Projections)
   await ctx.plugin(AgentLoop)
   const handle = await ctx.agents.create({ sessionId: SessionId('security-native-search'), agentOptions: { provider: 'deepseek-account', model: 'fixture' } })
   cleanups.push(() => handle.dispose())
@@ -242,8 +240,7 @@ describe('native credential and option resolution', () => {
   ] as const)('resolves an account token only for an account Session (%s, service: %s)', async (provider, hasAccount) => {
     const ctx = context()
     await mountAgentLoopTestDependencies(ctx, { tools: { mode: 'native' } })
-    await ctx.plugin(Projections)
-    await ctx.plugin(AgentLoop)
+      await ctx.plugin(AgentLoop)
     if (hasAccount) void new NetworkAccount(ctx)
     const handle = await ctx.agents.create({ sessionId: SessionId('native-auth'), agentOptions: { provider, model: 'fixture' } })
     cleanups.push(() => handle.dispose())

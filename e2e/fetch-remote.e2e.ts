@@ -31,7 +31,7 @@ describe('Remote fetch in the real Host', () => {
     if (api !== undefined) await api.close()
   })
 
-  it.each([remoteFetchFixture.requestedUrl, 'http://10.0.0.1/x'])('forwards %s unchanged to the trusted service while local blocks it', async url => {
+  it.each([remoteFetchFixture.requestedUrl, 'http://10.0.0.1/x'])('forwards %s unchanged to the trusted service while opt-in local filtering blocks it', async url => {
     enterIsolatedEnvironment(e2e.env)
     const start = api.requests.length
     api.respondWith(firecrawlResponse(url))
@@ -62,6 +62,7 @@ describe('Remote fetch in the real Host', () => {
 
     const local = await bootHost(e2e)
     try {
+      await local.ctx.settings.mutate(FETCH.rowId, [{ op: 'set', path: ['connections', 'builtin:local', 'options', 'allowHostnames'], value: ['public-filter.invalid'] }])
       await expect(local.web.fetch({ url }, AbortSignal.timeout(15_000))).rejects.toMatchObject({ code: 'WEB_BLOCKED_URL' })
       expect(api.requests).toHaveLength(start + 1)
     } finally {

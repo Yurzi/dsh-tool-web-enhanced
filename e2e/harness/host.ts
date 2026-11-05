@@ -13,18 +13,20 @@ import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { WebRuntime } from '@deepseek-ai/dsh-web'
 import { type E2EContext, PROFILE, run } from './environment.ts'
+import type { RuntimePackageTable } from './host-runtime-peers.ts'
 
 /** A booted host plane. */
 export interface Host {
   readonly ctx: Context
   readonly web: WebRuntime
+  readonly resolution: RuntimePackageTable
   dispose(): Promise<void>
 }
 
 /** The pieces of `@deepseek-ai/dsh-app-boot` the CLI uses to start a profile. */
 interface AppBoot {
   loadProfile(binName: string, name: string, installAnchor: string): { dir: string; patchPath: string; layers: { packageName: string }[] }
-  createRuntimeResolution(options: { installAnchor: string; profile: unknown }): Promise<unknown>
+  createRuntimeResolution(options: { installAnchor: string; profile: unknown }): Promise<RuntimePackageTable>
   loadOverlayPatches(binName: string, file: string): unknown[]
   readProfilePatches(binName: string, context: object, profile: unknown): unknown[]
   boot(binName: string, configPath: string, patches: unknown[], prepare: (ctx: Context) => Promise<void>): Promise<Context>
@@ -94,7 +96,7 @@ export async function bootHost(e2e: E2EContext, overlays: readonly string[] = []
   if (web === undefined) throw new Error('the composed profile did not provide ctx.web')
   const hmr = ctx.get('hmr') as { runExclusive(work: () => Promise<void>): Promise<void> } | undefined
   return {
-    ctx, web,
+    ctx, web, resolution,
     dispose: async () => {
       // Let public profile-reload work finish before disposing the root it still uses.
       if (hmr !== undefined) await hmr.runExclusive(async () => {})

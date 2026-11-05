@@ -1,4 +1,5 @@
 /** Credential dependency failures through real Settings, plugin registration and tools.execute. */
+import { toolCall } from '../../core/tests/fixtures/tool-call.ts'
 import { inspect } from 'node:util'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
@@ -42,7 +43,7 @@ async function host() {
   h.ctx.logger.exporter({ levels: { default: 3 }, export: entry => logs.push(entry.args) })
   const network = vi.fn(() => { throw new Error('credential failures must not reach the network') })
   vi.stubGlobal('fetch', network)
-  const call = (signal: AbortSignal) => h.ctx.tools.execute({ callId: ToolCallId('credential-call'), name: FETCH.tools.action, arguments: { url: 'https://example.com/', provider: 'custom:crawl' }, agent: h.agent, signal })
+  const call = (signal: AbortSignal) => toolCall(h.ctx, { callId: ToolCallId('credential-call'), name: FETCH.tools.action, arguments: { url: 'https://example.com/', provider: 'custom:crawl' }, agent: h.agent, signal })
   return { resolver: vi.spyOn(h.credentials, 'resolve'), call, logs, network }
 }
 

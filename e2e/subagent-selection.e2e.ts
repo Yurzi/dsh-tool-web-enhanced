@@ -243,10 +243,12 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Subagent connec
     const host = await bootHost(e2e)
     try {
       const fork = await host.ctx.sessionPersistence.stat(userForkId as SessionId)
-      expect(fork!.header).toMatchObject({ parentSession: parentId, isSeeded: true })
+      expect(userForkId).not.toBe(parentId)
+      expect(fork!.header).toMatchObject({ isSeeded: true })
+      expect(fork!.header.parentSession).toBeUndefined()
       expect(fork!.header.origin).not.toBe('subagent')
-      expect((await host.ctx.searchConnections.pairings({})).pairings).toEqual([expect.objectContaining({ connectionId: 'custom:m55-search-b' })])
-      expect((await host.ctx.fetchConnections.pairings({})).pairings).toEqual([expect.objectContaining({ connectionId: 'custom:m55-fetch-b' })])
+      expect((await host.ctx.searchConnections.pairings({})).pairings).toEqual([expect.objectContaining({ provider: 'deepseek-official', model: 'deepseek-flash', connectionId: 'custom:m55-search-b' })])
+      expect((await host.ctx.fetchConnections.pairings({})).pairings).toEqual([expect.objectContaining({ provider: 'deepseek-official', model: 'deepseek-flash', connectionId: 'custom:m55-fetch-b' })])
     } finally { await host.dispose() }
   })
 })

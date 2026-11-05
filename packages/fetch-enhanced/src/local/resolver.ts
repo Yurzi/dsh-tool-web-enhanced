@@ -1,8 +1,7 @@
 /**
- * DNS resolution for the local provider. One answer set is resolved and
- * validated in full; the official transport then pins its connection to
- * exactly these addresses, so the hostname is never resolved again between
- * the check and the connection.
+ * DNS preflight for opt-in local address filtering. One answer set is resolved
+ * and validated in full. The official provider resolves again when connecting;
+ * these addresses are not pinned and cannot prevent DNS rebinding.
  */
 import { lookup } from 'node:dns/promises'
 import type { LookupAddress } from 'node:dns'
@@ -16,7 +15,7 @@ import { stripIpv6Brackets } from './rules.ts'
 /** Lookup signature of `node:dns/promises`, replaceable in tests. */
 export type AddressLookup = (hostname: string, options: { all: true; order: 'verbatim' }) => Promise<LookupAddress[]>
 
-/** One validated destination the transport may connect to. */
+/** One address accepted by the preflight policy, not a pinned connection target. */
 export interface ValidatedAddress {
   readonly address: string
   readonly family: 4 | 6
@@ -140,7 +139,7 @@ async function lookupAnswers(hostname: string, signal: AbortSignal, resolve: Add
 }
 
 function resolutionAborted(): Error {
-  // The official transport uses its signal to distinguish cancellation from its own deadline.
+  // The backend classifies its shared preflight/request signal as cancellation or timeout.
   return new Error(`${FETCH.packageName}: web fetch aborted during hostname resolution`)
 }
 

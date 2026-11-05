@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { AddressPolicy, isPublicAddress } from '../src/local/backend.ts'
-import { cidrWarnings, describeProblem, normalizeHost, parseCidr, parseHostnameRule, stripIpv6Brackets, type RuleProblem } from '../src/local/rules.ts'
+import { cidrWarnings, describeProblem, hasAllowlistRules, normalizeHost, parseCidr, parseHostnameRule, stripIpv6Brackets, type RuleProblem } from '../src/local/rules.ts'
+
+describe('opt-in address filtering', () => {
+  it.each([
+    [[], [], false],
+    [['127.0.0.1/32'], [], true],
+    [[], ['localhost'], true],
+    [['127.0.0.1/32'], ['localhost'], true],
+  ] as const)('activates for CIDRs %j and hostnames %j: %s', (allowCidrs, allowHostnames, active) => {
+    expect(hasAllowlistRules({ allowCidrs, allowHostnames })).toBe(active)
+  })
+})
 
 describe('shared rule diagnostics', () => {
   const cases: [RuleProblem, string][] = [
@@ -119,7 +130,7 @@ describe('hostname rules', () => {
 describe('AddressPolicy', () => {
   const policy = (allowCidrs: string[], allowHostnames: string[] = []) => new AddressPolicy({ allowCidrs, allowHostnames })
 
-  it('keeps the public-only baseline when nothing is allowed', () => {
+  it('keeps the classifier public-only when filtering is enabled without CIDR exceptions', () => {
     const empty = policy([])
     expect(empty.allows('example.com', '93.184.216.34')).toBe(true)
     for (const address of ['127.0.0.1', '10.0.0.1', '169.254.169.254', '198.18.0.1', '::1', 'fc00::1', '::ffff:127.0.0.1', '::7f00:1']) {
@@ -162,7 +173,7 @@ describe('AddressPolicy', () => {
     expect(() => policy([], ['https://example.com'])).toThrow('dsh-web-fetch-enhanced: allowHostnames entry')
   })
 
-  it('classifies public unicast like the native provider', () => {
+  it('classifies public unicast for the opt-in address policy', () => {
     expect(isPublicAddress('8.8.8.8')).toBe(true)
     expect(isPublicAddress('[2001:4860:4860::8888]')).toBe(true)
     expect(isPublicAddress('100.64.0.1')).toBe(false)

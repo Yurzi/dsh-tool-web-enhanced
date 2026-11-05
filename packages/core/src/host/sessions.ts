@@ -100,7 +100,8 @@ export class Sessions<O extends Record<string, unknown>, S extends CapabilitySet
     const origin = sessionOrigin(target.header)
     const parentSession = parentOf(origin)
     const seeded = parentSession !== undefined && origin.seeded
-    let inherited = stored !== undefined && seeded && (stored.inherited ?? table.get(parentSession) !== undefined)
+    // Keep an already materialized historical fork selection, without reading its old parent again.
+    let inherited = stored !== undefined && (stored.inherited ?? (seeded && table.get(parentSession) !== undefined))
     if (stored === undefined && seeded) {
       const parentAgent = this.ctx.get('agents')?.get(parentSession)
       if (parentAgent !== undefined && persist) await this.current(liveSession(parentAgent))

@@ -5,7 +5,6 @@ import DeepSeekAccount from '@deepseek-ai/dsh-deepseek-account'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import Projections from '@deepseek-ai/dsh-session-projection'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import { WebError } from '@deepseek-ai/dsh-web'
 import { DEEPSEEK_WEB_API_BASE_URL, DeepSeekFetchApiProvider } from '@deepseek-ai/dsh-web-deepseek-api'
@@ -59,7 +58,6 @@ const withheld = prefixed(serviceMessage) + "\n\nDeepSeek's response was withhel
 
 async function accountSession(ctx: Context, provider: string) {
   await mountAgentLoopTestDependencies(ctx, { tools: { mode: 'native' } })
-  await ctx.plugin(Projections)
   await ctx.plugin(AgentLoop)
   const handle = await ctx.agents.create({ sessionId: SessionId('native-fetch-auth'), agentOptions: { provider, model: 'fixture' } })
   cleanups.push(() => handle.dispose())

@@ -15,7 +15,7 @@ import { isolatedContext, addPlugins, artifacts, composedRows, enterIsolatedEnvi
 import { bootHost } from './harness/host.ts'
 import { startModelApi } from './harness/model-api.ts'
 import { modelViewport } from './harness/model-visuals.ts'
-import { openConnectionTab, newSession, openConnections, openSearchSettings } from './harness/navigation.ts'
+import { openPluginsPanel, openConnectionTab, newSession, openConnections, openSearchSettings } from './harness/navigation.ts'
 import { setTheme } from './harness/theme.ts'
 import { type WebServer, startWeb } from './harness/web.ts'
 
@@ -274,7 +274,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Model UI review
     await search.getByText(zh['status.sessionModelNeedsKey'], { exact: true }).waitFor()
     await app.screenshot('search-model-review-menu-zh-1280-light')
     await app.page.keyboard.press('Escape')
-    await app.page.getByRole('navigation', { name: '全局面板', exact: true }).getByRole('button', { name: '插件', exact: true }).click()
+    await openPluginsPanel(app.page, 'zh')
     await app.page.locator('[data-plugin-package="' + PROFILE_PACKAGE + '"]').getByRole('button', { name: /^查看/ }).click()
     await app.page.locator('[data-plugin-detail="' + PROFILE_PACKAGE + '"]').getByRole('button', { name: /^配置.*增强网页搜索$/ }).click()
     const settings = app.page.locator('[data-plugin-row-detail="' + rowConfigKey(SEARCH) + '"]')

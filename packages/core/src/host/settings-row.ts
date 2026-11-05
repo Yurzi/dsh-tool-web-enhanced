@@ -1,4 +1,4 @@
-import type { Context, Fiber, Volatile } from '@deepseek-ai/cordis'
+import type { Context, Volatile } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 import type {} from '@deepseek-ai/dsh-settings'
 import z from '@deepseek-ai/schemastery'
@@ -37,9 +37,9 @@ export function settingsRow<V extends object, S>(options: {
     } catch (error) {
       ctx.logger.warn('%s: invalid initial ' + capabilityLabel + ' settings: %s', identity.rowId, error)
     }
-    ctx.on('internal/config', function (this: Fiber, _raw, next) {
+    ctx.on('internal/config', (fiber, next) => {
       const raw = next()
-      if (this === ctx.fiber) resolve(read(Config(raw as V)))
+      if (fiber === ctx.fiber) resolve(read(Config(raw as V)))
       return raw
     })
     ctx.inject(['settings'], scope => {

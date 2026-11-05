@@ -14,7 +14,7 @@ const local: FetchSettings['connections'] = { 'builtin:local': { options: { allo
 describe('fetch remote/local composition', () => {
   it('sends private literal and localhost URLs unchanged to the selected custom service, then restores local policy and notice', async () => {
     let targetVisits = 0
-    const target = await serve((_request, response) => { targetVisits += 1; response.end('must not be visited') })
+    const target = await serve((_request, response) => { targetVisits += 1; response.setHeader('content-type', 'text/plain'); response.end('local target after filtering is disabled') })
     const calls: Array<{ url: unknown; authorization: string | undefined }> = []
     const endpoint = await serve((request, response) => {
       void readJson(request).then(body => {
@@ -44,7 +44,9 @@ describe('fetch remote/local composition', () => {
     expect(targetVisits).toBe(0)
     expect(calls).toHaveLength(4)
     await h.ctx.settings.update(FETCH.rowId, { connections: { 'builtin:local': { options: { allowCidrs: [] } } } })
-    expect(await h.notice()).toBe('')
+    expect(await h.notice()).toContain('no plugin address filtering is enabled')
+    await expect(h.fetch(targets[0]!)).resolves.toMatchObject({ statusCode: 200 })
+    expect(targetVisits).toBe(1)
   })
 
   it('rebuilds the selected adapter from live Settings without waiting for a new model step', async () => {

@@ -47,6 +47,21 @@ async function save() {
 }
 
 describe('allowlist explicit-save editor', () => {
+  it('reports effective filtering mode, not an unsaved empty draft', () => {
+    const view = mount({ allowCidrs: ['10.0.0.0/8'] })
+    expect(screen.getByText('Plugin initial-address filtering is enabled.')).toBeTruthy()
+    fireEvent.change(view.cidrs, { target: { value: '' } })
+    expect(screen.getByText('Plugin initial-address filtering is enabled.')).toBeTruthy()
+    view.update({ allowCidrs: [], allowHostnames: [] })
+    expect(screen.getByText('Plugin address filtering is disabled (upstream any-address policy).')).toBeTruthy()
+  })
+
+  it('explains that a public CIDR enables filtering without granting non-public access', () => {
+    const view = mount()
+    fireEvent.change(view.cidrs, { target: { value: '8.8.8.0/24' } })
+    expect(screen.getByText('A public range grants no non-public access, but a non-empty rule list enables address filtering.', { exact: false })).toBeTruthy()
+  })
+
   it('renders primitive action buttons with primary and ghost variants and proper disabled states', () => {
     mount()
     const saveBtn = saveButton()

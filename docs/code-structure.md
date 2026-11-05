@@ -31,11 +31,11 @@ docs/orchestration-prompt.md：维护者维护的多 agent 开发任务说明（
 
 | 包目录 / manifest | npm 名称 | 版本 | exports 与 DSH 元数据 |
 | --- | --- | --- | --- |
-| [profile](<../packages/profile/package.json>) | dsh-tool-web-enhanced-profile | 0.1.3 | 导出 patch、locale、icon、package.json；dsh.bundle.patch 指向 patch。 |
+| [profile](<../packages/profile/package.json>) | dsh-tool-web-enhanced-profile | 0.1.4 | 导出 patch、locale、icon、package.json；dsh.bundle.patch 指向 patch。 |
 | [core](<../packages/core/package.json>) | dsh-tool-web-enhanced-core | 0.0.0 | private；./shared、./host、./client 直接指向源码；无 dsh 字段。 |
-| [search-enhanced](<../packages/search-enhanced/package.json>) | dsh-web-search-enhanced | 0.2.3 | 插件导出；dsh.client.platform = web。 |
-| [fetch-enhanced](<../packages/fetch-enhanced/package.json>) | dsh-web-fetch-enhanced | 0.2.3 | 插件导出；dsh.client.platform = web。 |
-| [ui](<../packages/ui/package.json>) | dsh-tool-web-enhanced-ui | 0.1.3 | 插件导出；dsh.client.platform = web。 |
+| [search-enhanced](<../packages/search-enhanced/package.json>) | dsh-web-search-enhanced | 0.2.4 | 插件导出；dsh.client.platform = web。 |
+| [fetch-enhanced](<../packages/fetch-enhanced/package.json>) | dsh-web-fetch-enhanced | 0.2.4 | 插件导出；dsh.client.platform = web。 |
+| [ui](<../packages/ui/package.json>) | dsh-tool-web-enhanced-ui | 0.1.4 | 插件导出；dsh.client.platform = web。 |
 
 三个插件共用 exports：`. → ./lib/index.js`、`./client → ./lib/client.cjs`，以及 locale JSON、icon SVG 与 package.json；均为 `sideEffects: false`，没有运行时 dependencies。profile 的 dependencies 是三个公开插件；core 只作为开发依赖参与内联。
 
@@ -77,8 +77,8 @@ src/
 | 模块 | 职责 |
 | --- | --- |
 | [capability.ts](<../packages/core/src/host/capability.ts>) · [runtime.ts](<../packages/core/src/host/runtime.ts>) | 能力参数（含 `enhancedTools`、`Capability.enhanced`、可选的 `commandOptions` 与带标签的连接 `LabeledConnection`）、选项 codec 与调用上下文类型；installCapability 连接会话选择、计划、对话列表、可见性控制器、显式入口、Remote、Host 命令（`commands` 注入子作用域）、TUI 补全（独立的 `tuiCommandTrees` 注入子作用域）与 provider 注册。 |
-| [sessions.ts](<../packages/core/src/host/sessions.ts>) · [plans.ts](<../packages/core/src/host/plans.ts>) | 以会话为目标（`SessionTarget`：运行中的 `live` 或冷的 `cold`；`liveSession`）的会话选择解析（fork 继承、revision、按会话来源写模型记忆、写入后同步当时运行中的 Agent）；请求步快照（Snapshots）与选择计划。 |
-| [session-origin.ts](<../packages/core/src/host/session-origin.ts>) | 会话来源 `sessionOrigin`：只读会话头公开字段（`origin`、`parentSession`、`isSeeded`）得出 `top-level` / `fork` / `subagent`；`parentOf`。 |
+| [sessions.ts](<../packages/core/src/host/sessions.ts>) · [plans.ts](<../packages/core/src/host/plans.ts>) | 以会话为目标（`SessionTarget`：运行中的 `live` 或冷的 `cold`；`liveSession`）的会话选择解析（仅 subagent_fork 继承、revision、按会话来源写模型记忆、写入后同步当时运行中的 Agent）；请求步快照（Snapshots）与选择计划。 |
+| [session-origin.ts](<../packages/core/src/host/session-origin.ts>) | 会话来源 `sessionOrigin`：只读会话头公开字段（`origin`、`parentSession`、`isSeeded`）得出 `top-level` / `subagent`（仅后者有可继承 parent）；`parentOf`。 |
 | [selectable.ts](<../packages/core/src/host/selectable.ts>) · [restriction.ts](<../packages/core/src/host/restriction.ts>) | 连接是否存在且启用；可见性控制器 `ToolRestriction`：原生工具遮罩，增强工具的注册（可回滚的成对注册、注册世代）、按 Agent 遮罩与有序撤下，路由与开关变化后的重算。 |
 | [enhanced.ts](<../packages/core/src/host/enhanced.ts>) · [explicit.ts](<../packages/core/src/host/explicit.ts>) | 增强工具的契约类型（`ExplicitCall`、`Rejection`、`ReadyProviders`、`ProviderListing`、`EnhancedAccess`、`CapabilityEnhanced` 等）；显式入口 `explicitAccess`：`run` / `list` / `ready` 的检查顺序、`withInitiator` 执行与就绪状态的异常边界。 |
 | [provider-lists.ts](<../packages/core/src/host/provider-lists.ts>) | 新建对话的判断 `isNewConversation`（经 `sessionOrigin`）；`ProviderLists`：对话 provider 列表的建立、继承、读取（空记录读作没有列表）。 |
@@ -189,8 +189,8 @@ src/
 | host/[connections](<../packages/fetch-enhanced/src/host/connections.ts>) · [options](<../packages/fetch-enhanced/src/host/options.ts>) · [remote](<../packages/fetch-enhanced/src/host/remote.ts>) | 本地与远程连接的显示事实；无会话参数的选项 codec；Remote 服务类型与 Context 扩展。 |
 | [host/listing.ts](<../packages/fetch-enhanced/src/host/listing.ts>) | 列出工具的能力事实 `fetchListing`：接收方（运维端点取主机名）与 `local` 的白名单说明。 |
 | tools/[index](<../packages/fetch-enhanced/src/tools/index.ts>) · [definitions](<../packages/fetch-enhanced/src/tools/definitions.ts>) | `fetchEnhanced`（能力的 `enhanced`）；`web_fetch_enhanced` 与 `list_web_fetch_providers` 的静态定义、参数校验（tool-web 的 `parseFetchArgs`）、输出与超时。 |
-| local/[rules](<../packages/fetch-enhanced/src/local/rules.ts>) · [address-policy](<../packages/fetch-enhanced/src/local/address-policy.ts>) | CIDR、hostname 规则的解析、规范化与逐条诊断；地址是否公共可达或满足操作员例外。 |
-| local/[resolver](<../packages/fetch-enhanced/src/local/resolver.ts>) · [backend](<../packages/fetch-enhanced/src/local/backend.ts>) | 完整验证 DNS 答案集与 NAT64 目标；向 DSH HttpFetchProvider 注入当前策略与 resolver。 |
+| local/[rules](<../packages/fetch-enhanced/src/local/rules.ts>) · [address-policy](<../packages/fetch-enhanced/src/local/address-policy.ts>) | CIDR、hostname 规则的解析、规范化、逐条诊断与共享 hasAllowlistRules；地址是否公共可达或满足操作员例外。 |
+| local/[resolver](<../packages/fetch-enhanced/src/local/resolver.ts>) · [backend](<../packages/fetch-enhanced/src/local/backend.ts>) | 规则非空时预检初始 DNS 完整答案集与 NAT64；双空跳过插件过滤。原 URL 交给未修改的 HttpFetchProvider，不固定地址，不逐跳复验；使用公开 proxyRouteFor 判断代理域名。 |
 | backends/[native](<../packages/fetch-enhanced/src/backends/native.ts>) · [common](<../packages/fetch-enhanced/src/backends/common.ts>) · [deepseek-fetch-api](<../packages/fetch-enhanced/src/backends/deepseek-fetch-api.ts>) | 创建原生抓取后端；原生鉴权、错误改写与 Host 诊断；实例化 DSH DeepSeek Fetch API provider。 |
 | remote/[adapters/index](<../packages/fetch-enhanced/src/remote/adapters/index.ts>) · [types](<../packages/fetch-enhanced/src/remote/types.ts>) | 把 core 抓取 wire 绑定到目录；按目录约束 keyless 类型。 |
 | remote/[execute](<../packages/fetch-enhanced/src/remote/execute.ts>) · [http](<../packages/fetch-enhanced/src/remote/http.ts>) · [errors](<../packages/fetch-enhanced/src/remote/errors.ts>) | 构建 adapter 后端并执行；HTTP / MCP 传输参数与消息；抓取能力错误工厂。 |
@@ -200,7 +200,7 @@ src/
 | client/[selection](<../packages/fetch-enhanced/src/client/selection.ts>) · [route](<../packages/fetch-enhanced/src/client/route.ts>) · [injected](<../packages/fetch-enhanced/src/client/injected.ts>) | 把 core 的选择 store 与路由状态绑定到抓取 Remote 与字段；设置页注入类型。 |
 | [client/allowlist-lines.ts](<../packages/fetch-enhanced/src/client/allowlist-lines.ts>) | allowlist 物理行诊断与显式修复操作。 |
 | client/settings/[SettingsPage](<../packages/fetch-enhanced/src/client/settings/SettingsPage.tsx>) · [model](<../packages/fetch-enhanced/src/client/settings/model.ts>) | 组合设置页、文档诊断与 Reset；目录转设置页事实与服务说明。 |
-| client/settings/[AllowlistEditor](<../packages/fetch-enhanced/src/client/settings/AllowlistEditor.tsx>) · [LocalExtras](<../packages/fetch-enhanced/src/client/settings/LocalExtras.tsx>) | 两组 allowlist 草稿与显式原子保存；挂载本地 allowlist 与 User-Agent 编辑器。 |
+| client/settings/[AllowlistEditor](<../packages/fetch-enhanced/src/client/settings/AllowlistEditor.tsx>) · [LocalExtras](<../packages/fetch-enhanced/src/client/settings/LocalExtras.tsx>) | 两组 allowlist 草稿与显式原子保存，过滤状态按有效合并配置而非草稿判断；挂载本地 allowlist 与 User-Agent 编辑器。 |
 
 其余设置模块是 core 工厂的抓取绑定：[CredentialEditor](<../packages/fetch-enhanced/src/client/settings/CredentialEditor.tsx>)、[CustomConnections](<../packages/fetch-enhanced/src/client/settings/CustomConnections.tsx>)、[DefaultsSection](<../packages/fetch-enhanced/src/client/settings/DefaultsSection.tsx>)、[EnhancedToolsSection](<../packages/fetch-enhanced/src/client/settings/EnhancedToolsSection.tsx>)、[OptionsEditor](<../packages/fetch-enhanced/src/client/settings/OptionsEditor.tsx>)、[PairingsSection](<../packages/fetch-enhanced/src/client/settings/PairingsSection.tsx>)、[ServicesSection](<../packages/fetch-enhanced/src/client/settings/ServicesSection.tsx>)、[parts](<../packages/fetch-enhanced/src/client/settings/parts.tsx>)、[sparse](<../packages/fetch-enhanced/src/client/settings/sparse.ts>)；CSS Modules 与声明文件提供局部样式和导入类型。
 
@@ -250,7 +250,7 @@ src/
 | [web.ts](<../e2e/harness/web.ts>) | 启动 `dsh web`，监听 127.0.0.1 上 OS 分配的空闲端口（从不用 3080），输出写 `web.log`。 |
 | [browser.ts](<../e2e/harness/browser.ts>) | 无头 Chromium（Playwright），按 context 语言关闭首次启动的对话框（可选保留本组合包的首次启用提示以便截图），导航前可接入页面观察者（如记录请求与 WebSocket 帧），收集控制台错误与页面异常（不计 DSH 右侧栏切换会话时打印的 “Session reference … is released”），失败时记录可访问性快照与截图。 |
 | [terminal.ts](<../e2e/harness/terminal.ts>) · [terminal-pty.py](<../e2e/harness/terminal-pty.py>) | `startTerminal`：经 Python 标准库 `pty` 在真实伪终端里运行一条命令（如正式的 `dsh-tui` 入口，180×60，`DSH_TUI_LANG=en`），按输出事件等待文字（不计时），结束时把纯文本与 ANSI 原文存为证据。 |
-| [navigation.ts](<../e2e/harness/navigation.ts>)、[theme.ts](<../e2e/harness/theme.ts>)、[model-visuals.ts](<../e2e/harness/model-visuals.ts>) | 经公开界面打开插件页、设置页、新会话、连接菜单及其能力标签与主题设置。 |
+| [navigation.ts](<../e2e/harness/navigation.ts>)、[theme.ts](<../e2e/harness/theme.ts>)、[model-visuals.ts](<../e2e/harness/model-visuals.ts>) | 经公开界面打开插件页（同一 helper 处理 rail/drawer 与中英 header opener、验证关闭后无覆盖）、设置页、原生 workspace picker/新会话、连接菜单及其能力标签与主题；响应式几何区分768 rail与手机drawer，compact测试用真实workspace-scoped新会话。 |
 | [remote-fetch-api.ts](<../e2e/harness/remote-fetch-api.ts>)、[model-api.ts](<../e2e/harness/model-api.ts>)、[http.ts](<../e2e/harness/http.ts>) | 回环假远程服务 / 假模型 API（记录方法、路径、请求头与请求体，回复可替换或按请求生成）与本地抓取目标；`startAgentModelApi` 回放确定的 Messages SSE（第一步发出给定的工具调用，之后回答），驱动真实 Agent 循环，`startTextModelApi` 只回文本。 |
 | [enhanced-tool-review.ts](<../e2e/harness/enhanced-tool-review.ts>) | `captureEnhancedToolReview`：回环假模型与假服务驱动真实 Agent，同一回合调用原生 `web_search`、两个成功与失败的增强工具，经传输闸门拍下运行中（切到 Compact）、展开的来源、原生与增强并列、失败行折叠与展开，以及会话关闭后的拒绝。 |
 | [review.ts](<../e2e/harness/review.ts>) | `reviewScreenshot`：截图存入 `.e2e/artifacts`，并复制到不被全局准备清空的 `.e2e/review/<日期-主题>/` 供评审。 |
@@ -302,19 +302,27 @@ src/
 | [subagent-selection.e2e.ts](<../e2e/subagent-selection.e2e.ts>) | 回环模型让父 Agent 经 preset 的 `subagent` / `subagent_fork` 建两个子会话；在 Web 打开子会话，不在运行与运行中都经菜单改两侧连接，下一步（或父 Agent 用 `send_message` 再叫起时）请求发往新连接，模型记忆保持为空；Web 的分叉会话照常写两侧的模型记忆 | 是 | 独立 |
 | [setup-commands.e2e.ts](<../e2e/setup-commands.e2e.ts>) | 真实 Host 的 `CommandRuntime`：两个命令的说明与参数提示、不带参数的显示、`off` / 连接 id（含大写的 `custom:MyEngine`）/ 三档实时性的写入与 Remote `get` 一致；用法、不可选与实时性不适用的拒绝不改选择；设置无效的固定措辞；插件行停用时命令消失，ui 行停用时照常 | 否 | 套件 |
 | [setup-commands-ui.e2e.ts](<../e2e/setup-commands-ui.e2e.ts>) | 先跑一轮回环对话再在 Web 打开会话：斜杠菜单行与原来的选择框（截图）；带参数执行后命令卡显示输出、菜单与按钮反映新选择；展开命令卡看到路由警告；ui 行停用时选择框与带参数执行照常；插件行停用时命令与选择框一起消失。记录请求与 WebSocket 帧作证据 | 是 | 独立 |
-| [tui-completion.e2e.ts](<../e2e/tui-completion.e2e.ts>) | 已安装的 dsh-TUI（根 devDependency）与本 bundle：Web profile 叠入 TUI bundle、经 `bootHost` 检查真实 `tuiCommandTrees` 里两棵补全树与 Host 命令输出；独立的 TUI profile（dsh-base → dsh-tui → 本 bundle）里经真实 PTY 启动正式 `dsh-tui` 入口，Tab 补全插入原样的 `custom:MyEngine` 并执行，另一次不带参数执行看到连接列表与路由行 | 否（PTY） | 独立 |
+| [tui-completion.e2e.ts](<../e2e/tui-completion.e2e.ts>) | 以普通包管理流程在隔离 profile 安装固定 dsh-TUI 0.16.1 与本 bundle（不使用 workspace symlink）：Web profile 叠入 TUI bundle、经 `bootHost` 检查真实 `tuiCommandTrees` 里两棵补全树与 Host 命令输出；独立的 TUI profile（dsh-base → dsh-tui → 本 bundle）里经真实 PTY 启动正式 `dsh-tui` 入口，Tab 补全插入原样的 `custom:MyEngine` 并执行，另一次不带参数执行看到连接列表与路由行 | 否（PTY） | 独立 |
 
-当前 e2e 基线为 29 个文件、183 个测试（最终 `pnpm run test:e2e`）。
+e2e 当前收集 31 个文件、186 个展开用例，包含真实普通 fork/恢复、运行时模块单实例、真实 TUI 和 390/768/桌面规格；最终放行必须完整 `pnpm run test:e2e` 通过，不把被取消或失败的诊断轮当绿色结果。
+
+## rc.1 测试接缝
+
+- core 测试夹具 [tool-call.ts](<../packages/core/tests/fixtures/tool-call.ts>) 与 [step.ts](<../packages/core/tests/fixtures/step.ts>) 通过真实 resolve/admission、raw tool-call batch 和 dispose 检查 Native/PTC。
+- [session-controller.ts](<../packages/core/tests/fixtures/session-controller.ts>) 经公开服务生命周期组装 Controller；真实 remote-access、attachment-local 与精确读取 query，全文搜索明确不支持。testkit 自带 projections，不再重复安装。
+- 新 [settings-row.spec.ts](<../packages/core/tests/settings-row.spec.ts>)、[model.spec.ts](<../packages/core/tests/model.spec.ts>) 覆盖 effective Volatile/config事件与公开模型所有权；session-origin/row-visibility 扩充实际 fork/恢复、缺失/空/非空授权记录不回填。
+- [peer-runtime.e2e.ts](<../e2e/peer-runtime.e2e.ts>) / [peer-runtime.ts](<../e2e/harness/peer-runtime.ts>) 检查 root/clean 的完整 manifest 图；[host-runtime-peers.ts](<../e2e/harness/host-runtime-peers.ts>) 解析发射 JS 静态导入图、比对公开 runtime table 和真实模块身份（动态表达式不声称穷尽）；[runtime-peer-probe.ts](<../e2e/harness/runtime-peer-probe.ts>) 在独立 Node 里审计另一个真实 TUI profile，避免不同安装的第三方全局 prototype patch 互相叠加；[fork-state.e2e.ts](<../e2e/fork-state.e2e.ts>) 在打包的真实 Host 上做普通 fork 与重启恢复；TUI 规格通过真实安装固定包，不再 workspace symlink。
+- local/prompt/listing/editor 覆盖默认 any、非空 opt-in、hostname-only、有效配置模式与清空、公共 CIDR 提示、初始预检及取消/超时。
 
 ## 测试清单
 
-当前测试基线为 **107 个文件、2407 个测试**（最终 `pnpm run check`，不含 e2e）；逐包数量如下，参数化用例按实际展开计数。每行对应一个测试文件；tests/fixtures/ 下的辅助模块不计入。
+当前测试基线为 **109 个文件、2456 个测试**（最终 `pnpm run check`，不含 e2e）；逐包数量如下，参数化用例按实际展开计数。每行对应一个测试文件；tests/fixtures/ 下的辅助模块不计入。
 
 | 包 | 测试文件 | 通过测试 |
 | --- | ---: | ---: |
-| core | 38 | 719 |
+| core | 40 | 742 |
 | search-enhanced | 30 | 862 |
-| fetch-enhanced | 31 | 732 |
+| fetch-enhanced | 31 | 758 |
 | ui | 7 | 86 |
 | profile | 1 | 8 |
 

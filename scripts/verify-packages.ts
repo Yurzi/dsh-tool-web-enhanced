@@ -23,7 +23,10 @@ const packages = publishablePackages()
 const versions = new Map(packages.map(pkg => [pkg.manifest.name, pkg.manifest.version]))
 const out = mkdtempSync(join(tmpdir(), 'dsh-web-enhanced-pack-'))
 const dshRanges = new Set<string>()
-const repositoryUrl = (JSON.parse(readFileSync(join(repo, 'package.json'), 'utf8')) as Manifest).repository?.url
+const rootManifest = JSON.parse(readFileSync(join(repo, 'package.json'), 'utf8')) as Manifest
+const repositoryUrl = rootManifest.repository?.url
+const dshBaseline = '>=0.2.2-rc.1 <0.3.0-0'
+const nodeBaseline = '>=24.9.0'
 
 try {
   for (const pkg of packages) {
@@ -44,7 +47,18 @@ try {
 
     const dsh = manifest.engines?.dsh
     if (dsh === undefined) fail(name, 'engines.dsh is missing')
-    else dshRanges.add(dsh)
+    else {
+      dshRanges.add(dsh)
+      if (dsh !== dshBaseline) fail(name, `engines.dsh must target ${dshBaseline}`)
+    }
+    if (manifest.engines?.node !== nodeBaseline || rootManifest.engines?.node !== nodeBaseline) {
+      fail(name, `all published packages and the root must require Node ${nodeBaseline}`)
+    }
+    if (manifest.dsh?.bundle === undefined) {
+      if (manifest.peerDependencies?.['@deepseek-ai/cordis'] !== '~4.1.0') fail(name, 'Cordis peer must target ~4.1.0')
+      const schema = manifest.peerDependencies?.['@deepseek-ai/schemastery']
+      if (schema !== undefined && schema !== '^3.19.0') fail(name, 'Schemastery peer must target ^3.19.0')
+    }
     for (const [dep, range] of Object.entries(manifest.peerDependencies ?? {})) {
       if (dep.startsWith('@deepseek-ai/dsh-') && range !== dsh) fail(name, `peer ${dep} ${range} differs from engines.dsh ${dsh}`)
     }

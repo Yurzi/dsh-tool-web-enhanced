@@ -1,4 +1,5 @@
 /** Real WebRuntime, Agents, Session Controller, Typert and JSON storage; only the network is mocked. */
+import { mountSessionController } from '../../core/tests/fixtures/session-controller.ts'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -7,9 +8,7 @@ import type { CreateAgentOptions } from '@deepseek-ai/dsh-agent'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import Gateway from '@deepseek-ai/dsh-api-gateway'
-import SessionController from '@deepseek-ai/dsh-api-session-controller'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import Projections from '@deepseek-ai/dsh-session-projection'
 import Storage from '@deepseek-ai/dsh-storage'
 import * as StorageDomain from '@deepseek-ai/dsh-storage-domain'
 import * as StorageJson from '@deepseek-ai/dsh-storage-json'
@@ -46,7 +45,6 @@ async function host(options: { storage?: boolean; root?: string; rawSettings?: R
   ctx.provide('launchEnvironment', createLaunchEnvironmentSnapshot([{ source: 'process', values: options.environment ?? {} }]))
   await mountAgentLoopTestDependencies(ctx, { tools: { mode: 'native' } })
   if (options.routes !== undefined) await mountModelSettings(ctx, root, options.routes)
-  await ctx.plugin(Projections)
   await ctx.plugin(AgentLoop)
   await ctx.plugin(Storage)
   await ctx.plugin(StorageJson, { root })
@@ -60,7 +58,7 @@ async function host(options: { storage?: boolean; root?: string; rawSettings?: R
     uploadResolvers.add(resolver)
     return () => { uploadResolvers.delete(resolver) }
   } } as never)
-  const controller = new SessionController(ctx, { nativeOpen: false })
+  if (options.storage !== false) await mountSessionController(ctx, root)
   let settings = resolveSettings(options.settings ?? INITIAL)
   const pluginDefinition = { inject: ['web'], apply: (scope: Context) => installSearch(scope, () => settings) }
   let plugin = options.rawSettings === undefined
@@ -72,7 +70,7 @@ async function host(options: { storage?: boolean; root?: string; rawSettings?: R
     await ctx.fiber.await()
   }
   await ctx.fiber.await()
-  expect(ctx.get('searchConnections')).toBeDefined()
+  if (options.storage !== false) expect(ctx.get('searchConnections')).toBeDefined()
   const add = async (id: string, extra: Omit<CreateAgentOptions, 'sessionId'> = {}) => {
     const handle = await ctx.agents.create({ sessionId: SessionId(id), ...extra })
     cleanups.push(() => handle.dispose())
@@ -90,7 +88,7 @@ async function host(options: { storage?: boolean; root?: string; rawSettings?: R
     expect(continued).toBe(true)
   }
   const search = (agent = one) => ctx.agents.withInitiator(agent, () => ctx.web.search({ query: 'query' }))
-  return { ctx, root, controller, one, two, add, invoke, get, set, request, search, remount, configure: (document: SearchSettings) => { settings = resolveSettings(document) } }
+  return { ctx, root, one, two, add, invoke, get, set, request, search, remount, configure: (document: SearchSettings) => { settings = resolveSettings(document) } }
 }
 
 function network() {
@@ -368,7 +366,7 @@ describe('searchConnections real Host', () => {
       meta: { parentSession: top.session.id, isSeeded: true }, inheritedEventCount: 0 as never, seed: [],
       agentOptions: { provider: 'p', model: 'fork' },
     })
-    expect(await h.get(fork)).toMatchObject({ source: 'inherited', selection: { connectionId: 'builtin:openalex', revision: 0 } })
+    expect(await h.get(fork)).toMatchObject({ source: 'default', selection: { connectionId: 'builtin:openalex', revision: 0 } })
     await h.set({ connectionId: null, expectedRevision: 0 }, fork)
     expect(await h.invoke('pairings')).toEqual({ pairings: [
       { provider: 'p', model: 'top', connectionId: 'builtin:openalex' },
@@ -422,10 +420,10 @@ describe('searchConnections real Host', () => {
     ] })
   })
 
-  it('inherits a seeded fork once and survives plugin storage reopening', async () => {
+  it('inherits a seeded subagent_fork once and survives plugin storage reopening', async () => {
     const h = await host()
     await h.set({ connectionId: null, options: { freshness: 'fresh' }, expectedRevision: 0 })
-    const fork = await h.add('fork', { meta: { parentSession: h.one.session.id, isSeeded: true }, inheritedEventCount: 0 as never, seed: [] })
+    const fork = await h.add('fork', { meta: { origin: 'subagent', parentSession: h.one.session.id, isSeeded: true }, inheritedEventCount: 0 as never, seed: [] })
     expect(await h.get(fork)).toMatchObject({ source: 'inherited', selection: { connectionId: null, revision: 0, options: { freshness: 'fresh' } } })
     await h.set({ connectionId: 'builtin:openalex', expectedRevision: 1 })
     expect((await h.get(fork)).selection.connectionId).toBeNull()

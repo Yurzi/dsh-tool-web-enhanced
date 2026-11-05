@@ -6,6 +6,18 @@
  */
 import ipaddr from 'ipaddr.js'
 
+/** Operator rules enabling address filtering and defining non-public exceptions. */
+export interface AllowlistRules {
+  readonly allowCidrs: readonly string[]
+  /** When non-empty, only these hostnames may use the CIDR exceptions. */
+  readonly allowHostnames: readonly string[]
+}
+
+/** Empty rule lists leave destination access to the official provider. */
+export function hasAllowlistRules(rules: AllowlistRules): boolean {
+  return rules.allowCidrs.length > 0 || rules.allowHostnames.length > 0
+}
+
 /** A parsed IPv4 or IPv6 address. */
 export type IpAddress = ipaddr.IPv4 | ipaddr.IPv6
 

@@ -1,5 +1,7 @@
 # dsh-web-fetch-enhanced
 
+Requires DSH `>=0.2.2-rc.1 <0.3.0-0` and Node `>=24.9.0`. Development and isolated end-to-end tests target the exact published DSH `0.2.2-rc.1` release.
+
 Fetch half of [dsh-tool-web-enhanced-profile](../profile/README.md).
 **Install the profile, not this package**: the profile mounts this package as
 row `web-fetch-enhanced` and selects its provider in the shared `web` row.
@@ -51,10 +53,15 @@ plus custom adapter connections such as a self-hosted endpoint.
   refused when the conversation turned fetch off, and runs through the same
   execution layer.
 
-- **Who controls access.** Only local fetching applies the operator's address
-  allowlist; an empty allowlist is exactly DSH's public-only fetch. Hostnames
-  reached through a proxy are resolved by the proxy, so the allowlist cannot
-  limit them. Remote services receive the URL as requested and own target
+- **Breaking: address filtering is opt-in.** Both lists empty/absent follows
+  upstream any-address fetching, unlike the old public-only default. Either
+  non-empty list enables initial public-plus-CIDR/hostname preflight; hostname-only
+  grants no private access. Clear both effective lists to disable filtering; invalid
+  settings still reject. The original URL then goes to the unmodified official
+  provider: DNS is resolved again, addresses are not pinned, and redirects do not
+  recheck plugin rules, so DNS rebinding is not prevented. Proxy-resolved hostnames
+  belong to the proxy's policy; allowed private literals follow upstream proxy
+  routing too. Upstream URL, redirect, timeout and size limits still apply. Remote services receive the URL as requested and own target
   access; the menu and settings page say which service receives it and what
   its terms say about caching and retention.
 - **Credentials.** Keys live in DSH Credentials; settings store only the

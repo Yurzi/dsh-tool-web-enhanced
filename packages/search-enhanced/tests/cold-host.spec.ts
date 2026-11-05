@@ -1,4 +1,5 @@
 /** Real capability lifecycle, WebRuntime, Remote and JSONL; adapter HTTP stays on loopback. */
+import { mountSessionController } from '../../core/tests/fixtures/session-controller.ts'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
@@ -9,11 +10,9 @@ import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-test
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import AgentDefaultModel from '@deepseek-ai/dsh-agent-default-model'
 import Gateway from '@deepseek-ai/dsh-api-gateway'
-import SessionController from '@deepseek-ai/dsh-api-session-controller'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { SessionId, SessionLogOffset, type SessionStore } from '@deepseek-ai/dsh-session'
 import * as SessionPersistenceJsonl from '@deepseek-ai/dsh-session-persistence-jsonl'
-import Projections from '@deepseek-ai/dsh-session-projection'
 import Storage from '@deepseek-ai/dsh-storage'
 import * as StorageDomain from '@deepseek-ai/dsh-storage-domain'
 import * as StorageJson from '@deepseek-ai/dsh-storage-json'
@@ -59,7 +58,6 @@ async function host(url: string) {
   const ctx = new Context()
   cleanups.push(() => ctx.fiber.dispose())
   await mountAgentLoopTestDependencies(ctx, { tools: { mode: 'native' } })
-  await ctx.plugin(Projections)
   await ctx.plugin(AgentLoop)
   await ctx.plugin(SessionPersistenceJsonl, { root: join(root, 'sessions'), compression: 'none' })
   await ctx.plugin(AgentDefaultModel, { provider: 'fixture', model: 'child' })
@@ -75,7 +73,7 @@ async function host(url: string) {
     uploadResolvers.add(resolver)
     return () => { uploadResolvers.delete(resolver) }
   } } as never)
-  void new SessionController(ctx, { nativeOpen: false })
+  await mountSessionController(ctx, root)
   const credentials = new MemoryCredentials(ctx)
   await credentials.set(credentialRef('FIXTURE_KEY'), 'local-fixture-key')
   const connection = (path: string): CustomConnection => ({

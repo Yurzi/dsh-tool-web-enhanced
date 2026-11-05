@@ -8,12 +8,22 @@ permissions:
   contents: read
   id-token: write
 
+env:
+  PNPM_HOME: ${{ github.workspace }}/.pnpm-home
+  XDG_CACHE_HOME: ${{ github.workspace }}/.xdg/cache
+  XDG_DATA_HOME: ${{ github.workspace }}/.xdg/data
+  XDG_STATE_HOME: ${{ github.workspace }}/.xdg/state
+  XDG_RUNTIME_DIR: ${{ github.workspace }}/.xdg/runtime
+  npm_config_cache: ${{ github.workspace }}/.npm-cache
+
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
+        with:
+          dest: ${{ env.PNPM_HOME }}
       # No registry-url: npm trusted publishing authenticates this workflow
       # through OIDC, and a configured token would take its place.
       - uses: actions/setup-node@v7
@@ -25,7 +35,7 @@ jobs:
       # The release job below needs these notes; fail before anything is published.
       - name: CHANGELOG.md has notes for this tag
         run: node scripts/release-notes.ts "$GITHUB_REF_NAME" > /dev/null
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile --strict-peer-dependencies
       - run: pnpm run check
       # Publishes every public package whose version is not on the registry yet.
       - run: pnpm --recursive publish --access public --no-git-checks --provenance

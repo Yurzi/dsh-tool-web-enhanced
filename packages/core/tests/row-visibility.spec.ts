@@ -10,7 +10,6 @@ import AgentPresets from '@deepseek-ai/dsh-agent-preset-registry'
 import { shippedWebPreset } from './fixtures/shipped-preset.ts'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import * as SessionPersistenceJsonl from '@deepseek-ai/dsh-session-persistence-jsonl'
-import Projections from '@deepseek-ai/dsh-session-projection'
 import SessionController from '@deepseek-ai/dsh-api-session-controller'
 import TypertRegistry from '@deepseek-ai/dsh-typert-registry'
 import { SessionId, SessionLogOffset, type SessionStore } from '@deepseek-ai/dsh-session'
@@ -24,6 +23,7 @@ import { SEARCH, FETCH } from '../src/shared/index.ts'
 import * as searchPlugin from '../../search-enhanced/src/index.ts'
 import * as fetchPlugin from '../../fetch-enhanced/src/index.ts'
 import { mountWebSettings } from './fixtures/web-settings.ts'
+import { mountSessionController } from './fixtures/session-controller.ts'
 
 const cleanups: Array<() => Promise<unknown>> = []
 afterEach(async () => { for (const cleanup of cleanups.splice(0).toReversed()) await cleanup() })
@@ -35,7 +35,6 @@ async function host(enhancedTools: boolean, priorEvents = false, persistence = f
   cleanups.push(() => ctx.fiber.dispose())
   await ctx.plugin(Loader)
   await mountAgentLoopTestDependencies(ctx, { tools: { mode: 'native' } })
-  await ctx.plugin(Projections)
   await ctx.plugin(AgentLoop)
   if (priorEvents) ctx.on('agent/created', ({ agent }) => {
     agent.session.append('model/selection', { provider: 'fixture', model: 'fixture' })
@@ -90,7 +89,7 @@ it.each([SEARCH, FETCH])('offers initial enabled row $rowId and follows actual w
   for (const name of names) expect(ctx.tools.get(name, scopeOf(agent.ctx))).toBeDefined()
 })
 
-async function controller(ctx: Context): Promise<SessionController> {
+async function controller(ctx: Context, root: string): Promise<SessionController> {
   await ctx.plugin(AgentDefaultModel, { provider: 'fixture', model: 'fixture' })
   await ctx.plugin(TypertRegistry)
   const resolvers = new Set<unknown>()
@@ -98,12 +97,12 @@ async function controller(ctx: Context): Promise<SessionController> {
     resolvers.add(resolver)
     return () => { resolvers.delete(resolver) }
   } } as never)
-  return new SessionController(ctx, { nativeOpen: false })
+  return mountSessionController(ctx, root)
 }
 
 it('authorizes a genuine Controller-created conversation even after earlier created listeners appended live events', async () => {
   const { ctx, root } = await host(true, true)
-  const api = await controller(ctx)
+  const api = await controller(ctx, root)
   const created = await api.create({ cwd: root })
   const agent = ctx.agents.get(created.sessionId)!
   expect(agent.session.seq).toBeGreaterThan(0)
@@ -160,7 +159,7 @@ it.each([false, true])('classifies a real JSONL resume using public lifecycle bo
 
 it.each([false, true])('inherits, never resnapshots, authorization for a Controller parent’s child (fork=%s)', async fork => {
   const { ctx, root } = await host(true, true)
-  const api = await controller(ctx)
+  const api = await controller(ctx, root)
   const parent = await api.create({ cwd: root })
   const child = await ctx.agents.create({
     sessionId: SessionId('controller-child'), meta: { parentSession: parent.sessionId, origin: 'subagent', isSeeded: fork },
@@ -174,6 +173,37 @@ it.each([false, true])('inherits, never resnapshots, authorization for a Control
   }
   for (const name of [SEARCH.tools.action, SEARCH.tools.list, FETCH.tools.action, FETCH.tools.list]) {
     expect(ctx.tools.get(name, scopeOf(child.agent.ctx))).toBeDefined()
+  }
+})
+
+it('initializes a real Controller user fork independently at its public inherited lifecycle cut', async () => {
+  const { ctx, root } = await host(true, true, true)
+  const api = await controller(ctx, root)
+  const parent = await api.create({ cwd: root })
+  const parentAgent = ctx.agents.get(parent.sessionId)!
+  for (const domain of ['web_search_enhanced', 'web_fetch_enhanced']) {
+    const storage = ctx.storageDomain.get(domain)!
+    await storage.table('provider_lists').put(parent.sessionId, [])
+    await storage.table('selections').put(parent.sessionId, { connectionId: null, revision: 1 })
+  }
+  const child = await api.fork({ sessionId: parent.sessionId, atSeq: parentAgent.session.seq - 1 })
+  const agent = ctx.agents.get(child.sessionId)!
+  expect(agent.session.header).toMatchObject({ isSeeded: true })
+  expect(agent.session.header.parentSession).toBeUndefined()
+  expect(agent.session.firstLifecycleSeq).toBe(agent.session.inheritedEventCount)
+  expect(isNewConversation(agent.session)).toBe(true)
+  for (const domain of ['web_search_enhanced', 'web_fetch_enhanced']) {
+    const storage = ctx.storageDomain.get(domain)!
+    const initial = domain === 'web_search_enhanced' ? searchPlugin.resolveSettings() : fetchPlugin.resolveSettings()
+    const selectable = [...initial.connections.values()].filter(connection => !connection.disabled).map(connection => connection.id)
+    expect(selectable.length).toBeGreaterThan(0)
+    expect(storage.table('provider_lists').get(agent.id)).toEqual(selectable)
+    expect(storage.table('selections').get(agent.id)).toMatchObject({ connectionId: expect.any(String), revision: 0 })
+    expect(storage.table('selections').get(parent.sessionId)).toMatchObject({ connectionId: null, revision: 1 })
+    expect(storage.table('provider_lists').get(parent.sessionId)).toEqual([])
+  }
+  for (const name of [SEARCH.tools.action, SEARCH.tools.list, FETCH.tools.action, FETCH.tools.list]) {
+    expect(ctx.tools.get(name, scopeOf(agent.ctx))).toBeDefined()
   }
 })
 

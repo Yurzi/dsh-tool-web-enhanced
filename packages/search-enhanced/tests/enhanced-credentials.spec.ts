@@ -1,4 +1,6 @@
 /** Credential dependency failures through the real registered enhanced tool, not a backend-only stub. */
+import { mountSessionController } from '../../core/tests/fixtures/session-controller.ts'
+import { toolCall } from '../../core/tests/fixtures/tool-call.ts'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -8,12 +10,10 @@ import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import SessionController from '@deepseek-ai/dsh-api-session-controller'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import Projections from '@deepseek-ai/dsh-session-projection'
 import Storage from '@deepseek-ai/dsh-storage'
 import * as StorageDomain from '@deepseek-ai/dsh-storage-domain'
 import * as StorageJson from '@deepseek-ai/dsh-storage-json'
@@ -64,14 +64,13 @@ async function host(account: boolean, provider: string) {
   onTestFinished(() => ctx.fiber.dispose())
   ctx.provide('launchEnvironment', createLaunchEnvironmentSnapshot([{ source: 'process', values: {} }]))
   await mountAgentLoopTestDependencies(ctx, { tools: { mode: 'native' } })
-  await ctx.plugin(Projections)
   await ctx.plugin(AgentLoop)
   await ctx.plugin(Storage)
   await ctx.plugin(StorageJson, { root: join(root, 'storage') })
   await ctx.plugin(StorageDomain, { backend: 'json' })
   await ctx.plugin(TypertRegistry)
   ctx.provide('fileUploads', { registerAgentResolver: () => () => {} } as never)
-  void new SessionController(ctx, { nativeOpen: false })
+  await mountSessionController(ctx, root)
   const credentials = new MemoryCredentials(ctx)
   await credentials.set(credentialRef('TEST_KEY'), SECRET)
   const accountService = { resolveToken: async (_url: string): Promise<string | undefined> => SECRET }
@@ -107,7 +106,7 @@ async function host(account: boolean, provider: string) {
   ctx.logger.exporter({ levels: { default: 3 }, export: entry => logs.push(entry.args) })
   const network = vi.fn(() => { throw new Error('credential failures must not reach the network') })
   vi.stubGlobal('fetch', network)
-  const call = (signal: AbortSignal) => ctx.tools.execute({ callId: ToolCallId('credential-call'), name: SEARCH.tools.action, arguments: { queries: ['q'], provider }, agent, signal })
+  const call = (signal: AbortSignal) => toolCall(ctx, { callId: ToolCallId('credential-call'), name: SEARCH.tools.action, arguments: { queries: ['q'], provider }, agent, signal })
   const resolver = account ? vi.spyOn(accountService, 'resolveToken') : vi.spyOn(credentials, 'resolve')
   return { resolver, call, logs, network }
 }

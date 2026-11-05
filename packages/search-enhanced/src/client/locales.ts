@@ -81,7 +81,7 @@ export const en = {
 
   'defaults.title': 'Defaults',
   'defaults.connection': 'Default connection',
-  'defaults.connectionHint': "A conversation that hasn't chosen uses, in order: its parent's choice (forked conversations only), the last choice for its model, then the default.",
+  'defaults.connectionHint': "A conversation that hasn't chosen uses its model's last choice, then the default. Only subagent_fork inherits a parent's choice; ordinary forks and spawn are independent.",
   'defaults.connectionUnset': 'Default ({name})',
   'defaults.connectionMissing': 'Missing: {id}',
   'defaults.freshness': 'Default freshness',
@@ -375,7 +375,7 @@ export const zh: Record<LocaleKey, string> = {
 
   'defaults.title': '默认值',
   'defaults.connection': '默认连接',
-  'defaults.connectionHint': '未自行选择的会话依次使用：父会话的选择（仅限分叉出的会话）、该模型上次的选择、默认连接。',
+  'defaults.connectionHint': '未自行选择的会话依次使用该模型上次的选择、默认连接。仅 subagent_fork 继承父会话选择；普通分叉与 spawn 独立选择。',
   'defaults.connectionUnset': '默认（{name}）',
   'defaults.connectionMissing': '不存在：{id}',
   'defaults.freshness': '默认实时性',

@@ -10,7 +10,7 @@ const fixture = (name: string) => join(import.meta.dirname, 'fixtures', name)
 const notice = 'authorized web_fetch to reach non-public addresses within [127.0.0.1/32]'
 
 describe('Fetch local allowlist in the real Host', () => {
-  it.each([false, true])('enforces loopback authorization and prompt context (override: %s)', async allowed => {
+  it.each([false, true])('follows upstream any mode or explicit loopback rules (override: %s)', async allowed => {
     enterIsolatedEnvironment(e2e.env)
     const overlays = allowed ? [fixture('fetch-allow-loopback.yml')] : []
     if (allowed) expect(composedRows(e2e, overlays).find(row => row.id === 'web-fetch-enhanced')?.config).toEqual({
@@ -25,8 +25,8 @@ describe('Fetch local allowlist in the real Host', () => {
         expect(await request).toMatchObject({ statusCode: 200, body: { kind: 'text', content: 'web-fetch-enhanced loopback fixture' } })
         expect(target.userAgents).toEqual(['wfe-e2e/1.0'])
       } else {
-        await expect(request).rejects.toMatchObject({ code: 'WEB_BLOCKED_URL' })
-        expect(target.userAgents).toEqual([])
+        expect(await request).toMatchObject({ statusCode: 200, body: { kind: 'text', content: 'web-fetch-enhanced loopback fixture' } })
+        expect(target.userAgents).toHaveLength(1)
       }
       const runtime = (await host.ctx.systemPrompt.assemble()).contexts.map(context => context.text).join('\n')
       if (allowed) expect(runtime).toContain(notice)
@@ -37,6 +37,31 @@ describe('Fetch local allowlist in the real Host', () => {
       } finally {
         await target.close()
       }
+    }
+  })
+
+  it('enables filtering with hostname-only rules and disables it only after both effective lists are cleared', async () => {
+    enterIsolatedEnvironment(e2e.env)
+    const host = await bootHost(e2e)
+    const target = await startFetchTarget()
+    try {
+      const fetch = () => host.web.fetch({ url: target.url }, AbortSignal.timeout(15_000))
+      expect(await fetch()).toMatchObject({ statusCode: 200 })
+      await host.ctx.settings.mutate('web-fetch-enhanced', [{ op: 'set', path: ['connections', 'builtin:local', 'options', 'allowHostnames'], value: ['localhost'] }])
+      await expect(fetch()).rejects.toMatchObject({ code: 'WEB_BLOCKED_URL' })
+      await host.ctx.settings.mutate('web-fetch-enhanced', [
+        { op: 'set', path: ['connections', 'builtin:local', 'options', 'allowCidrs'], value: ['127.0.0.1/32'] },
+        { op: 'set', path: ['connections', 'builtin:local', 'options', 'allowHostnames'], value: [] },
+      ])
+      expect(await fetch()).toMatchObject({ statusCode: 200 })
+      await host.ctx.settings.mutate('web-fetch-enhanced', [
+        { op: 'set', path: ['connections', 'builtin:local', 'options', 'allowCidrs'], value: [] },
+        { op: 'set', path: ['connections', 'builtin:local', 'options', 'allowHostnames'], value: [] },
+      ])
+      expect(await fetch()).toMatchObject({ statusCode: 200 })
+      expect(target.userAgents).toHaveLength(3)
+    } finally {
+      try { await host.dispose() } finally { await target.close() }
     }
   })
 

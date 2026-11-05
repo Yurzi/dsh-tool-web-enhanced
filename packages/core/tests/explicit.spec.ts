@@ -6,7 +6,6 @@ import Loader from '@deepseek-ai/cordis-plugin-loader'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import Projections from '@deepseek-ai/dsh-session-projection'
 import { SessionId, SessionLogOffset } from '@deepseek-ai/dsh-session'
 import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import Storage from '@deepseek-ai/dsh-storage'
@@ -21,6 +20,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { SEARCH, selectionContract, type ConnectionView } from '../src/shared/index.ts'
 import { installCapability, InvalidSettingsError, type Capability, type EnhancedAccess, type ExplicitCall } from '../src/host/index.ts'
 import { mountWebSettings } from './fixtures/web-settings.ts'
+import { toolCall } from './fixtures/tool-call.ts'
 
 const cleanups: Array<() => Promise<unknown>> = []
 afterEach(async () => { for (const cleanup of cleanups.splice(0).toReversed()) await cleanup() })
@@ -39,7 +39,6 @@ async function host(enhancedTools = true, native = false) {
   cleanups.push(() => ctx.fiber.dispose())
   await ctx.plugin(Loader)
   await mountAgentLoopTestDependencies(ctx, { tools: { mode: 'native' } })
-  await ctx.plugin(Projections)
   await ctx.plugin(AgentLoop)
   await mountWebSettings(ctx, root)
   if (native) await ctx.plugin(ToolWeb, { fetch: false })
@@ -353,7 +352,7 @@ it.each([true, false])('a malformed provider-list record never fails the native 
   const diagnostics: unknown[] = []
   h.ctx.logger.exporter({ levels: { default: 3 }, export: message => { diagnostics.push(message.args) } })
   await h.ctx.waterfall('agent/request', { agent, turn: 1, step: 0, signal: new AbortController().signal } as never, (async () => ({})) as never)
-  const native = await h.ctx.agents.withInitiator(agent, () => h.ctx.tools.execute({
+  const native = await h.ctx.agents.withInitiator(agent, () => toolCall(h.ctx, {
     name: 'web_search', arguments: { queries: ['q'] }, agent, callId: ToolCallId('native-list-failure'), signal: new AbortController().signal,
   }))
   expect(native.error).toBeUndefined()

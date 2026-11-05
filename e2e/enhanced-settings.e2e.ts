@@ -17,7 +17,7 @@ import fetchMeta from '../packages/fetch-enhanced/locale/zh.json'
 import { type App, browserRequired, chromiumPath, openApp, recordBrowserFailure } from './harness/browser.ts'
 import { isolatedContext, addPlugins, artifacts, composedRows, enterIsolatedEnvironment } from './harness/environment.ts'
 import { bootHost } from './harness/host.ts'
-import { newSession, openBundle, openConnectionTab, openConnections, openFetchSettings, openSearchSettings } from './harness/navigation.ts'
+import { openPluginsPanel, newSession, openBundle, openConnectionTab, openConnections, openFetchSettings, openSearchSettings } from './harness/navigation.ts'
 import { reviewScreenshot } from './harness/review.ts'
 import { modelViewport } from './harness/model-visuals.ts'
 import { expectTheme, setTheme } from './harness/theme.ts'
@@ -31,7 +31,7 @@ const matrix = [1280, 768, 390].flatMap(width => (['light', 'dark'] as const).fl
   (['en-US', 'zh-CN'] as const).map(locale => ({ width, scheme, locale }))))
 
 async function chineseSettings(page: Page, capability: typeof SEARCH) {
-  await page.getByRole('navigation', { name: '全局面板', exact: true }).getByRole('button', { name: '插件', exact: true }).click()
+  await openPluginsPanel(page, 'zh')
   const back = page.getByRole('button', { name: /^返回/ }).filter({ hasText: '增强网页工具' })
   if (await back.isVisible()) await back.click()
   const bundle = page.locator('[data-plugin-detail="' + PROFILE_PACKAGE + '"]')
@@ -179,8 +179,14 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Enhanced consen
       if ('error' in resolved) throw resolved.error
       await host.ctx.waterfall('agent/request', { agent: resolved.agent, turn: 1, step: 0, signal: new AbortController().signal } as never,
         (async () => ({ provider: 'e2e', model: 'e2e' })) as never)
-      const listed = await host.ctx.tools.execute({ name: FETCH.tools.list, arguments: {}, callId: callId('m5-enabled-list'),
-        signal: new AbortController().signal, agent: resolved.agent })
+      const signal = new AbortController().signal
+      const toolSet = await host.ctx.tools.resolve({ agent: resolved.agent, modelSelection: { provider: 'e2e', model: 'e2e' }, signal })
+      const batch = await host.ctx.tools.execute({
+        calls: [{ type: 'tool-call', id: callId('m5-enabled-list'), name: FETCH.tools.list, arguments: '{}' }],
+        signal, agent: resolved.agent, toolSet,
+      }).finally(() => toolSet.dispose())
+      expect(batch.results).toHaveLength(1)
+      const listed = batch.results[0]!.result
       expect(listed.isError, JSON.stringify(listed)).toBe(false)
       expect(JSON.stringify(listed.value)).toContain('builtin:firecrawl')
       const view = await host.ctx.fetchConnections.get({ sessionId })

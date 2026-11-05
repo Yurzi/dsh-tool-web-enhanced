@@ -6,9 +6,8 @@ import { Context } from '@deepseek-ai/cordis'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import Gateway from '@deepseek-ai/dsh-api-gateway'
-import SessionController from '@deepseek-ai/dsh-api-session-controller'
+import { mountSessionController } from './fixtures/session-controller.ts'
 import { SessionId } from '@deepseek-ai/dsh-session'
-import Projections from '@deepseek-ai/dsh-session-projection'
 import Storage from '@deepseek-ai/dsh-storage'
 import * as StorageDomain from '@deepseek-ai/dsh-storage-domain'
 import * as StorageJson from '@deepseek-ai/dsh-storage-json'
@@ -37,7 +36,6 @@ async function host() {
     name: 'fixture-runtime',
     async apply(runtime: Context) {
       await mountAgentLoopTestDependencies(runtime, { tools: { mode: 'native' } })
-      await runtime.plugin(Projections)
       await runtime.plugin(AgentLoop)
       await runtime.plugin(Storage)
       await runtime.plugin(StorageJson, { root })
@@ -46,11 +44,13 @@ async function host() {
       await runtime.plugin(TypertRegistry)
       await runtime.inject(['typert'], gateway => { void new Gateway(gateway, {}) })
       const uploadResolvers = new Set<unknown>()
-      runtime.provide('fileUploads', { registerAgentResolver: (resolver: unknown) => {
-        uploadResolvers.add(resolver)
-        return () => { uploadResolvers.delete(resolver) }
-      } } as never)
-      void new SessionController(ctx, { nativeOpen: false })
+      await runtime.plugin({ name: 'fixture-upload-resolver', apply(uploads: Context) {
+        uploads.provide('fileUploads', { registerAgentResolver: (resolver: unknown) => {
+          uploadResolvers.add(resolver)
+          return () => { uploadResolvers.delete(resolver) }
+        } } as never)
+      } })
+      await mountSessionController(runtime, root)
       // Unlike root-level fixture installation, service providers are not ancestors
       // of this row scope. Each nested Remote must declare its own required services.
       await runtime.plugin({

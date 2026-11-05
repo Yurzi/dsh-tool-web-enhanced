@@ -9,14 +9,14 @@ import SubprocessLocal from '@deepseek-ai/dsh-subprocess-local'
 import { parse } from 'yaml'
 
 export async function shippedWebPreset(ctx: Context, id: 'standard' | 'minimal' | 'ptc'): Promise<void> {
-  // Resolve shipped plugin rows from their bundle, including its presentation dependency.
+  // Resolve shipped plugin rows from their bundle, including the PTC executor that owns model descriptions in rc.1.
   ctx.baseUrl = new URL('../', import.meta.resolve('@deepseek-ai/dsh-web-app')).href
   const url = import.meta.resolve('@deepseek-ai/dsh-web-app/presets/' + id + '.patch.yml')
   const text = await readFile(new URL(url), 'utf8')
   // Platform expressions belong only to excluded shell rows; no JS evaluation is needed.
   const patches = parse(text, { customTags: [{ tag: 'tag:yaml.org,2002:js', resolve: () => false }] }) as Array<{ insert: Array<{ config: PresetDefinition }> }>
   const preset = patches[0]!.insert[0]!.config
-  await ctx.agentPresets.register({ ...preset, plugins: preset.plugins.filter(row => row.id === 'tool-web' || row.id === 'tool-presentation') })
+  await ctx.agentPresets.register({ ...preset, plugins: preset.plugins.filter(row => row.id === 'tool-web' || row.id === 'tool-executor-ptc') })
 }
 
 /** The local runtime rows the shipped PTC preset expects, in the order DSH mounts them. */
