@@ -9,7 +9,7 @@
 [![npm](https://img.shields.io/npm/v/dsh-tool-web-enhanced-profile?style=flat-square)](https://www.npmjs.com/package/dsh-tool-web-enhanced-profile)
 [![CI](https://github.com/Yurzi/dsh-tool-web-enhanced/actions/workflows/ci.yml/badge.svg)](https://github.com/Yurzi/dsh-tool-web-enhanced/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
-[![DSH](https://img.shields.io/badge/DSH-%3E%3D0.2.2--rc.1%20%3C0.3.0--0-536DFE?style=flat-square)](packages/profile/package.json)
+[![DSH](https://img.shields.io/badge/DSH-%3E%3D0.2.2--rc.5%20%3C0.3.0--0-536DFE?style=flat-square)](packages/profile/package.json)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D24.9.0-green?style=flat-square)](packages/profile/package.json)
 
 </div>
@@ -30,7 +30,7 @@ DSH 的 `web` 行为 `web_search` 与 `web_fetch` 各指定一个 provider，整
 
 ## 安装
 
-要求：DSH `>=0.2.2-rc.1 <0.3.0-0`，Node.js `>=24.9.0`。
+要求：DSH `>=0.2.2-rc.5 <0.3.0-0`，Node.js `>=24.9.0`。
 
 只需要安装 profile 包，它会带上另外三个包：
 
@@ -189,10 +189,10 @@ dsh-web-search-enhanced 与 dsh-web-fetch-enhanced 的 0.1.x 版本原本各自�
 
 | 包 | 版本 | 作用 |
 | --- | --- | --- |
-| [dsh-tool-web-enhanced-profile](packages/profile/README.md) | 0.1.4 | 要安装的 bundle，不含代码：挂载下面三个包，并在 `web` 行选中两个插件的 provider |
-| [dsh-web-search-enhanced](packages/search-enhanced/README.md) | 0.2.4 | 行 `web-search-enhanced`，`web_search` 的 provider `search-enhanced`，内部切换搜索后端 |
-| [dsh-web-fetch-enhanced](packages/fetch-enhanced/README.md) | 0.2.4 | 行 `web-fetch-enhanced`，`web_fetch` 的 provider `fetch-enhanced`，内部切换抓取后端 |
-| [dsh-tool-web-enhanced-ui](packages/ui/README.md) | 0.1.4 | 行 `tool-web-enhanced-ui`：输入框的连接菜单、首次启用提示与插件页上的组合包概览；不依赖两个插件行 |
+| [dsh-tool-web-enhanced-profile](packages/profile/README.md) | 0.1.5 | 要安装的 bundle，不含代码：挂载下面三个包，并在 `web` 行选中两个插件的 provider |
+| [dsh-web-search-enhanced](packages/search-enhanced/README.md) | 0.2.5 | 行 `web-search-enhanced`，`web_search` 的 provider `search-enhanced`，内部切换搜索后端 |
+| [dsh-web-fetch-enhanced](packages/fetch-enhanced/README.md) | 0.2.5 | 行 `web-fetch-enhanced`，`web_fetch` 的 provider `fetch-enhanced`，内部切换抓取后端 |
+| [dsh-tool-web-enhanced-ui](packages/ui/README.md) | 0.1.5 | 行 `tool-web-enhanced-ui`：输入框的连接菜单、首次启用提示与插件页上的组合包概览；不依赖两个插件行 |
 
 `dsh-tool-web-enhanced-core` 是私有的共享源码，构建时内联进各插件，不发布。
 

@@ -44,11 +44,28 @@ it('shares native launch-plane auth without doing I/O at construction', async ()
   try {
     const auth = nativeAuth(ctx, 'CUSTOM_KEY')
     expect(auth.apiKeyEnv).toBe('CUSTOM_KEY')
+    await expect(auth.apiKeyConfigured()).resolves.toBe(true)
     await expect(auth.resolveApiKey()).resolves.toBe('test-key')
     await expect(routeApiKey(ctx, 'CUSTOM_KEY')).resolves.toBe('test-key')
     await expect(routeApiKey(ctx, 'MISSING_KEY')).resolves.toBeUndefined()
     await expect(resolveApiKey(ctx, 'CUSTOM_KEY')).resolves.toBeUndefined()
     await expect(auth.resolveAccountToken('https://example.test')).resolves.toBeUndefined()
+    await expect(auth.rejectAccountToken('unused-token')).resolves.toBeUndefined()
+  } finally { await ctx.fiber.dispose() }
+})
+
+it('forwards rejectAccountToken to deepseekAccount and contains storage failures', async () => {
+  const ctx = new Context()
+  const rejected: string[] = []
+  ctx.provide('deepseekAccount', {
+    rejectToken: async (token: string) => {
+      rejected.push(token)
+      throw new Error('storage unavailable')
+    },
+  } as never)
+  try {
+    await expect(nativeAuth(ctx, 'DEEPSEEK_API_KEY').rejectAccountToken('expired-token')).resolves.toBeUndefined()
+    expect(rejected).toEqual(['expired-token'])
   } finally { await ctx.fiber.dispose() }
 })
 

@@ -13,6 +13,14 @@ import { describeConnections } from './connections.ts'
 import { optionsCodec, type FetchOptions } from './options.ts'
 import type {} from './remote.ts'
 
+const FETCH_PROVIDER_METADATA = {
+  title: 'Web Fetch Enhanced',
+  description: {
+    en: 'Switchable web fetch connections per conversation: local HTTP (with optional private-network rules), DeepSeek Fetch API, or remote reading services. Configure in the Web Fetch Enhanced plugin settings.',
+    zh: '按会话切换网页获取连接：本机 HTTP（可选内网放行规则）、DeepSeek Fetch API 或远程读取服务。请在「增强网页获取」插件设置中配置。',
+  },
+} as const
+
 export function fetchCapability(ctx: Context, settings: () => ResolvedSettings): Capability<ResolvedSettings, FetchOptions, FetchConnectionView, WebFetchProvider, WebFetchRequest, WebFetchResult> {
   return {
     identity: FETCH,
@@ -34,7 +42,7 @@ export function fetchCapability(ctx: Context, settings: () => ResolvedSettings):
     },
     execute: (provider, request, call) => provider.fetch(request, call.signal),
     register: (scope, invoke) => {
-      scope.web.registerFetchProvider({ id: FETCH.providerId, available: () => true, fetch: invoke })
+      scope.web.registerFetchProvider({ id: FETCH.providerId, ...FETCH_PROVIDER_METADATA, available: () => true, fetch: invoke })
     },
     enhanced: fetchEnhanced(ctx),
   }

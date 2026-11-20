@@ -11,7 +11,7 @@ import { WEB_SEARCH_MAX_QUERIES, WEB_SEARCH_MAX_RESULTS } from '@deepseek-ai/dsh
 import type { WebSearchRequest, WebSearchResult, WebSearchSource } from '@deepseek-ai/dsh-web'
 import { invalidArguments } from 'dsh-tool-web-enhanced-core/host'
 
-/** tool-web's `parseSearchArgs`: 1–4 non-blank queries, exact duplicates collapsed after the bound check. */
+/** tool-web's `parseSearchArgs`: 1–10 non-blank queries, exact duplicates collapsed after the bound check. */
 export function parseQueries(queries: readonly string[]): string[] {
   if (queries.length === 0) throw invalidArguments('queries must contain at least one query')
   if (queries.length > WEB_SEARCH_MAX_QUERIES) throw invalidArguments(`queries must contain at most ${WEB_SEARCH_MAX_QUERIES} queries`)

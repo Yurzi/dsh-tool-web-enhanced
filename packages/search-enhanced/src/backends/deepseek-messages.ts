@@ -17,7 +17,10 @@ export function messagesOptions(ctx: Context, { credentialRef, options }: Native
   const environmentBase = launchEnvironmentOf(ctx).get('DEEPSEEK_SEARCH_BASE_URL')
   const defaultBase = environmentBase === undefined ? DEEPSEEK_DEFAULT_BASE_URL : environmentBase.value
   return {
-    ...auth,
+    apiKeyEnv: auth.apiKeyEnv,
+    resolveAccountToken: auth.resolveAccountToken,
+    rejectAccountToken: auth.rejectAccountToken,
+    resolveApiKey: auth.resolveApiKey,
     baseURL: typeof options.baseURL === 'string' ? options.baseURL : defaultBase,
     model: typeof options.model === 'string' ? options.model : DEEPSEEK_DEFAULT_MODEL,
     apiVersion: typeof options.apiVersion === 'string' ? options.apiVersion : DEEPSEEK_DEFAULT_API_VERSION,

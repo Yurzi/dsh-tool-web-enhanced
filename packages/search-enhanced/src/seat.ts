@@ -13,9 +13,14 @@ import type { WebSearchProvider } from '@deepseek-ai/dsh-web'
  * @param select - picks the backend for one call; must not do I/O.
  * @returns the provider `ctx.web` calls.
  */
-export function createSearchSeat(id: string, select: () => WebSearchProvider): WebSearchProvider {
+export function createSearchSeat(
+  id: string,
+  select: () => WebSearchProvider,
+  metadata?: Pick<WebSearchProvider, 'title' | 'description'>,
+): WebSearchProvider {
   return {
     id,
+    ...metadata,
     // Whether a Session can search depends on its selection, known only at call time.
     available: () => true,
     search: (request, signal) => select().search(request, signal),

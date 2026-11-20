@@ -42,7 +42,7 @@ export function auditRuntimePeers(directory: string, owners: readonly string[]) 
     paths.add(root)
     instances.set(name, paths)
     if (name.startsWith('@deepseek-ai/dsh-')) {
-      const expected = name === '@deepseek-ai/dsh-invariants' ? '0.1.7-rc.2' : '0.2.2-rc.1'
+      const expected = name === '@deepseek-ai/dsh-invariants' ? '0.1.7-rc.2' : '0.2.2-rc.5'
       assert.equal(manifest.version, expected, `${name} must use the published target (invariants is independently versioned)` )
     }
     if (name === '@deepseek-ai/cordis') assert.equal(manifest.version, '4.1.0')

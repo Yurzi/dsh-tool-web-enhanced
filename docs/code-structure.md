@@ -31,11 +31,11 @@ docs/orchestration-prompt.md：维护者维护的多 agent 开发任务说明（
 
 | 包目录 / manifest | npm 名称 | 版本 | exports 与 DSH 元数据 |
 | --- | --- | --- | --- |
-| [profile](<../packages/profile/package.json>) | dsh-tool-web-enhanced-profile | 0.1.4 | 导出 patch、locale、icon、package.json；dsh.bundle.patch 指向 patch。 |
+| [profile](<../packages/profile/package.json>) | dsh-tool-web-enhanced-profile | 0.1.5 | 导出 patch、locale、icon、package.json；dsh.bundle.patch 指向 patch。 |
 | [core](<../packages/core/package.json>) | dsh-tool-web-enhanced-core | 0.0.0 | private；./shared、./host、./client 直接指向源码；无 dsh 字段。 |
-| [search-enhanced](<../packages/search-enhanced/package.json>) | dsh-web-search-enhanced | 0.2.4 | 插件导出；dsh.client.platform = web。 |
-| [fetch-enhanced](<../packages/fetch-enhanced/package.json>) | dsh-web-fetch-enhanced | 0.2.4 | 插件导出；dsh.client.platform = web。 |
-| [ui](<../packages/ui/package.json>) | dsh-tool-web-enhanced-ui | 0.1.4 | 插件导出；dsh.client.platform = web。 |
+| [search-enhanced](<../packages/search-enhanced/package.json>) | dsh-web-search-enhanced | 0.2.5 | 插件导出；dsh.client.platform = web。 |
+| [fetch-enhanced](<../packages/fetch-enhanced/package.json>) | dsh-web-fetch-enhanced | 0.2.5 | 插件导出；dsh.client.platform = web。 |
+| [ui](<../packages/ui/package.json>) | dsh-tool-web-enhanced-ui | 0.1.5 | 插件导出；dsh.client.platform = web。 |
 
 三个插件共用 exports：`. → ./lib/index.js`、`./client → ./lib/client.cjs`，以及 locale JSON、icon SVG 与 package.json；均为 `sideEffects: false`，没有运行时 dependencies。profile 的 dependencies 是三个公开插件；core 只作为开发依赖参与内联。
 

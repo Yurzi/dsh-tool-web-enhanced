@@ -52,6 +52,11 @@ export function nativeAuth(ctx: Context, ref: string, secrets = new Set<string>(
       const resolve = accountTokenFor(ctx, ctx.get('agents')?.currentInitiator())
       return resolve === undefined ? undefined : await resolve(endpoint)
     }),
+    rejectAccountToken: async (token: string): Promise<void> => {
+      try { await ctx.get('deepseekAccount')?.rejectToken(token) }
+      catch { /* Storage failure must not replace the request failure. */ }
+    },
+    apiKeyConfigured: (): Promise<boolean> => routeKeyConfigured(ctx, ref, 'route'),
     resolveApiKey: () => tracked(() => routeApiKey(ctx, ref)),
   }
 }

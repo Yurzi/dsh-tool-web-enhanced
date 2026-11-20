@@ -39,7 +39,7 @@ function isHostPeer(name: string): boolean {
 
 function assertVersion(name: string, version: string | undefined): void {
   if (name === '@deepseek-ai/cordis') assert.equal(version, '4.1.0')
-  else if (name.startsWith('@deepseek-ai/dsh-')) assert.equal(version, name === '@deepseek-ai/dsh-invariants' ? '0.1.7-rc.2' : '0.2.2-rc.1', name)
+  else if (name.startsWith('@deepseek-ai/dsh-')) assert.equal(version, name === '@deepseek-ai/dsh-invariants' ? '0.1.7-rc.2' : '0.2.2-rc.5', name)
 }
 
 /** Emitted-JS probe plus the public boot table. Node require conditions may differ from ESM import conditions; dynamic expressions are not claimed exhausted. */

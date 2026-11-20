@@ -10,7 +10,7 @@ import { auditHostRuntime } from './harness/host-runtime-peers.ts'
 
 const e2e = inject('e2e')
 
-it('the packed profile resolves one exact rc.1 DSH graph and the same Cordis module identity as its Host', async () => {
+it('the packed profile resolves one exact rc.5 DSH graph and the same Cordis module identity as its Host', async () => {
   enterIsolatedEnvironment(e2e.env)
   // rc.1 routes Host peers through the public PluginPackages runtime interception.
   const host = await bootHost(e2e)

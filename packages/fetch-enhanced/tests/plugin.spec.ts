@@ -65,8 +65,16 @@ describe('fetch seat', () => {
     await expect(ctx.web.fetch({ url: 'https://example.org/' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_CONFIGURED_MISSING' })
   })
 
-  it('is the provider the web row selects', async () => {
+  it('is the provider the web row selects and publishes picker metadata', async () => {
     const { ctx } = await compose({ connections: { 'builtin:local': { options: { allowHostnames: ['public-filter.invalid'] } } } })
+    expect(ctx.web.listProviders().fetch).toContainEqual({
+      id: FETCH.providerId,
+      title: 'Web Fetch Enhanced',
+      description: {
+        en: expect.any(String),
+        zh: expect.any(String),
+      },
+    })
     // The unique Seat reaches explicit public-only preflight, not a missing registration.
     await expect(ctx.web.fetch({ url: 'http://127.0.0.1:9/' })).rejects.toMatchObject({ code: 'WEB_BLOCKED_URL' })
   })

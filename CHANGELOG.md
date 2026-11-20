@@ -1,5 +1,40 @@
 # Changelog
 
+## v0.1.5 (2026-11-21)
+
+### Breaking
+
+- Target exact published DSH **0.2.2-rc.5**, Cordis **4.1.0**, and Node **>=24.9.0** in development, CI and isolated testing. Published `engines.dsh` and `@deepseek-ai/dsh-*` peer minimums move to `>=0.2.2-rc.5 <0.3.0-0`.
+
+### dsh-tool-web-enhanced-profile 0.1.5
+
+- Mounts dsh-web-search-enhanced **0.2.5**, dsh-web-fetch-enhanced **0.2.5** and dsh-tool-web-enhanced-ui **0.1.5** with these three exact dependency versions in the packed profile; `cordis.patch.yml` behaviour is unchanged.
+
+### dsh-tool-web-enhanced-ui 0.1.5
+
+- Rebuild against the rc.5 Web platform with updated DSH peer minimums, retaining the single shared composer menu, activation prompt and bundle overview.
+
+### dsh-web-search-enhanced 0.2.5
+
+- Migrate `builtin:deepseek-search-api` to DSH `0.2.2-rc.5`'s `DeepSeekSearchApiOptions` `auth.sources`, `guidance` and `requestsPerSecond` contract, and wire `rejectAccountToken` on `builtin:deepseek-messages`.
+- Publish bilingual `title` and `description` metadata on the registered `search-enhanced` `WebSearchProvider` for DSH's shared Web settings page.
+- Retain existing default connections (`builtin:deepseek-messages`) and align query/result limit checks with `0.2.2-rc.5` (`WEB_SEARCH_MAX_QUERIES = 10`, `WEB_SEARCH_MAX_RESULTS = 10`).
+
+### dsh-web-fetch-enhanced 0.2.5
+
+- Migrate `builtin:deepseek-fetch-api` to DSH `0.2.2-rc.5`'s `DeepSeekFetchApiOptions` `auth.sources` and `guidance` contract.
+- Publish bilingual `title` and `description` metadata on the registered `fetch-enhanced` `WebFetchProvider` for DSH's shared Web settings page.
+- Retain existing default connections (`builtin:local`) and opt-in remote service defaults unchanged.
+
+### dsh-tool-web-enhanced-core (private, not published)
+
+- `./host`: `nativeAuth` now exposes `rejectAccountToken` (swallowing storage errors so request failures are preserved) and `apiKeyConfigured` for `0.2.2-rc.5` native provider auth sources.
+
+### Development and release
+
+- Upgrade exact manifests, catalog, lockfile, `verify-packages` baseline, peer runtime audits and isolated E2E suite to DSH `0.2.2-rc.5` (updating E2E specs for `WEB_SEARCH_MAX_RESULTS`, `subagents.waitForTreeWork` and `send_message`'s `agent` parameter).
+
+
 ## v0.1.4 (2026-11-05)
 
 ### Breaking

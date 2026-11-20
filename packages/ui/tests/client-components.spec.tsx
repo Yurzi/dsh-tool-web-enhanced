@@ -51,7 +51,6 @@ vi.mock('@deepseek-ai/dsh-client-ui-primitives', async importOriginal => {
         {text}
       </div>
     ),
-    useAnchoredPosition: () => ({ top: 0, left: 0 }),
     useDismissOnOutsidePointer: () => {},
     IconGlobeOutlineRegular: (props: any) => <svg data-testid="icon-globe" {...props} />,
     IconChevronDownOutlineRegular: (props: any) => <svg data-testid="icon-chevron" {...props} />,

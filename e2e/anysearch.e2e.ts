@@ -3,6 +3,7 @@ import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import type { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type { createUserMessage } from '@deepseek-ai/dsh-llm'
+import type { WEB_SEARCH_MAX_RESULTS as WebSearchMaxResults } from '@deepseek-ai/dsh-tool-web'
 import { PROFILE_PACKAGE } from 'dsh-tool-web-enhanced-core/shared'
 import { stringify } from 'yaml'
 import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest'
@@ -17,6 +18,7 @@ const e2e = isolatedContext(inject('e2e'))
 const require = createRequire(join(e2e.install, 'node_modules/@deepseek-ai/dsh/package.json'))
 const { credentialRef: ref } = require('@deepseek-ai/dsh-credentials') as { credentialRef: typeof credentialRef }
 const { createUserMessage: userMessage } = require('@deepseek-ai/dsh-llm') as { createUserMessage: typeof createUserMessage }
+const { WEB_SEARCH_MAX_RESULTS: maxResults } = require('@deepseek-ai/dsh-tool-web') as { WEB_SEARCH_MAX_RESULTS: typeof WebSearchMaxResults }
 const key = ref(fixture.credentialRef)
 const invalidMessage = 'dsh-web-fetch-enhanced: ' + fixture.fetchLabel + ' refused the URL as invalid or not allowed; check the URL'
   + '\n\n' + fixture.fetchLabel + ' responded (untrusted): URL is invalid.'
@@ -132,7 +134,7 @@ describe('AnySearch through the real DSH with loopback services only', () => {
         expect(request.method).toBe('POST')
         expect(request.headers.authorization).toBe('Bearer ' + fixture.key)
         const body = JSON.parse(request.body)
-        if (request.path === '/v1/search') expect(body).toEqual({ query: fixture.query, max_results: 8, zone: 'intl', language: 'en' })
+        if (request.path === '/v1/search') expect(body).toEqual({ query: fixture.query, max_results: maxResults, zone: 'intl', language: 'en' })
         else expect(Object.keys(body)).toEqual(['url'])
       }
     } finally {

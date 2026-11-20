@@ -14,6 +14,14 @@ import { describeConnections } from './connections.ts'
 import { optionsCodec, type SearchOptions } from './options.ts'
 import type {} from './remote.ts'
 
+const SEARCH_PROVIDER_METADATA = {
+  title: 'Web Search Enhanced',
+  description: {
+    en: 'Switchable web search connections per conversation: native DeepSeek search, remote search services, or a model with server-side search. Configure in the Web Search Enhanced plugin settings.',
+    zh: '按会话切换网页搜索连接：原生 DeepSeek 搜索、远程搜索服务或带服务端搜索的模型。请在「增强网页搜索」插件设置中配置。',
+  },
+} as const
+
 export function searchCapability(ctx: Context, settings: () => ResolvedSettings): Capability<ResolvedSettings, SearchOptions, SearchConnectionView, SearchTarget | ModelSearchTarget, WebSearchRequest, WebSearchResult> {
   return {
     identity: SEARCH, tool: 'web_search', field: 'searchProvider',
@@ -44,7 +52,7 @@ export function searchCapability(ctx: Context, settings: () => ResolvedSettings)
       }, call.signal)
       return executeSearch(target, request, { onDiagnostic, credential: ref => resolveApiKey(ctx, ref) }, call.signal)
     },
-    register: (scope, invoke) => { scope.web.registerSearchProvider(createSearchSeat(SEARCH.providerId, () => ({ id: SEARCH.providerId, available: () => true, search: invoke }))) },
+    register: (scope, invoke) => { scope.web.registerSearchProvider(createSearchSeat(SEARCH.providerId, () => ({ id: SEARCH.providerId, available: () => true, search: invoke }), SEARCH_PROVIDER_METADATA)) },
     enhanced: searchEnhanced(ctx),
   }
 }

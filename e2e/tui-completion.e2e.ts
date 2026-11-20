@@ -26,7 +26,7 @@ function installTui(profileName = 'web'): void {
   const parents = ['@deepseek-harness-tui/dsh-tui@0.16.1>', 'dsh-working-activity@0.5.1>', '@deepseek-ai/dsh-invariants@0.1.7-rc.2>']
   config.peerDependencyRules = { allowedVersions: Object.fromEntries(Object.entries(workspace.peerDependencyRules.allowedVersions).filter(([key]) => parents.some(parent => key.startsWith(parent)))) }
   writeFileSync(file, stringify(config))
-  dsh(e2e, ['plugin', '--profile', profileName, 'allow-version', '@deepseek-harness-tui/dsh-tui@0.16.1', '--dsh-version', '0.2.2-rc.1', '--accept-risk'])
+  dsh(e2e, ['plugin', '--profile', profileName, 'allow-version', '@deepseek-harness-tui/dsh-tui@0.16.1', '--dsh-version', '0.2.2-rc.5', '--accept-risk'])
   addPlugins(e2e, ['@deepseek-harness-tui/dsh-tui@0.16.1'], {}, profileName)
 }
 const fixture = (name: string) => join(import.meta.dirname, 'fixtures', name)

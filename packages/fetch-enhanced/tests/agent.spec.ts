@@ -404,7 +404,7 @@ it.each([false, true])('inherits the provider list into a child before its first
   const parent = await create('enhanced-parent')
   cleanups.push(() => parent.dispose())
   const child = await ctx.agents.create({
-    sessionId: SessionId('enhanced-child'), parentAgent: parent.agent,
+    sessionId: SessionId('enhanced-child'),
     meta: { parentSession: parent.agent.id, origin: 'subagent', isSeeded: fork },
     ...(fork ? { seed: [], inheritedEventCount: SessionLogOffset(0) } : {}),
     setup: scope => { ctx.agentPresets.composeFrom(scope, parent.agent.ctx) },

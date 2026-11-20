@@ -3,10 +3,12 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { WebSearchProvider } from '@deepseek-ai/dsh-web'
 import {
   DEEPSEEK_DEFAULT_COUNT,
+  DEEPSEEK_SEARCH_REQUESTS_PER_SECOND,
   DEEPSEEK_WEB_API_BASE_URL,
   DeepSeekSearchApiProvider,
   type DeepSeekSearchApiOptions,
 } from '@deepseek-ai/dsh-web-deepseek-api'
+import { SEARCH } from 'dsh-tool-web-enhanced-core/shared'
 import { DEFAULT_NATIVE_OVERRIDES, nativeAuth, nativeBackend, type NativeOverrides } from './common.ts'
 
 function latestUserQuestion(ctx: Context): string | undefined {
@@ -19,10 +21,37 @@ function latestUserQuestion(ctx: Context): string | undefined {
 }
 
 export function searchApiOptions(ctx: Context, { credentialRef, options }: NativeOverrides, auth = nativeAuth(ctx, credentialRef)): DeepSeekSearchApiOptions {
+  const customBaseURL = typeof options.baseURL === 'string' ? options.baseURL : undefined
+  const baseURL = customBaseURL ?? DEEPSEEK_WEB_API_BASE_URL
   return {
-    ...auth,
-    baseURL: typeof options.baseURL === 'string' ? options.baseURL : DEEPSEEK_WEB_API_BASE_URL,
+    auth: {
+      sources: [
+        {
+          kind: 'account',
+          baseURL,
+          resolveToken: auth.resolveAccountToken,
+          rejectToken: auth.rejectAccountToken,
+        },
+        {
+          kind: 'api-key',
+          baseURL,
+          key: {
+            ref: auth.apiKeyEnv,
+            configured: auth.apiKeyConfigured,
+            resolve: auth.resolveApiKey,
+          },
+        },
+      ],
+    },
+    guidance: {
+      subject: 'Search',
+      plugin: SEARCH.rowId,
+      custom: customBaseURL !== undefined,
+      baseURLField: 'baseURL',
+      apiKeyEnvField: 'credentialRef',
+    },
     count: typeof options.count === 'number' ? options.count : DEEPSEEK_DEFAULT_COUNT,
+    requestsPerSecond: typeof options.requestsPerSecond === 'number' ? options.requestsPerSecond : DEEPSEEK_SEARCH_REQUESTS_PER_SECOND,
     ...(options.sendOriginalQuestion === false ? {} : { originalQuestion: () => latestUserQuestion(ctx) }),
   }
 }

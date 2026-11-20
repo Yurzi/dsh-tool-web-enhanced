@@ -1,6 +1,6 @@
 # dsh-web-fetch-enhanced
 
-Requires DSH `>=0.2.2-rc.1 <0.3.0-0` and Node `>=24.9.0`. Development and isolated end-to-end tests target the exact published DSH `0.2.2-rc.1` release.
+Requires DSH `>=0.2.2-rc.5 <0.3.0-0` and Node `>=24.9.0`. Development and isolated end-to-end tests target the exact published DSH `0.2.2-rc.5` release.
 
 Fetch half of [dsh-tool-web-enhanced-profile](../profile/README.md).
 **Install the profile, not this package**: the profile mounts this package as

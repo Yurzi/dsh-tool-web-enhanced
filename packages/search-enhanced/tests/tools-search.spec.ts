@@ -69,7 +69,7 @@ describe('definitions', () => {
       parameters: {
         type: 'object',
         properties: {
-          queries: { type: 'array', items: { type: 'string' }, description: '1–4 search queries; their results are merged.' },
+          queries: { type: 'array', items: { type: 'string' }, description: '1–10 search queries; their results are merged.' },
           provider: { type: 'string', description: 'Provider id exactly as listed by list_web_search_providers.' },
         },
         required: ['queries', 'provider'],
@@ -101,7 +101,7 @@ describe('arguments', () => {
     expect(failure(await run('web_search_enhanced', { queries: ['q'], provider: 'builtin:exa', note: 'x' }))?.message).toBe('invalid arguments: unknown property')
     expect(failure(await run('list_web_search_providers', { verbose: true }))?.message).toBe('invalid arguments: unknown property')
     expect(failure(await run('web_search_enhanced', { queries: [], provider: 'bad' }))?.message).toBe('invalid arguments: queries must contain at least one query')
-    expect(failure(await run('web_search_enhanced', { queries: ['a', 'b', 'c', 'd', 'e'], provider: 'builtin:exa' }))?.message).toBe('invalid arguments: queries must contain at most 4 queries')
+    expect(failure(await run('web_search_enhanced', { queries: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k'], provider: 'builtin:exa' }))?.message).toBe('invalid arguments: queries must contain at most 10 queries')
     expect(failure(await run('web_search_enhanced', { queries: ['a', '  '], provider: 'builtin:exa' }))?.message).toBe('invalid arguments: each query must be a non-empty string')
     expect(failure(await run('web_search_enhanced', { queries: ['a'] }))?.message).toBe('invalid arguments: missing required property "provider"')
     expect(ready).not.toHaveBeenCalled()
@@ -109,7 +109,7 @@ describe('arguments', () => {
 
   it('words query problems exactly as tool-web does, behind the argument-error prefix', async () => {
     const { run } = await host({})
-    for (const queries of [[], ['a', 'b', 'c', 'd', 'e'], ['a', ' \t ']]) {
+    for (const queries of [[], ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k'], ['a', ' \t ']]) {
       const native = failure(await run('web_search', { queries }))
       const enhanced = failure(await run('web_search_enhanced', { queries, provider: 'builtin:exa' }))
       expect(enhanced?.message).toBe(`invalid arguments: ${native?.message}`)
@@ -136,7 +136,7 @@ describe('arguments', () => {
 })
 
 describe('search', () => {
-  it('runs each distinct query once, concurrently, as the calling Agent with at most 8 sources', async () => {
+  it('runs each distinct query once, concurrently, as the calling Agent with at most 10 sources', async () => {
     const pending = new Map<string, ReturnType<typeof deferred<Explicit<WebSearchResult>>>>()
     const started = deferred<void>()
     const runAccess = vi.fn((_id: string, request: WebSearchRequest, _call: ExplicitCall) => {
@@ -149,8 +149,8 @@ describe('search', () => {
     const result = run('web_search_enhanced', { queries: ['alpha', 'beta', 'alpha'], provider: 'builtin:exa' })
     await started.promise
     expect(runAccess.mock.calls.map(([id, request, call]) => [id, request, call.agent])).toEqual([
-      ['builtin:exa', { query: 'alpha', maxResults: 8 }, agent],
-      ['builtin:exa', { query: 'beta', maxResults: 8 }, agent],
+      ['builtin:exa', { query: 'alpha', maxResults: 10 }, agent],
+      ['builtin:exa', { query: 'beta', maxResults: 10 }, agent],
     ])
     pending.get('beta')?.resolve(done({ sources: sources('b', 1), truncated: false }))
     pending.get('alpha')?.resolve(done({ sources: sources('a', 1), truncated: false }))
@@ -162,11 +162,11 @@ describe('search', () => {
   it('caps each result before merging, as the seam does for web_search', async () => {
     const { run } = await host({ run: async (_id, request) => done({ sources: [{ url: 'https://shared/x' }, ...sources(request.query, 12)], truncated: false }) })
     const single = (await run('web_search_enhanced', { queries: ['one'], provider: 'builtin:exa' })).value as { sources: unknown[]; truncated: boolean }
-    expect(single.sources).toHaveLength(8)
+    expect(single.sources).toHaveLength(10)
     expect(single.truncated).toBe(true)
     const merged = (await run('web_search_enhanced', { queries: ['a', 'b'], provider: 'builtin:exa' })).value as { sources: Array<{ url: string }>; truncated: boolean }
-    // Rank 0: the shared URL once, then a/0 and b/0 in turn; the cut at 8 drops later ranks.
-    expect(merged.sources.map(source => source.url)).toEqual(['https://shared/x', 'https://a/0', 'https://b/0', 'https://a/1', 'https://b/1', 'https://a/2', 'https://b/2', 'https://a/3'])
+    // Rank 0: the shared URL once, then a/0 and b/0 in turn; the cut at 10 drops later ranks.
+    expect(merged.sources.map(source => source.url)).toEqual(['https://shared/x', 'https://a/0', 'https://b/0', 'https://a/1', 'https://b/1', 'https://a/2', 'https://b/2', 'https://a/3', 'https://b/3', 'https://a/4'])
     expect(merged.truncated).toBe(true)
   })
 

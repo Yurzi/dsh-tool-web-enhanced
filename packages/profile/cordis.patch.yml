@@ -10,8 +10,10 @@
     fetchProvider: fetch-enhanced
 
 # Native DeepSeek Messages search becomes the `deepseek-messages` backend of
-# web-search-enhanced. Disabling the row also retires the built-in "Web search"
-# page, whose switch rewrites the selection above in the user layer.
+# web-search-enhanced. Disabling the row keeps it from registering a duplicate
+# `deepseek-official` provider; DSH's built-in "Web search and fetch" settings
+# page stays mounted under `web` and lists `search-enhanced` / `fetch-enhanced`
+# as selectable providers.
 # web-deepseek-api and web-fetch-http stay mounted: unselected, they register
 # providers no one routes to, and remain a manual escape hatch.
 - id: web-search-deepseek

@@ -31,8 +31,8 @@ type Kind = typeof fixture.kinds[number]
 
 /** Join the real descendant lifecycle, including completion notifications queued on the parent. */
 async function settle(host: Host, parent: Agent) {
-  const subagents = host.ctx.get('subagents') as { waitForChildren(agent: Agent): Promise<boolean> }
-  do { await parent.whenIdle() } while (await subagents.waitForChildren(parent))
+  const subagents = host.ctx.get('subagents') as { waitForTreeWork(agent: Agent): Promise<boolean> }
+  do { await parent.whenIdle() } while (await subagents.waitForTreeWork(parent))
   await parent.whenIdle()
 }
 
@@ -209,7 +209,7 @@ describe.skipIf(chromiumPath === undefined && !browserRequired)('Subagent connec
         expect((await resumed.ctx.searchConnections.get({ sessionId })).selection.connectionId).toBe('custom:m55-search-b')
         expect((await resumed.ctx.fetchConnections.get({ sessionId })).selection.connectionId).toBe('custom:m55-fetch-b')
         expect(resumed.ctx.agents.get(sessionId)).toBeUndefined()
-        model.next([{ id: 'm55_resume_' + kind, name: 'send_message', input: { agent_id: sessionId, message: 'M55_RUN_WEB_' + kind } }])
+        model.next([{ id: 'm55_resume_' + kind, name: 'send_message', input: { agent: sessionId, message: 'M55_RUN_WEB_' + kind } }])
         parent.followup(userMessage({ content: [{ type: 'text', text: 'M55 resume ' + kind }], source: { kind: 'user' } }))
         await settle(resumed, parent)
         await expect.poll(() => backendB.requests.length).toBe((fixture.kinds.indexOf(kind) + 1) * 2)

@@ -1,7 +1,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { MemoryCredentials } from './fixtures/credentials.ts'
-import DeepSeekAccount from '@deepseek-ai/dsh-deepseek-account'
+import type DeepSeekAccount from '@deepseek-ai/dsh-deepseek-account'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { SessionId } from '@deepseek-ai/dsh-session'
@@ -15,21 +15,19 @@ import { nativeAuth, restateNativeError } from '../src/backends/common.ts'
 import { fetchApiOptions } from '../src/backends/deepseek-fetch-api.ts'
 import { createNativeFetchBackend, type NativeOverrides } from '../src/backends/native.ts'
 
-// Public service implementations for the seam; only their outbound network is mocked.
-class NetworkAccount extends DeepSeekAccount {
-  override async resolveToken(endpoint: string) { return (await fetch(endpoint)).text() }
-  override getState(): never { throw new Error('account state not used') }
-  override getProfile(): never { throw new Error('account profile not used') }
-  override getBalance(): never { throw new Error('account balance not used') }
-  override getUnnotifiedBonuses(): never { throw new Error('account bonuses not used') }
-  override ackBonusNotified(): never { throw new Error('account bonuses not used') }
-  override startSignIn(): never { throw new Error('account sign-in not used') }
-  override cancelSignIn(): never { throw new Error('account sign-in not used') }
-  override signOut(): never { throw new Error('account sign-out not used') }
-  override watch(): never { throw new Error('account watch not used') }
-  override rejectToken(): never { throw new Error('account rejection not used') }
-  override getPlatformSession(): never { throw new Error('platform not used') }
-  override getDeviceIdentity(): never { throw new Error('identity not used') }
+// Public service stand-in for the seam; only its outbound network is mocked.
+function mountNetworkAccount(
+  ctx: Context,
+  custom: Partial<Pick<DeepSeekAccount, 'resolveToken' | 'rejectToken'>> = {},
+) {
+  const rejected: string[] = []
+  const account: Pick<DeepSeekAccount, 'resolveToken' | 'rejectToken'> = {
+    resolveToken: async endpoint => (await fetch(endpoint)).text(),
+    rejectToken: async token => { rejected.push(token) },
+    ...custom,
+  }
+  ctx.provide('deepseekAccount', account as DeepSeekAccount)
+  return { rejected }
 }
 
 const contexts: Context[] = []
@@ -83,7 +81,7 @@ describe('native fetch per-invocation security', () => {
     const ctx = context({ DEEPSEEK_API_KEY: secret })
     const debug = vi.spyOn(ctx.logger, 'debug').mockImplementation(() => {})
     const agent = access === 'account' ? await accountSession(ctx, 'deepseek-account') : undefined
-    if (agent !== undefined) void new NetworkAccount(ctx)
+    const account = agent !== undefined ? mountNetworkAccount(ctx) : undefined
     const backend = createNativeFetchBackend(ctx, () => overrides({ baseURL }))
     const pending = agent === undefined ? backend.fetch(request) : ctx.agents.withInitiator(agent, () => backend.fetch(request))
     const error: unknown = await pending.catch((cause: unknown) => cause)
@@ -99,6 +97,7 @@ describe('native fetch per-invocation security', () => {
     expect(diagnostic).not.toContain(secret)
     expect(dispatches).toBe(1)
     expect(resolves).toBe(access === 'account' ? 1 : 0)
+    if (account !== undefined) expect(account.rejected).toEqual([secret])
   })
 
   it.each(['api-key', 'account'] as const)('redacts successful native strings using the actual %s credential', async access => {
@@ -114,7 +113,7 @@ describe('native fetch per-invocation security', () => {
     })
     const ctx = context({ DEEPSEEK_API_KEY: secret })
     const agent = access === 'account' ? await accountSession(ctx, 'deepseek-account') : undefined
-    if (agent !== undefined) void new NetworkAccount(ctx)
+    if (agent !== undefined) mountNetworkAccount(ctx)
     const backend = createNativeFetchBackend(ctx, () => overrides({ baseURL }))
     const result = await (agent === undefined ? backend.fetch(request) : ctx.agents.withInitiator(agent, () => backend.fetch(request)))
     const text = JSON.stringify(result)
@@ -129,16 +128,13 @@ describe('native fetch per-invocation security', () => {
     class FailingCredentials extends MemoryCredentials {
       override async resolve(): Promise<never> { throw new Error(privateDetail) }
     }
-    class FailingAccount extends NetworkAccount {
-      override async resolveToken(): Promise<never> { throw new Error(privateDetail) }
-    }
     let dispatches = 0
     const baseURL = await serve((_incoming, response) => { dispatches++; response.end('{}') })
     const ctx = context()
     const debug = vi.spyOn(ctx.logger, 'debug').mockImplementation(() => {})
     const agent = access === 'account' ? await accountSession(ctx, 'deepseek-account') : undefined
     if (agent === undefined) void new FailingCredentials(ctx)
-    else void new FailingAccount(ctx)
+    else mountNetworkAccount(ctx, { resolveToken: async () => { throw new Error(privateDetail) } })
     const backend = createNativeFetchBackend(ctx, () => overrides({ baseURL }))
     const pending = agent === undefined ? backend.fetch(request) : ctx.agents.withInitiator(agent, () => backend.fetch(request))
     await expect(pending).rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR' })
@@ -177,7 +173,7 @@ describe('native fetch per-invocation security', () => {
     await credentials.set(credentialRef('FIRST_KEY'), first)
     await credentials.set(credentialRef('SECOND_KEY'), second)
     const agent = access === 'account' ? await accountSession(ctx, 'deepseek-account') : undefined
-    if (agent !== undefined) void new NetworkAccount(ctx)
+    if (agent !== undefined) mountNetworkAccount(ctx)
     const baseURL = await serve((incoming, response) => {
       if (incoming.method === 'GET') { accountReads++; response.end(accountValue); return }
       const sent = String(incoming.headers['x-dsh-auth-token'] ?? incoming.headers.authorization)
@@ -236,9 +232,16 @@ describe('native fetch credential and endpoint resolution', () => {
 
   it('uses the official API base, not chat or Messages environment overrides', () => {
     const ctx = context({ DEEPSEEK_BASE_URL: 'https://chat.test', DEEPSEEK_SEARCH_BASE_URL: 'https://messages.test' })
-    expect(fetchApiOptions(ctx, overrides()).baseURL).toBe(DEEPSEEK_WEB_API_BASE_URL)
-    expect(fetchApiOptions(ctx, overrides({ baseURL: 'https://operator.test/api' })).baseURL).toBe('https://operator.test/api')
-    expect(fetchApiOptions(ctx, overrides()).apiKeyEnv).toBe('DEEPSEEK_API_KEY')
+    expect(fetchApiOptions(ctx, overrides()).auth.sources).toMatchObject([
+      { kind: 'account', baseURL: DEEPSEEK_WEB_API_BASE_URL },
+      { kind: 'api-key', baseURL: DEEPSEEK_WEB_API_BASE_URL, key: { ref: 'DEEPSEEK_API_KEY' } },
+    ])
+    expect(fetchApiOptions(ctx, overrides()).guidance).toMatchObject({ subject: 'Fetch', custom: false })
+    expect(fetchApiOptions(ctx, overrides({ baseURL: 'https://operator.test/api' })).auth.sources).toMatchObject([
+      { kind: 'account', baseURL: 'https://operator.test/api' },
+      { kind: 'api-key', baseURL: 'https://operator.test/api', key: { ref: 'DEEPSEEK_API_KEY' } },
+    ])
+    expect(fetchApiOptions(ctx, overrides({ baseURL: 'https://operator.test/api' })).guidance).toMatchObject({ subject: 'Fetch', custom: true })
   })
 
   it.each([
@@ -248,7 +251,7 @@ describe('native fetch credential and endpoint resolution', () => {
   ] as const)('uses account headers only on an account Session (%s, service %s, token %s)', async (provider, hasAccount, token) => {
     const ctx = context({ DEEPSEEK_API_KEY: 'api-secret' })
     const agent = await accountSession(ctx, provider)
-    if (hasAccount) void new NetworkAccount(ctx)
+    if (hasAccount) mountNetworkAccount(ctx)
     const tokenEndpoints: string[] = []
     const headers: Headers[] = []
     vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
@@ -272,7 +275,7 @@ describe('native fetch credential and endpoint resolution', () => {
   it('uses the current request route rather than the Agent default route', async () => {
     const ctx = context({ DEEPSEEK_API_KEY: 'api-secret' })
     const agent = await accountSession(ctx, 'other-provider')
-    void new NetworkAccount(ctx)
+    mountNetworkAccount(ctx)
     agent.session.append('request/context', { provider: 'deepseek-account', model: 'fixture' })
     const network = vi.fn(async () => new Response('account-token'))
     vi.stubGlobal('fetch', network)
@@ -387,10 +390,16 @@ describe('native fetch service error reporting', () => {
     expect(calls).toBe(2)
   })
 
-  it('passes through account rejection without API-key fallback or retry', async () => {
+  it('passes through account rejection without API-key fallback or retry and invalidates the rejected token', async () => {
     const ctx = context({ DEEPSEEK_API_KEY: 'must-not-fallback' })
     const agent = await accountSession(ctx, 'deepseek-account')
-    void new NetworkAccount(ctx)
+    const rejected: string[] = []
+    mountNetworkAccount(ctx, {
+      rejectToken: async token => {
+        rejected.push(token)
+        throw new Error('private rejection storage error')
+      },
+    })
     const network = vi.fn(async (_url: string, init?: RequestInit) => init === undefined
       ? new Response('account-token')
       : Response.json({ error: 'private account error' }, { status: 401 }))
@@ -399,12 +408,13 @@ describe('native fetch service error reporting', () => {
       code: 'WEB_PROVIDER_ERROR', message: responded('DeepSeek API error (HTTP 401): private account error'),
     })
     expect(network).toHaveBeenCalledTimes(2)
+    expect(rejected).toEqual(['account-token'])
   })
 
   it('reports credential resolver failure with fixed plugin wording', async () => {
     const ctx = context()
     const agent = await accountSession(ctx, 'deepseek-account')
-    void new NetworkAccount(ctx)
+    mountNetworkAccount(ctx)
     const network = vi.fn(async () => { throw new Error('private credential error') })
     vi.stubGlobal('fetch', network)
     await expect(ctx.agents.withInitiator(agent, () => createNativeFetchBackend(ctx, () => overrides()).fetch(request))).rejects.toMatchObject({
@@ -428,7 +438,7 @@ describe('native fetch service error reporting', () => {
   it('preserves cancellation during account-token resolution without API dispatch', async () => {
     const ctx = context({ DEEPSEEK_API_KEY: 'must-not-fallback' })
     const agent = await accountSession(ctx, 'deepseek-account')
-    void new NetworkAccount(ctx)
+    mountNetworkAccount(ctx)
     const controller = new AbortController()
     const entered = Promise.withResolvers<void>()
     const token = Promise.withResolvers<Response>()

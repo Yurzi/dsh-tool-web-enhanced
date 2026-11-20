@@ -79,6 +79,7 @@ function protocolOf(api: unknown): ModelProtocol | undefined {
     case 'anthropic-messages': return api
     case 'openai-responses': return api
     case 'openai-completions': return 'openai-chat-completions'
+    // Other upstream pi-ai protocols (for example `google-generative-ai`) intentionally degrade to `unsupported: protocol`.
     default: return undefined
   }
 }

@@ -568,7 +568,7 @@ URL 原样交给服务（不规范化、不解码），目标能否访问由服�
 
 ### fetch local：白名单与提示
 
-`builtin:local` 是唯一提供可选目标地址预检的连接。传输直接使用 DSH 0.2.2-rc.1 官方 `HttpFetchProvider`；本插件不注入 resolver、不接管 dispatcher，URL、同源重定向、代理、超时与大小上限仍由它执行。
+`builtin:local` 是唯一提供可选目标地址预检的连接。传输直接使用 DSH 0.2.2-rc.5 官方 `HttpFetchProvider`；本插件不注入 resolver、不接管 dispatcher，URL、同源重定向、代理、超时与大小上限仍由它执行。
 
 | 参数 | 缺省（等于原生 `web-fetch-http` 行） |
 | --- | --- |
@@ -771,11 +771,11 @@ Host 日志分两层，按是否可能经手本次请求的凭据区分：
 
 ## 已知限制
 
-每条先写限制：用户能观察到的现象、影响范围与可行的变通；再写原因：上游行为、设计取舍或技术约束。上游的版本未另写时即本项目的 DSH 基线 `0.2.2-rc.1`。
+每条先写限制：用户能观察到的现象、影响范围与可行的变通；再写原因：上游行为、设计取舍或技术约束。上游的版本未另写时即本项目的 DSH 基线 `0.2.2-rc.5`。
 
 - **local 过滤是初始预检而非连接保证**
   - 限制：规则为空时允许任意地址；非空也不能阻止预检与上游二次解析之间的 DNS rebinding，或对后续同源重定向逐跳复验。严格连接地址固定应使用隔离网络或受控代理。
-  - 原因：rc.1 HttpFetchProvider 无公开 resolver/transport 注入接口；维护者接受仅做初始预检，不接管 dispatcher、不新增传输依赖。
+  - 原因：rc.5 HttpFetchProvider 无公开 resolver/transport 注入接口；维护者接受仅做初始预检，不接管 dispatcher、不新增传输依赖。
 - **`web` 行可被更晚的层覆盖**
   - 限制：其他 bundle 或用户层改写 `web` 行会压过 profile 的选择（只写一个字段时另一个也丢失），本插件随之收不到流量。例如 AnySearch 官方的 `@anysearch/anysearch-dsh` 的 profile 层把两个字段都写成 `anysearch`，不要与本组合包一起装。路由提示与升级预检会说明；本插件不做运行时自我修复。
   - 原因：DSH 的层叠语义：更晚的层覆盖更早的层，patch 整体替换目标行的 `config`、不做深合并（见[架构 · 组合](architecture.md#组合profile-patch)）。本仓库只有 profile 的 patch 写 `web` 行；更晚的层改写它也是退出本组合包的正常途径，所以不自我修复。

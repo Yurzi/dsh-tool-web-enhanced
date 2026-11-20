@@ -20,11 +20,11 @@ interface Manifest { name: string; dsh: { bundle: { patch: string } }; dependenc
 const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as Manifest
 const PROFILE = parse(readFileSync(new URL(`../${manifest.dsh.bundle.patch}`, import.meta.url), 'utf8')) as PatchOptions[]
 
-/** Web rows of @deepseek-ai/dsh-base 0.2.1-rc.2 (packages/bundle/base/cordis.patch.yml); e2e composes the real one. */
+/** Web rows of @deepseek-ai/dsh-base 0.2.2-rc.5 (packages/bundle/base/cordis.patch.yml); e2e composes the real one. */
 const BASE: Row[] = [
-  { id: 'web', name: '@deepseek-ai/dsh-web', config: { searchProvider: 'deepseek-official', fetchProvider: 'http' } },
+  { id: 'web', name: '@deepseek-ai/dsh-web', config: { fetchProvider: 'http' } },
   { id: 'web-search-deepseek', name: '@deepseek-ai/dsh-web-search-deepseek', config: { apiKeyEnv: 'DEEPSEEK_API_KEY' } },
-  { id: 'web-deepseek-api', name: '@deepseek-ai/dsh-web-deepseek-api', config: { apiKeyEnv: 'DEEPSEEK_API_KEY' } },
+  { id: 'web-deepseek-api', name: '@deepseek-ai/dsh-web-deepseek-api' },
   { id: 'web-fetch-http', name: '@deepseek-ai/dsh-web-fetch-http' },
 ]
 /** Provider ids each row registers. */

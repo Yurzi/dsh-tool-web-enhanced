@@ -24,7 +24,7 @@
 
 本项目不做：覆盖或改写原生工具的定义（增强工具用新名字，理由见[组合](#组合profile-patch)）、改写 tool-web 的 HTML→Markdown 转换（增强工具直接调用 tool-web 导出的格式化函数）、切换会话连接的模型工具（显式参数覆盖它的全部用途，又不留下看不到的状态）、自动重试或自动 fallback（失败后由 Agent 用增强工具改换 provider）。
 
-当前开发、CI 与隔离 e2e 固定 DSH **0.2.2-rc.1**、Cordis **4.1.0**、include/loader **1.1.0**、Schemastery **3.19.0**；要求 Node **>=24.9.0**。发布包仍声明本小版本内的最低兼容边界，不以源码 HEAD 代替已发布包。
+当前开发、CI 与隔离 e2e 固定 DSH **0.2.2-rc.5**、Cordis **4.1.0**、include/loader **1.1.0**、Schemastery **3.19.0**；要求 Node **>=24.9.0**。发布包仍声明本小版本内的最低兼容边界，不以源码 HEAD 代替已发布包。
 
 ## DSH 的 web 接缝
 
@@ -130,7 +130,7 @@ profile 对 base profile 只叠加一层 patch（[cordis.patch.yml](../packages/
 
 - **profile 拥有 `web` 行，两个字段一起写。** patch 整体替换目标行的 `config`，不做深合并，只写一个字段会丢掉另一个。本仓库里除了这份 patch，没有代码写 `web` 行的值；更晚的层（用户层、别的 bundle）改写它即覆盖本项目的选择，这是 DSH 的层叠语义，也是退出的正常途径。
 - **用自有 provider id。** `search-enhanced` / `fetch-enhanced` 不占原生席位，错误、日志与路由判断都指向本插件，原生 provider 也能同时挂载而不触发重复注册。
-- **停用 `web-search-deepseek`。** 它的能力由 search 的 `native` 连接 `deepseek-messages` 承接；停用它同时撤下 DSH 内置的“网页搜索”页面，那个页面的开关会在用户层改写 `web` 行、把流量引走。
+- **停用 `web-search-deepseek`。** 它的能力由 search 的 `native` 连接 `deepseek-messages` 承接，避免同时注册重复的 `deepseek-official` provider；DSH 0.2.2-rc.5 起内置的“网页搜索与获取”设置页只要 `web` 行存在就会挂载，并把 `search-enhanced` / `fetch-enhanced`（带各自 `title` 与多语言 `description`）作为可选 provider 列出。
 - **保留 `web-deepseek-api` 与 `web-fetch-http`。** 它们注册的 provider 未被选中，不参与路由，是手动退路。
 - **ui 行不依赖插件行。** 插件向 ui 注册是可选注入，任一或两个插件行停用时 ui 照常激活；被停用的能力不会回退到别的 provider，调用报 `WEB_PROVIDER_CONFIGURED_MISSING`。
 - **增强工具不经 preset 组合。** 两个插件从 Host 行把增强工具注册到全局工具层，所有 agent preset（含没有原生工具的 minimal）与 base profile 都会带上；这是 DSH 官方可选 bundle 的做法，DSH 不提供往具名 preset 插行的 patch 操作。也不做同名覆盖：Web profile 里 tool-web 挂在 preset 的 `config.plugins` 里，Host 行注册的同名工具会被它遮蔽，base profile 里重名注册直接失败，覆盖还等于 fork tool-web 的契约。

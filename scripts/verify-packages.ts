@@ -25,7 +25,7 @@ const out = mkdtempSync(join(tmpdir(), 'dsh-web-enhanced-pack-'))
 const dshRanges = new Set<string>()
 const rootManifest = JSON.parse(readFileSync(join(repo, 'package.json'), 'utf8')) as Manifest
 const repositoryUrl = rootManifest.repository?.url
-const dshBaseline = '>=0.2.2-rc.1 <0.3.0-0'
+const dshBaseline = '>=0.2.2-rc.5 <0.3.0-0'
 const nodeBaseline = '>=24.9.0'
 
 try {

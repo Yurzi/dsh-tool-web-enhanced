@@ -2,14 +2,14 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { Context } from '@deepseek-ai/cordis'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { MemoryCredentials } from './fixtures/credentials.ts'
-import DeepSeekAccount from '@deepseek-ai/dsh-deepseek-account'
+import type DeepSeekAccount from '@deepseek-ai/dsh-deepseek-account'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import { WebError, type WebSearchProvider } from '@deepseek-ai/dsh-web'
 import { DEEPSEEK_DEFAULT_BASE_URL, DEEPSEEK_DEFAULT_MODEL, DeepSeekSearchProvider } from '@deepseek-ai/dsh-web-search-deepseek'
-import { DEEPSEEK_WEB_API_BASE_URL, DeepSeekSearchApiProvider } from '@deepseek-ai/dsh-web-deepseek-api'
+import { DEEPSEEK_SEARCH_REQUESTS_PER_SECOND, DEEPSEEK_WEB_API_BASE_URL, DeepSeekSearchApiProvider } from '@deepseek-ai/dsh-web-deepseek-api'
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { nativeAuth, nativeBackend, restateNativeError } from '../src/backends/common.ts'
 import { executeSearch } from '../src/search/execute.ts'
@@ -18,20 +18,18 @@ import { searchApiOptions } from '../src/backends/deepseek-search-api.ts'
 import { createNativeBackend, type NativeOverrides } from '../src/backends/native.ts'
 
 
-class NetworkAccount extends DeepSeekAccount {
-  override async resolveToken(endpoint: string) { return (await fetch(endpoint)).text() }
-  override getState(): never { throw new Error('account state not used') }
-  override getProfile(): never { throw new Error('account profile not used') }
-  override getBalance(): never { throw new Error('account balance not used') }
-  override getUnnotifiedBonuses(): never { throw new Error('account bonuses not used') }
-  override ackBonusNotified(): never { throw new Error('account bonuses not used') }
-  override startSignIn(): never { throw new Error('account sign-in not used') }
-  override cancelSignIn(): never { throw new Error('account sign-in not used') }
-  override signOut(): never { throw new Error('account sign-out not used') }
-  override watch(): never { throw new Error('account watch not used') }
-  override rejectToken(): never { throw new Error('account rejection not used') }
-  override getPlatformSession(): never { throw new Error('platform not used') }
-  override getDeviceIdentity(): never { throw new Error('identity not used') }
+function mountNetworkAccount(
+  ctx: Context,
+  custom: Partial<Pick<DeepSeekAccount, 'resolveToken' | 'rejectToken'>> = {},
+) {
+  const rejected: string[] = []
+  const account: Pick<DeepSeekAccount, 'resolveToken' | 'rejectToken'> = {
+    resolveToken: async endpoint => (await fetch(endpoint)).text(),
+    rejectToken: async token => { rejected.push(token) },
+    ...custom,
+  }
+  ctx.provide('deepseekAccount', account as DeepSeekAccount)
+  return { rejected }
 }
 
 const contexts: Context[] = []
@@ -93,7 +91,7 @@ describe.each(['deepseek-messages', 'deepseek-search-api'] as const)('%s per-inv
     const ctx = context({ DEEPSEEK_API_KEY: secret })
     const debug = vi.spyOn(ctx.logger, 'debug').mockImplementation(() => {})
     const agent = access === 'account' ? await securityAccountSession(ctx) : undefined
-    if (agent !== undefined) void new NetworkAccount(ctx)
+    const account = agent !== undefined ? mountNetworkAccount(ctx) : undefined
     const backend = createNativeBackend(ctx, key, () => overrides({ baseURL }))
     const pending = agent === undefined ? backend.search({ query: 'q' }) : ctx.agents.withInitiator(agent, () => backend.search({ query: 'q' }))
     const error: unknown = await pending.catch((cause: unknown) => cause)
@@ -109,6 +107,29 @@ describe.each(['deepseek-messages', 'deepseek-search-api'] as const)('%s per-inv
     expect(diagnostic).not.toContain(secret)
     expect(dispatches).toBe(1)
     expect(resolves).toBe(access === 'account' ? 1 : 0)
+    if (account !== undefined) expect(account.rejected).toEqual([secret])
+  })
+
+  it('invalidates a rejected account token on HTTP 401 even when rejectToken fails', async () => {
+    const secret = 'account-token-to-reject'
+    const baseURL = await serve((incoming, response) => {
+      if (incoming.method === 'GET') { response.end(secret); return }
+      response.statusCode = 401
+      response.end(JSON.stringify({ error: { message: 'token expired' } }))
+    })
+    const ctx = context()
+    const agent = await securityAccountSession(ctx)
+    const rejected: string[] = []
+    mountNetworkAccount(ctx, {
+      rejectToken: async token => {
+        rejected.push(token)
+        throw new Error('private rejection storage error')
+      },
+    })
+    const backend = createNativeBackend(ctx, key, () => overrides({ baseURL }))
+    const pending = ctx.agents.withInitiator(agent, () => backend.search({ query: 'q' }))
+    await expect(pending).rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR', message: responded('DeepSeek API error (HTTP 401): token expired') })
+    expect(rejected).toEqual([secret])
   })
 
   it.each(['api-key', 'account'] as const)('redacts successful native strings using the actual %s credential', async access => {
@@ -129,7 +150,7 @@ describe.each(['deepseek-messages', 'deepseek-search-api'] as const)('%s per-inv
     })
     const ctx = context({ DEEPSEEK_API_KEY: secret })
     const agent = access === 'account' ? await securityAccountSession(ctx) : undefined
-    if (agent !== undefined) void new NetworkAccount(ctx)
+    if (agent !== undefined) mountNetworkAccount(ctx)
     const backend = createNativeBackend(ctx, key, () => overrides({ baseURL }))
     const result = await (agent === undefined ? backend.search({ query: 'q' }) : ctx.agents.withInitiator(agent, () => backend.search({ query: 'q' })))
     const text = JSON.stringify(result)
@@ -144,16 +165,13 @@ describe.each(['deepseek-messages', 'deepseek-search-api'] as const)('%s per-inv
     class FailingCredentials extends MemoryCredentials {
       override async resolve(): Promise<never> { throw new Error(privateDetail) }
     }
-    class FailingAccount extends NetworkAccount {
-      override async resolveToken(): Promise<never> { throw new Error(privateDetail) }
-    }
     let dispatches = 0
     const baseURL = await serve((_incoming, response) => { dispatches++; response.end('{}') })
     const ctx = context()
     const debug = vi.spyOn(ctx.logger, 'debug').mockImplementation(() => {})
     const agent = access === 'account' ? await securityAccountSession(ctx) : undefined
     if (agent === undefined) void new FailingCredentials(ctx)
-    else void new FailingAccount(ctx)
+    else mountNetworkAccount(ctx, { resolveToken: async () => { throw new Error(privateDetail) } })
     const backend = createNativeBackend(ctx, key, () => overrides({ baseURL }))
     const pending = agent === undefined ? backend.search({ query: 'q' }) : ctx.agents.withInitiator(agent, () => backend.search({ query: 'q' }))
     await expect(pending).rejects.toMatchObject({ code: 'WEB_PROVIDER_ERROR' })
@@ -192,7 +210,7 @@ describe.each(['deepseek-messages', 'deepseek-search-api'] as const)('%s per-inv
     await credentials.set(credentialRef('FIRST_KEY'), first)
     await credentials.set(credentialRef('SECOND_KEY'), second)
     const agent = access === 'account' ? await securityAccountSession(ctx) : undefined
-    if (agent !== undefined) void new NetworkAccount(ctx)
+    if (agent !== undefined) mountNetworkAccount(ctx)
     const baseURL = await serve((incoming, response) => {
       if (incoming.method === 'GET') { accountReads++; response.end(accountValue); return }
       const sent = String(incoming.headers['x-dsh-auth-token'] ?? incoming.headers.authorization)
@@ -241,7 +259,7 @@ describe('native credential and option resolution', () => {
     const ctx = context()
     await mountAgentLoopTestDependencies(ctx, { tools: { mode: 'native' } })
       await ctx.plugin(AgentLoop)
-    if (hasAccount) void new NetworkAccount(ctx)
+    if (hasAccount) mountNetworkAccount(ctx)
     const handle = await ctx.agents.create({ sessionId: SessionId('native-auth'), agentOptions: { provider, model: 'fixture' } })
     cleanups.push(() => handle.dispose())
     handle.agent.session.append('request/context', { provider, model: 'fixture' })
@@ -271,10 +289,18 @@ describe('native credential and option resolution', () => {
   it('preserves the native endpoint difference: only Messages reads DEEPSEEK_SEARCH_BASE_URL', () => {
     const ctx = context({ DEEPSEEK_BASE_URL: 'https://conversation.test', DEEPSEEK_SEARCH_BASE_URL: 'https://messages.test/base' })
     expect(messagesOptions(ctx, overrides()).baseURL).toBe('https://messages.test/base')
-    expect(searchApiOptions(ctx, overrides()).baseURL).toBe(DEEPSEEK_WEB_API_BASE_URL)
+    expect(searchApiOptions(ctx, overrides()).auth.sources).toMatchObject([
+      { kind: 'account', baseURL: DEEPSEEK_WEB_API_BASE_URL },
+      { kind: 'api-key', baseURL: DEEPSEEK_WEB_API_BASE_URL, key: { ref: 'DEEPSEEK_API_KEY' } },
+    ])
+    expect(searchApiOptions(ctx, overrides()).guidance).toMatchObject({ subject: 'Search', custom: false })
     expect(messagesOptions(context(), overrides()).baseURL).toBe(DEEPSEEK_DEFAULT_BASE_URL)
     expect(messagesOptions(ctx, overrides({ baseURL: 'https://operator.test/base' })).baseURL).toBe('https://operator.test/base')
-    expect(searchApiOptions(ctx, overrides({ baseURL: 'https://operator.test/api' })).baseURL).toBe('https://operator.test/api')
+    expect(searchApiOptions(ctx, overrides({ baseURL: 'https://operator.test/api' })).auth.sources).toMatchObject([
+      { kind: 'account', baseURL: 'https://operator.test/api' },
+      { kind: 'api-key', baseURL: 'https://operator.test/api', key: { ref: 'DEEPSEEK_API_KEY' } },
+    ])
+    expect(searchApiOptions(ctx, overrides({ baseURL: 'https://operator.test/api' })).guidance).toMatchObject({ subject: 'Search', custom: true })
   })
 
   it('projects all Messages and Search API operator options without imposing new limits', () => {
@@ -283,7 +309,10 @@ describe('native credential and option resolution', () => {
       model: 'chosen', apiVersion: 'v-next', maxTokens: 20_000, maxUses: 100,
     })
     expect(messagesOptions(ctx, overrides()).model).toBe(DEEPSEEK_DEFAULT_MODEL)
-    expect(searchApiOptions(ctx, overrides({ count: 23, sendOriginalQuestion: false }))).toMatchObject({ count: 23 })
+    expect(searchApiOptions(ctx, overrides({ count: 23, sendOriginalQuestion: false }))).toMatchObject({
+      count: 23,
+      requestsPerSecond: DEEPSEEK_SEARCH_REQUESTS_PER_SECOND,
+    })
     expect(searchApiOptions(ctx, overrides({ sendOriginalQuestion: false })).originalQuestion).toBeUndefined()
     expect(searchApiOptions(ctx, overrides()).originalQuestion!()).toBeUndefined()
   })

@@ -60,8 +60,16 @@ describe('search seat', () => {
     await expect(ctx.web.search({ query: 'q' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_CONFIGURED_MISSING' })
   })
 
-  it('is the provider the web row selects', async () => {
+  it('is the provider the web row selects and publishes picker metadata', async () => {
     const { ctx } = await compose()
+    expect(ctx.web.listProviders().search).toContainEqual({
+      id: SEARCH.providerId,
+      title: 'Web Search Enhanced',
+      description: {
+        en: expect.any(String),
+        zh: expect.any(String),
+      },
+    })
     // A missing seat would be WEB_PROVIDER_CONFIGURED_MISSING; reaching the
     // DeepSeek backend without a key is what native search answers too.
     await expect(ctx.web.search({ query: 'deepseek harness' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_CREDENTIAL_MISSING' })

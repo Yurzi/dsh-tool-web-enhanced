@@ -1,6 +1,6 @@
 {
   "name": "dsh-tool-web-enhanced-profile",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "DeepSeek Harness bundle: serves web_search and web_fetch from switchable backends through dsh-web-search-enhanced and dsh-web-fetch-enhanced",
   "keywords": [
     "deepseek-harness",
@@ -37,7 +37,7 @@
   },
   "engines": {
     "node": ">=24.9.0",
-    "dsh": ">=0.2.2-rc.1 <0.3.0-0"
+    "dsh": ">=0.2.2-rc.5 <0.3.0-0"
   },
   "dsh": {
     "bundle": {
